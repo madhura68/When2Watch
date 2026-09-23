@@ -1,0 +1,11 @@
+# The public ingress validates this certificate with Caddy's private CA.
+when2watch.jp-visser.nl {
+    tls internal
+    @edge remote_ip 192.168.0.154
+    handle @edge {
+        reverse_proxy when2watch-web:3000
+    }
+    handle {
+        respond "Forbidden" 403
+    }
+}

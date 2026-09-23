@@ -1,0 +1,10 @@
+# Add this app-specific block to the existing public Caddy on 192.168.0.154.
+when2watch.jp-visser.nl {
+    reverse_proxy https://192.168.0.158 {
+        header_up Host when2watch.jp-visser.nl
+        transport http {
+            tls_server_name when2watch.jp-visser.nl
+            tls_trust_pool file /data/when2watch-root.crt
+        }
+    }
+}
