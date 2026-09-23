@@ -13,7 +13,11 @@ Status op 23 september 2026: in uitvoering. De onderstaande lokale tests zijn ui
 
 ## Uitgevoerd lokaal
 
-`npm test`: 14 tests geslaagd met echte tijdelijke SQLite-databases en de productiemigratie. Google-HTTP en tokenvernieuwing zijn in deze tests gesimuleerd. Getest: account-allowlist, geverifieerde e-mail, beide scopes, privésessie, refresh-tokenbehoud, DB-heropening, tokenvernieuwing/intrekking, gekozen agenda/writerrol, all-day datums, onderbroken insert/herhaling, eigendom bij opruimen en CSRF-origincontrole.
+`npm test`: 16 tests geslaagd met echte tijdelijke SQLite-databases en de productiemigratie. Google-HTTP en tokenvernieuwing zijn in deze tests gesimuleerd. Getest: account-allowlist, geverifieerde e-mail, beide scopes, privésessie, refresh-tokenbehoud, DB-heropening, tokenvernieuwing/intrekking, gekozen agenda/writerrol, all-day datums, onderbroken insert/herhaling, eigendom bij opruimen en CSRF-origincontrole.
+
+`npm run test:http`: 21 controles geslaagd tegen een echte productiebuild van Next.js met een eigen tijdelijke SQLite-database en synthetische sessies. Inclusief publieke/privépagina, werkelijk NextAuth-sessiepad, geen tokens in HTML/JSON, weigering van alle drie Calendar-mutaties zonder/toegang met ander account en met onjuiste Origin, invoervalidatie en logout-CSRF. Geen echte Google-aanvragen in deze HTTP-test.
+
+Onafhankelijke review van de initiële commit reproduceerde twee P2-herstelproblemen. Beide zijn met eerst falende regressietests hersteld: een bestaande onzekere aanvraag kan de volgende ochtend worden teruggelezen; create/retry/delete worden per gebruiker geserialiseerd binnen het afgesproken ene Node-proces. Een gedeeld `globalThis`-slot dekt afzonderlijke Next-routebundles en verdwijnt zodra er geen wachtende mutaties meer zijn. Geen multi-process/replica-ondersteuning in dit increment.
 
 `npm run typecheck` en `npm run build`: geslaagd. `npm audit`: geen bekende kwetsbaarheden in de geïnstalleerde set.
 
@@ -22,6 +26,8 @@ Afhankelijkheden: Next 16.3.6, React 19.3.0, NextAuth 4.24.15, Prisma/client 6.1
 Op de Mac exporteert de omgeving `RUST_LOG=warn`. Prisma's SQLite-bestaancontrole gaf daardoor een lege schema-enginefout. Een geïsoleerde vergelijking bewees dat `RUST_LOG=info` de initialisatie laat slagen. Alleen het testharnas en het migratiecommando stellen deze waarde in; er is geen globale omgeving gewijzigd.
 
 ## max2: wijziging en herstel
+
+De initiële container is daadwerkelijk op max2 gebouwd en gestart met Node 24.21.0. Healthcontrole en homepage geven HTTP 200. De eigen migratie is toegepast; runtime is UID/GID 1000, rootfs read-only, env/database modus 0600, datamap 0700. Dit bewijst het containerstartpad na `npm prune`, inclusief laden van Next-configuratie, maar nog geen Google-token na een herstart.
 
 Doel: `/srv/apps/when2watch`. UID/GID 1000, één Next.js-proces, containerproject `when2watch`, geen gepubliceerde apppoort. Extern netwerk `scrum4me_default`, alias `when2watch-web`.
 

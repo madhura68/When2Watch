@@ -13,6 +13,7 @@ function simulatedGoogle() {
   const writes: string[] = [];
   let role = "owner";
   let loseInsertResponse = false;
+  let insertPause: { entered: () => void; wait: Promise<void> } | null = null;
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
     expect(url.origin).toBe("https://www.googleapis.com");
@@ -27,6 +28,10 @@ function simulatedGoogle() {
     if (method === "POST") {
       const event = JSON.parse(String(init?.body));
       writes.push(`insert:${event.id}`);
+      if (insertPause) {
+        const gate = insertPause; insertPause = null;
+        gate.entered(); await gate.wait;
+      }
       if (events.has(event.id)) return Response.json({}, { status: 409 });
       events.set(event.id, { ...event, etag: '"version-1"', status: "confirmed" });
       if (loseInsertResponse) { loseInsertResponse = false; throw new TypeError("network connection lost after insert"); }
@@ -40,7 +45,16 @@ function simulatedGoogle() {
     }
     return events.has(id) ? Response.json(events.get(id)) : Response.json({}, { status: 404 });
   };
-  return { events, writes, fetcher, role: (value: string) => { role = value; }, loseResponse: () => { loseInsertResponse = true; } };
+  return { events, writes, fetcher, role: (value: string) => { role = value; }, loseResponse: () => { loseInsertResponse = true; },
+    pauseNextInsert: () => {
+      let entered!: () => void;
+      let resume!: () => void;
+      const waiting = new Promise<void>((resolve) => { entered = resolve; });
+      const wait = new Promise<void>((resolve) => { resume = resolve; });
+      insertPause = { entered, wait };
+      return { waiting, resume };
+    },
+  };
 }
 
 describe("Calendar trial using real SQLite and simulated Google HTTP", () => {
@@ -110,6 +124,33 @@ describe("Calendar trial using real SQLite and simulated Google HTTP", () => {
       await expect(service.create("owner", date)).rejects.toMatchObject({ code: "INVALID_DATE" });
     }
     expect(google.events.size).toBe(0);
+  });
+
+  it("can resume an existing uncertain request the next morning", async () => {
+    await service.verifyCalendar("owner");
+    google.loseResponse();
+    await expect(service.create("owner", "2026-09-24")).rejects.toMatchObject({ code: "GOOGLE_UNAVAILABLE" });
+    const morning = new CalendarProbeService(database.db, new GoogleCalendar(async () => "test-access", google.fetcher), chosen, () => new Date("2026-09-24T05:00:00Z"));
+    expect((await morning.create("owner", "2026-09-24")).status).toBe("created");
+    expect(google.events.size).toBe(1);
+    expect(google.writes).toHaveLength(1);
+  });
+
+  it("finishes an in-flight creation before reporting cleanup from another tab", async () => {
+    await service.verifyCalendar("owner");
+    const gate = google.pauseNextInsert();
+    const creation = service.create("owner", "2026-09-24");
+    await gate.waiting;
+    const probe = await database.db.probe.findFirstOrThrow();
+    const otherTab = new CalendarProbeService(database.db, new GoogleCalendar(async () => "test-access", google.fetcher), chosen, () => now);
+    const cleanup = otherTab.remove("owner", probe.id);
+    // Give the old unprotected deletion a chance to finish against Google's 404.
+    // With exclusion, cleanup must wait; then release the simulated slow insert.
+    await Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, 100))]);
+    gate.resume();
+    await Promise.all([creation, cleanup]);
+    expect(google.events.size).toBe(0);
+    expect((await database.db.probe.findUniqueOrThrow({ where: { id: probe.id } })).status).toBe("deleted");
   });
 
   it("cleans up only the persisted, owned event and refuses changed ownership", async () => {

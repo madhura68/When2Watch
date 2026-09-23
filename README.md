@@ -10,6 +10,6 @@ Google OAuth-callback: `/api/auth/callback/google`. Lokale ontwikkeling vereist 
 
 ## Controle
 
-`npm test`, `npm run typecheck`, `npm run build`. Tests maken tijdelijke SQLite-databases; Google-antwoorden zijn expliciete simulaties. Zie [praktijkproef](docs/praktijkproef.md) voor de nog afzonderlijk te bewijzen echte OAuth- en notificatieresultaten en de max2-deploy/herstelroute.
+`npm test`, `npm run typecheck`, `npm run build` en daarna `npm run test:http`. Tests maken tijdelijke SQLite-databases; Google-antwoorden zijn expliciete simulaties. De HTTP-proef gebruikt synthetische sessies en doet geen Google-aanvragen. Zie [praktijkproef](docs/praktijkproef.md) voor de nog afzonderlijk te bewijzen echte OAuth- en notificatieresultaten en de max2-deploy/herstelroute.
 
 Tokens blijven in de database op het privévolume. De browser krijgt alleen een sessiecookie en de gegevens voor het eigen proefscherm. Wijzigingen gebruiken de expliciet gekozen agenda en de eigen When2Watch-eventmarkeringen. Geen automatische seriesynchronisatie of cron in deze eerste proefversie.

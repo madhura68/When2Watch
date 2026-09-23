@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { GoogleCalendar, safeEvent, type CalendarEvent } from "./google-calendar";
 import { AppError } from "./errors";
 import { localDate, nextDate } from "@/lib/dates";
+import { serializeCalendarMutation } from "./calendar-mutations";
 
 export class CalendarProbeService {
   constructor(private readonly db: PrismaClient, private readonly google: GoogleCalendar, private readonly config: { calendarId: string; timeZone: string }, private readonly now = () => new Date()) {}
@@ -19,11 +20,18 @@ export class CalendarProbeService {
   }
 
   async create(userId: string, date: string): Promise<Probe> {
+    return serializeCalendarMutation(userId, () => this.createLocked(userId, date));
+  }
+
+  private async createLocked(userId: string, date: string): Promise<Probe> {
     const parsedDate = new Date(`${date}T00:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedDate.getTime()) ||
-        parsedDate.toISOString().slice(0, 10) !== date || date <= localDate(this.now(), this.config.timeZone) || date >= "9999-12-31") {
+        parsedDate.toISOString().slice(0, 10) !== date || date >= "9999-12-31") {
       throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de ochtendproef.");
     }
+    const existing = await this.db.probe.findUnique({ where: { userId_date: { userId, date } } });
+    const futureDate = date > localDate(this.now(), this.config.timeZone);
+    if (!existing && !futureDate) throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de ochtendproef.");
     const calendar = await this.db.calendarSettings.findUnique({ where: { userId } });
     if (calendar?.calendarId !== this.config.calendarId) {
       throw new AppError("CALENDAR_NOT_CONFIRMED", 409, "Controleer en bevestig eerst de gekozen agenda.");
@@ -51,6 +59,7 @@ export class CalendarProbeService {
       event = await this.google.event(probe.calendarId, probe.eventId);
     } catch (error) {
       if (!(error instanceof AppError) || error.code !== "NOT_FOUND" || probe.status !== "prepared") throw error;
+      if (!futureDate) throw new AppError("PROBE_DATE_PASSED", 409, "Google heeft geen proefitem op deze datum. Kies een nieuwe datum om de proef alsnog uit te voeren.");
       try { await this.google.insert(probe.calendarId, JSON.parse(probe.requestJson) as CalendarEvent); }
       catch (insertError) {
         if (!(insertError instanceof AppError) || insertError.code !== "CONFLICT") throw insertError;
@@ -67,6 +76,10 @@ export class CalendarProbeService {
   }
 
   async remove(userId: string, probeId: string): Promise<void> {
+    return serializeCalendarMutation(userId, () => this.removeLocked(userId, probeId));
+  }
+
+  private async removeLocked(userId: string, probeId: string): Promise<void> {
     const probe = await this.db.probe.findFirst({ where: { id: probeId, userId } });
     if (!probe) throw new AppError("PROBE_NOT_FOUND", 404, "Dit proefitem hoort niet bij jouw account.");
     if (probe.status === "deleted") return;
