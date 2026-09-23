@@ -25,7 +25,6 @@ export function authOptions(): NextAuthOptions {
     pages: { signIn: "/", error: "/" },
     callbacks: {
       async signIn({ account, profile }) {
-        console.info("when2watch: oauth account field types", Object.entries(account ?? {}).map(([key, value]) => `${key}:${typeof value}`).sort().join(","));
         return isAllowedGoogleSignIn(account, profile, settings.allowedEmail);
       },
       async session({ session, user }) {

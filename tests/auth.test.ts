@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { isAllowedGoogleSignIn, requireIdentity } from "@/server/auth-policy";
 import { getGoogleAccessToken, saveGoogleTokens } from "@/server/google-tokens";
 import { testDatabase } from "./database";
@@ -7,6 +8,27 @@ const email = "owner@example.com";
 const scope = "openid email profile https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events";
 const account = { provider: "google", providerAccountId: "google-owner", type: "oauth" as const, scope };
 const profile = { email, email_verified: true };
+
+describe("Google account adapter", () => {
+  it("persists the optional refresh-token lifetime returned by Google", async () => {
+    const database = testDatabase();
+    try {
+      const user = await database.db.user.create({ data: { email } });
+      const providerReply = {
+        ...account, userId: user.id,
+        access_token: "test-access", refresh_token: "test-refresh",
+        expires_at: 1_800_000_000, token_type: "Bearer", id_token: "test-id-token",
+        refresh_token_expires_in: 604_800,
+      };
+      await PrismaAdapter(database.db).linkAccount!(providerReply);
+      const linked = await database.db.account.findFirstOrThrow();
+      expect(linked).toMatchObject({
+        providerAccountId: account.providerAccountId, userId: user.id,
+        refresh_token: "test-refresh", refresh_token_expires_in: 604_800,
+      });
+    } finally { await database.close(); }
+  });
+});
 
 describe("Google authorization boundary", () => {
   it("accepts only the verified allowlisted Google identity with both Calendar scopes", () => {
