@@ -1,0 +1,111 @@
+{
+  "observed_at": "2026-09-23",
+  "source": "When2Watch max2: opgeslagen werkelijk Calendar API-request en readback",
+  "accounts": [
+    {
+      "provider": "google",
+      "access_stored": true,
+      "refresh_stored": true,
+      "both_calendar_scopes": true,
+      "needs_reauth": false,
+      "refresh_lifetime_field_stored": true
+    }
+  ],
+  "calendar": [
+    {
+      "summary": "When2Watch",
+      "timeZone": "Europe/Amsterdam",
+      "accessRole": "owner",
+      "defaultRemindersJson": "[]"
+    }
+  ],
+  "probes": [
+    {
+      "id": "6277ae74-32f3-4d4b-ab6d-51eb803ee881",
+      "event_id": "pbf32054e863a4d64a2480246e77fb163",
+      "date": "2026-09-24",
+      "status": "created",
+      "request": {
+        "id": "pbf32054e863a4d64a2480246e77fb163",
+        "summary": "When2Watch — meldingsproef Slow Horses",
+        "description": "Proefitem voor When2Watch, geen echte aflevering. Gewenste melding: 09:00 Europe/Amsterdam op deze datum. Ontvangst in Apple Agenda en Google Agenda in Chrome moet nog afzonderlijk worden bevestigd.",
+        "start": {
+          "date": "2026-09-24"
+        },
+        "end": {
+          "date": "2026-09-25"
+        },
+        "reminders": {
+          "useDefault": true
+        },
+        "extendedProperties": {
+          "private": {
+            "app": "when2watch",
+            "kind": "probe",
+            "userId": "cmuefv1uz0000o3019ux9qy7h",
+            "probeId": "6277ae74-32f3-4d4b-ab6d-51eb803ee881"
+          }
+        }
+      },
+      "readback": {
+        "id": "pbf32054e863a4d64a2480246e77fb163",
+        "summary": "When2Watch — meldingsproef Slow Horses",
+        "status": "confirmed",
+        "etag": "\"3580376688054046\"",
+        "start": {
+          "date": "2026-09-24"
+        },
+        "end": {
+          "date": "2026-09-25"
+        },
+        "reminders": {
+          "useDefault": false
+        },
+        "extendedProperties": {
+          "private": {
+            "app": "when2watch",
+            "kind": "probe",
+            "probeId": "6277ae74-32f3-4d4b-ab6d-51eb803ee881",
+            "userId": "cmuefv1uz0000o3019ux9qy7h"
+          }
+        }
+      }
+    }
+  ],
+  "notification_receipt": {
+    "apple_calendar": "Nog niet waargenomen",
+    "google_calendar_chrome": "Nog niet waargenomen"
+  },
+  "runtime": {
+    "commit": "961fc09330236e86c20d449f2d42ee9b836c1436",
+    "image": "when2watch:961fc09",
+    "restarted_at_utc": "2026-09-23T18:36:02.460778147Z",
+    "session_persisted": true,
+    "calendar_and_probe_persisted": true,
+    "fresh_google_calendar_verify_after_restart": true,
+    "refresh_token_renewal_observed": false
+  },
+  "client_observations": {
+    "apple_calendar": {
+      "calendar_visible": true,
+      "probe_visible": true,
+      "google_account_all_day_default": "On day of event (09:00)",
+      "probe_alert": "Alert on day of event at 09:00 (default)",
+      "account_wide_default_approved_by_jp": true,
+      "individual_event_reminder_manually_added": false
+    },
+    "google_calendar_chrome": {
+      "calendar_visible": true,
+      "probe_visible": true,
+      "calendar_all_day_default": "Op dezelfde dag om 09:00",
+      "event_edit_notifications": [],
+      "event_edit_cancelled_without_changes": true,
+      "general_notifications": "Bureaubladmeldingen"
+    }
+  },
+  "fallback": {
+    "timed_probe_proposed": true,
+    "user_choice": "pending",
+    "created": false
+  }
+}

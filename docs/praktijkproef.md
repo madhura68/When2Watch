@@ -1,6 +1,6 @@
 # When2Watch — praktijkproef ST-001.1
 
-Status op 23 september 2026: de minimale proefapp draait op max2 en is bereikbaar via https://when2watch.jp-visser.nl. De lokale tests en publieke HTTPS-controles zijn uitgevoerd; echte OAuth, agendarechten en meldingsontvangst zijn nog niet bewezen. ST-001.1 blijft in uitvoering.
+Status op 23 september 2026: de app draait op max2 via https://when2watch.jp-visser.nl. Echte Google-login, schrijfrecht op When2Watch, één all-day proefitem voor 24 september en behoud van de koppeling na containerherstart zijn bewezen. Apple Agenda toont voor het item een standaardmelding om 09:00. Google Agenda toont op hetzelfde item geen melding, ondanks de ingestelde all-day standaard om 09:00. Werkelijke ontvangst is nog niet gemeten; ST-001.1 blijft in uitvoering.
 
 ## Vastgelegde proef
 
@@ -13,7 +13,7 @@ Status op 23 september 2026: de minimale proefapp draait op max2 en is bereikbaa
 
 ## Uitgevoerd lokaal
 
-`npm test`: 16 tests geslaagd met echte tijdelijke SQLite-databases en de productiemigratie. Google-HTTP en tokenvernieuwing zijn in deze tests gesimuleerd. Getest: account-allowlist, geverifieerde e-mail, beide scopes, privésessie, refresh-tokenbehoud, DB-heropening, tokenvernieuwing/intrekking, gekozen agenda/writerrol, all-day datums, onderbroken insert/herhaling, eigendom bij opruimen en CSRF-origincontrole.
+`npm test`: 17 tests geslaagd met echte tijdelijke SQLite-databases en de productiemigraties. Google-HTTP en tokenvernieuwing zijn in deze tests gesimuleerd. Getest: account-allowlist, geverifieerde e-mail, beide scopes, privésessie, refresh-tokenbehoud, DB-heropening, tokenvernieuwing/intrekking, gekozen agenda/writerrol, all-day datums, onderbroken insert/herhaling, eigendom bij opruimen en CSRF-origincontrole. De toegevoegde regressietest gebruikt de echte PrismaAdapter om Google's optionele `refresh_token_expires_in` op te slaan; deze test faalde vóór de schemafix.
 
 `npm run test:http`: 21 controles geslaagd tegen een echte productiebuild van Next.js met een eigen tijdelijke SQLite-database en synthetische sessies. Inclusief publieke/privépagina, werkelijk NextAuth-sessiepad, geen tokens in HTML/JSON, weigering van alle drie Calendar-mutaties zonder/toegang met ander account en met onjuiste Origin, invoervalidatie en logout-CSRF. Geen echte Google-aanvragen in deze HTTP-test.
 
@@ -27,9 +27,9 @@ Op de Mac exporteert de omgeving `RUST_LOG=warn`. Prisma's SQLite-bestaancontrol
 
 ## Uitgevoerde deployment
 
-De container is daadwerkelijk op max2 gebouwd en gestart met Node 24.21.0. Actieve appcommit: `4a50e76ea9e077216c03d4da6cd7d4b680fa32ad`; image `when2watch:4a50e76`, container `when2watch-web-1`, health `healthy`. De eigen migratie is toegepast; runtime is UID/GID 1000, rootfs read-only, env/database modus 0600, datamap 0700. Dit bewijst het containerstartpad na `npm prune`, inclusief laden van Next-configuratie, maar nog geen Google-token na een herstart.
+De container is daadwerkelijk op max2 gebouwd en gestart met Node 24.21.0. Actieve appcommit: `961fc09330236e86c20d449f2d42ee9b836c1436`; image `when2watch:961fc09`, container `when2watch-web-1`, health `healthy`. De eigen migraties zijn toegepast; runtime is UID/GID 1000, rootfs read-only, env/database modus 0600, datamap 0700. De app is na de Google-koppeling opnieuw gestart om 18:36:02 UTC. Daarna bleef dezelfde browsersessie ingelogd, waren agenda en proefitem bewaard en slaagde een nieuwe echte Google-agendacontrole. Dit bewijst opgeslagen toegang na herstart; het is nog geen bewijs van echte refresh-tokenvernieuwing.
 
-Doel: `/srv/apps/when2watch`; `current` verwijst naar `releases/4a50e76`. De gedeelde `.env` bevat dezelfde release-tag. Eén Next.js-proces, containerproject `when2watch`, geen gepubliceerde apppoort. Extern netwerk `scrum4me_default`, alias `when2watch-web`.
+Doel: `/srv/apps/when2watch`; `current` verwijst naar `releases/961fc09`. De gedeelde `.env` bevat dezelfde release-tag. Eén Next.js-proces, containerproject `when2watch`, geen gepubliceerde apppoort. Extern netwerk `scrum4me_default`, alias `when2watch-web`.
 
 Runtimegeheimen staan uitsluitend in `/srv/apps/when2watch/.env` met modus 0600. De persistente SQLite-map `/srv/apps/when2watch/data` krijgt modus 0700; het startscript gebruikt umask 077. De container draait zonder root, met alleen `/data` en `/tmp` schrijfbaar.
 
@@ -52,7 +52,7 @@ Beide hosts gebruiken `/srv/scrum4me/caddy/Caddyfile`, als bestand gemount op `/
 |---|---|
 | Publieke TLS-handshake | TLS 1.3, Let's Encrypt YE2, vervaldatum 22 december 2026 |
 | `/api/health` | HTTP 200, exact `{"status":"ok"}` |
-| Homepage | HTTP 200; Google-configuratie nog niet gereed; ook visueel gecontroleerd in Chrome |
+| Homepage | HTTP 200; Google-configuratie geïnstalleerd; echte login in Chrome geslaagd |
 | `/settings` zonder login | HTTP 307 naar `/` |
 | `POST /api/probe` zonder login | HTTP 401 |
 | `DELETE /api/probe` zonder login | HTTP 401 |
@@ -60,7 +60,7 @@ Beide hosts gebruiken `/srv/scrum4me/caddy/Caddyfile`, als bestand gemount op `/
 | Cachebeleid van deze responses | `private, no-store` |
 | Ingress naar max2 met CA- en hostnaamcontrole | HTTPS-health HTTP 200 |
 | Rechtstreeks vanaf Mac naar max2 met dezelfde CA-controle | HTTP 403 |
-| Eigen SQLite-tabellen User, Account en Probe | Elk 0 rijen; nog geen echte koppeling/proef aangemaakt |
+| Eigen SQLite-tabellen User, Account en Probe | Eén toegelaten gebruiker, één Google-koppeling, één eigen proefitem |
 
 ### Herstel en volgende release
 
@@ -68,26 +68,53 @@ Op max2 staat de oorspronkelijke herstelkopie van vóór alle When2Watch-proxywi
 
 Op de publieke ingress staat de herstelkopie in `/home/janpeter/.local/state/when2watch/proxy-backups/Caddyfile.20260923T163811Z.before`. Oorspronkelijke SHA-256: `6ea9cd11084d359a8430b34253366934fbc0d89bf67832e435236a671756daf1`; uiteindelijke SHA-256: `3adfb49ba2fb3bf38069ffbc3ae236cb0317562f128b0ca3a59fc94d4d7abda6`.
 
-Herstel: stop uitsluitend When2Watch met `docker compose -p when2watch down` vanuit de actuele release. Verwijder het eigen domeinblok op beide hosts of herstel een volledige kopie uitsluitend als de actuele hash nog gelijk is aan de hierboven vastgelegde eindhash. Werk weer in-place, valideer en reload. Laat `.env`, SQLite en bewijs behouden. Bij een app-rollback blijft de vorige image-tag `dfc39bb` beschikbaar; zet release-tag en `current` coherent terug. Geen Tailscale-, runner-, andere app- of cronwijzigingen zijn uitgevoerd.
+Herstel: stop uitsluitend When2Watch met `docker compose -p when2watch down` vanuit de actuele release. Verwijder het eigen domeinblok op beide hosts of herstel een volledige kopie uitsluitend als de actuele hash nog gelijk is aan de hierboven vastgelegde eindhash. Werk weer in-place, valideer en reload. Laat `.env`, SQLite en bewijs behouden. Eerdere appreleases blijven beschikbaar; zet release-tag en `current` coherent terug. Releases vóór `961fc09` missen de OAuth-schemafix en zijn daarom geen werkende loginoplossing. De extra optionele databasekolom hoeft bij een app-rollback niet verwijderd te worden. Geen Tailscale-, runner-, andere app- of cronwijzigingen zijn uitgevoerd.
 
 Een bestaande restart-loop van drie runnercontainers op max2 is als `ISS-11` geregistreerd. Die containers zijn voor deze taak niet aangepast.
 
-## Google-koppeling en bewijs (nog open)
+## Google-koppeling en bewijs
 
-Google OAuth-clienttype: Web application. Redirect-URI exact `https://when2watch.jp-visser.nl/api/auth/callback/google`. Calendar API moet actief zijn. Scopes: `openid email profile`, `calendar.calendarlist.readonly`, `calendar.events` (volledige scope-URLs in de bron).
+Google OAuth-clienttype: Web application. Redirect-URI exact `https://when2watch.jp-visser.nl/api/auth/callback/google`. Project: `when2watch-509517`; Google Cloud toont Calendar API `Enabled`. Scopes: `openid email profile`, `calendar.calendarlist.readonly`, `calendar.events` (volledige scope-URLs in de bron).
 
-JP levert alleen het pad naar het private clientbestand; geen clientsecret in chat/Git/logs. Na installatie geeft JP Google-consent met zijn gekozen account. Daarna bevestigt hij in de app de vastgelegde agenda. De app leest naam, tijdzone, ID en schrijfrecht terug en bewaart die.
+JP heeft het private clientbestand op 23 september aangeleverd. Type, verplichte velden en exacte redirect zijn gecontroleerd zonder credentialwaarden af te drukken. Het lokale bestand en de server-`.env` hebben modus 0600. Alleen Client ID en Client secret zijn via SSH-stdin naar de bestaande max2-configuratie overgebracht; geheimen blijven buiten chat, Git en bewijs.
 
-Maak één all-day proefitem voor een toekomstige datum. Bewaar het verzoek en de geschoonde API-readback vanuit het proefscherm. Controleer vóór 09:00 de cliëntinstellingen, de gekoppelde agenda, Focus en Chrome-meldingsrechten; Google Agenda moet in Chrome openstaan.
+De clientconfiguratie is eerst met image `4a50e76` geactiveerd. `/api/auth/providers` toonde Google met de juiste callback. De drie Calendar-mutaties bleven zonder sessie HTTP 401 geven; de geteste publieke responses bevatten geen clientsecret. Privéconfig-backup: `/srv/apps/when2watch/config-backups/.env.20260923T181443Z.before-google`.
+
+De eerste login gaf `403 access_denied`: External / Testing had nog geen testgebruiker. JP heeft zichzelf vervolgens als tester toegevoegd. Google toonde bij de daaropvolgende aanmelding de vijf al verleende rechten. De callback liep daarna vast op het opslaan van Google's optionele veld `refresh_token_expires_in`. Een tijdelijke diagnose legde uitsluitend veldnamen en typen vast, nooit waarden. De echte PrismaAdapter-regressietest reproduceerde `Unknown argument refresh_token_expires_in`.
+
+Commit `961fc09` voegt een optionele integerkolom en een additieve migratie toe en verwijdert de tijdelijke diagnose. Vóór herstel is uitsluitend de app gestopt en de eigen SQLite-database privé gekopieerd naar `/srv/apps/when2watch/db-backups/when2watch.20260923T182950Z.before-oauth-repair.db`. De ene onvolledig aangemaakte gebruiker is pas verwijderd nadat het exacte account en alle lege relatie-tabellen waren gecontroleerd. Er is geen authcontrole omzeild of automatische accountkoppeling aangezet. Op de nieuwe release slaagt de echte OAuth-callback.
+
+De opgeslagen Google-koppeling bevat een access-token, refresh-token en beide Calendar-scopes. Bewijs bevat alleen aanwezigheidsbooleans. De Google Calendar API bevestigt de opgegeven agenda-ID, naam `When2Watch`, tijdzone `Europe/Amsterdam` en toegangsrol `owner`. Na containerherstart slaagde `Agenda opnieuw controleren` zonder nieuwe login.
+
+### Werkelijk proefitem en verschillen tussen clients
+
+Op 23 september is via When2Watch één all-day item aangemaakt voor **24 september 2026**:
+
+- Titel: `When2Watch — meldingsproef Slow Horses`.
+- Probe-ID: `6277ae74-32f3-4d4b-ab6d-51eb803ee881`.
+- Google event-ID: `pbf32054e863a4d64a2480246e77fb163`.
+- Start `2026-09-24`, exclusieve einddatum `2026-09-25`; status `confirmed`.
+- Geschoond werkelijk request/readback: `docs/evidence/2026-09-23-google-proef.json`.
+
+**Google Agenda in Chrome:** vóór de insert is de all-day standaard voor When2Watch op dezelfde dag om 09:00 gezet; Google bevestigde dat de meldingsinstellingen waren opgeslagen. Desondanks is de CalendarList-readback `defaultReminders: []`. Het eventrequest bevat `reminders.useDefault: true`, maar de echte event-readback bevat `useDefault: false` zonder overrides. Het item is zichtbaar in Chrome; de bewerkingspagina heeft een lege lijst Meldingen. Die pagina is zonder wijzigingen verlaten. Dit bewijst een beperking van deze geteste route, niet dat elke mogelijke all-day oplossing onmogelijk is. Er is geen Google-melding voor dit item bewezen of ingesteld.
+
+**Apple Agenda op Mac:** When2Watch is aangevinkt en het echte proefitem is zichtbaar. JP heeft uitdrukkelijk gekozen voor de accountbrede Google-standaard op de Mac: dezelfde dag om 09:00, ook voor andere hele-dagafspraken van dat Google-account. Bij de actuele controle stond deze voorkeur al ingesteld; het bestaande proefitem toont `Alert on day of event at 09:00 (default)`. Er is geen afzonderlijke handmatige eventmelding toegevoegd. De instelling is bewijs van configuratie, nog niet van ontvangst.
+
+Het bestaande proefitem blijft voor de meting staan. JP is gevraagd of daarnaast het vooraf besproken korte proefitem om 09:00 met expliciete melding bij aanvang gewenst is. Die andere eventvorm is nog niet toegepast. Controleer vóór de meting dat de Mac wakker is, Agenda/Chrome meldingen mogen tonen en Focus de melding niet onderdrukt. Laat Google Agenda in Chrome openstaan voor een eventuele Chrome-proef.
 
 | Bewijs | Status |
 |---|---|
-| Echte Google-consent/callback | Open |
-| Gekozen agenda/schrijfbevoegdheid | Open |
-| Echte API-readback proefitem | Open |
+| Clientconfig geïnstalleerd, callback geregistreerd, Calendar API actief | Bewezen op 23 september 2026 |
+| Google-testgebruiker toegelaten | JP bevestigd; nieuwe Google-login geslaagd |
+| Echte Google-consent/callback | Geslaagd met bestaande toestemming, release `961fc09` |
+| Gekozen agenda/schrijfbevoegdheid | Exacte agenda, Europe/Amsterdam, owner via echte API |
+| Echte API-readback proefitem | Vastgelegd; `useDefault: false`, geen overrides |
+| Apple Agenda: instelling op het proefitem | Dezelfde dag om 09:00 (standaard) |
+| Google Agenda in Chrome: instelling op het proefitem | Geen melding, ondanks all-day agendastandaard 09:00 |
 | Apple Agenda: ontvangen datum/tijd | Open |
 | Google Agenda in Chrome: ontvangen datum/tijd | Open |
-| Blijvende Google-koppeling na containerherstart | Open |
+| Blijvende Google-koppeling na containerherstart | Bewezen met dezelfde sessie en nieuwe Google-agendacontrole |
+| Echte refresh-tokenvernieuwing | Nog niet uitgevoerd; taak 3 |
 | Eigen proefitem opgeruimd | Open |
 | Gebruik na dag zeven | Later te observeren |
 
