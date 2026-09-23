@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env*
+!.env.example
+data/
+*.db
+*.db-*
+*.tsbuildinfo
+coverage/
+.superpowers/
+.worktrees/
+.DS_Store

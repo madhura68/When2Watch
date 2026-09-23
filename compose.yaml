@@ -1,0 +1,38 @@
+name: when2watch
+services:
+  web:
+    build: .
+    image: when2watch:${RELEASE_TAG:-local}
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/data/when2watch.db
+      TZ: Europe/Amsterdam
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - /srv/apps/when2watch/data:/data
+    networks:
+      proxy:
+        aliases: [when2watch-web]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+networks:
+  proxy:
+    external: true
+    name: scrum4me_default
