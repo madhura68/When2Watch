@@ -1,11 +1,11 @@
 {
   "kind": "calendar#calendarList",
-  "etag": "redacted-etag-49e5033e",
-  "nextSyncToken": "redacted-nextSyncToken-7a091a45",
+  "etag": "redacted-etag-a51a53ca",
+  "nextSyncToken": "redacted-nextSyncToken-fa593420",
   "items": [
     {
       "kind": "calendar#calendarListEntry",
-      "etag": "redacted-etag-c4e866ae",
+      "etag": "redacted-etag-c80da9fa",
       "id": "redacted-id-9f56dcae",
       "summary": "redacted-summary-e6e0010d",
       "description": "redacted-description-d956abae",

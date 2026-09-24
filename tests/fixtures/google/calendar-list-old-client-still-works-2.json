@@ -1,23 +1,27 @@
 {
   "kind": "calendar#calendarList",
-  "etag": "redacted-etag-a51a53ca",
-  "nextPageToken": "redacted-nextPageToken-318b6c7e",
+  "etag": "redacted-etag-071d12bc",
+  "nextPageToken": "redacted-nextPageToken-3ae320af",
   "items": [
     {
       "kind": "calendar#calendarListEntry",
-      "etag": "redacted-etag-46b5b71b",
-      "id": "redacted-id-bfcbc257",
-      "summary": "redacted-summary-bfcbc257",
+      "etag": "redacted-etag-293ce64d",
+      "id": "redacted-id-78ee086f",
+      "summary": "redacted-summary-78ee086f",
       "timeZone": "Europe/Amsterdam",
-      "colorId": "15",
-      "backgroundColor": "#9fc6e7",
+      "colorId": "17",
+      "backgroundColor": "#9a9cff",
       "foregroundColor": "#000000",
       "selected": true,
       "accessRole": "owner",
       "defaultReminders": [
         {
-          "method": "popup",
+          "method": "email",
           "minutes": 10
+        },
+        {
+          "method": "popup",
+          "minutes": 30
         }
       ],
       "notificationSettings": {

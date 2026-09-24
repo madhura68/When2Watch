@@ -1,7 +1,7 @@
 {
   "kind": "calendar#calendarList",
-  "etag": "redacted-etag-d304f11c",
-  "nextPageToken": "redacted-nextPageToken-b6190338",
+  "etag": "redacted-etag-071d12bc",
+  "nextPageToken": "redacted-nextPageToken-36ddaaba",
   "items": [
     {
       "kind": "calendar#calendarListEntry",

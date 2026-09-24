@@ -1,9 +1,9 @@
 # B0 — Google-configuratieproef
 
-Status op 24 september 2026: **echte login, kandidaataccount, agendacreatie,
-herstart en itemverplaatsing bewezen; clientvervangingsproef nog open**.
+Status op 24 september 2026: **B0 afgerond: echte login, kandidaataccount,
+agendacreatie, herstart, itemverplaatsing en clientvervanging bewezen**.
 T-8 / ST-004, sprint S-2026-09-24-2. A1/A2 zijn op max2 bewezen; B1/B2/C1 zijn
-nog niet gestart. Dit document wordt aangevuld met echte uitkomsten.
+nog niet gestart bij het afronden van dit proefbewijs.
 
 ## Afbakening
 
@@ -22,8 +22,8 @@ Nieuwe tokens worden eerst kandidaat, gekoppeld aan hun eigen OAuth-client.
 Een nieuwe client wordt pas na readbacks met zowel oud als nieuw bevestigd.
 
 De lokale probe is geen definitieve instellingen-UI. De onderstaande echte
-browsercallbacks bewijzen een deel van het contract. De overige Google-responses
-moeten de aannames nog bewijzen voordat B1 wordt gebouwd.
+browsercallbacks en Google-responses leveren het afgesproken contractbewijs
+waarop B1 en B2 kunnen worden gebouwd.
 
 ## Reproductie
 
@@ -129,6 +129,7 @@ proefdatabase is gebruikt. Tijden in deze tabel zijn UTC.
 | 12:18:36 | Drie gevraagde Calendar-rechten niet aanvinken, wel doorgaan | Google stuurde een succesvolle callback met uitsluitend identiteitsrechten. Dezelfde interne eigenaar behouden; actieve verbinding ongewijzigd. Geen kalenderaanmaak gestart. |
 | 12:21:52 | Drie Calendar-rechten verlenen, na expliciete gebruikersbevestiging | Werkelijke callback bevat alle drie de gevraagde Calendar-scopes; dezelfde interne eigenaar en één account behouden. Daarna afzonderlijk bevestigd in het harnas. |
 | 12:24:57 | Tweede account verbinden, met toestemming voor agenda-aanmaak | Dezelfde interne gebruiker, nu twee verschillende Google-subjects/accounts. Actieve verbinding bleef ongewijzigd; de nieuwe verbinding is vervolgens alleen als kandidaat bevestigd. |
+| 12:35:30 | Dezelfde eigenaar met een tweede OAuth-webclient verbinden | Zelfde Google-subject, interne eigenaar en twee bestaande Accounts behouden. Nieuwe tokens bij clientversie 1; versie 0 bleef actief tot bevestiging. |
 
 De werkelijk verleende scopes bij de eerste drie succesvolle callbacks zijn steeds:
 
@@ -217,22 +218,48 @@ of ontvangst geclaimd; de echte meldingsproef van de nieuwe installatie hoort
 bij C1. Herstel na onderbroken eventwrites wordt hiermee evenmin als volledig
 B2-bewijs geclaimd: deze B0-proef bewijst de normale bevestigingsvolgorde.
 
-## Openstaande externe voorwaarden en metingen
+### OAuth-client vervangen
 
-- De eigenaar heeft twee proefaccounts aangewezen.
-- De gewenste proefeigenaar is volgens de eigenaar toegevoegd als testgebruiker.
-- De proefredirect werkt nu; eerste login en herverbinding zijn werkelijk bewezen.
-- De Calendar-rechten zijn bij beide proefaccounts verleend. Bron- en doelagenda
-  zijn aangemaakt en na procesherstart bevestigd; de itemproef is opgeruimd.
-- Het pad naar een **tweede, verschillende OAuth-webclient** is nog nodig voor
-  de vervangingsproef, met dezelfde callback
-  `http://localhost:3401/api/auth/callback/google`. De bestaande client en
-  tokens blijven behouden. Er wordt geen client uit een andere dienst gehaald.
-- Nog te meten: herautorisatie van dezelfde eigenaar met deze nieuwe client en
-  werkelijk bewijs dat de oude verbinding vóór bevestiging blijft werken.
+De eigenaar leverde een tweede credentialbestand. Het is een andere webclient
+binnen hetzelfde Google-project met de vereiste localhost-callback. Het bestand
+blijft buiten Git; de private proefconfiguratie verwijst naar het aangeleverde
+pad. Google toonde de zes al verleende services en vroeg geen extra scope.
 
-B0 wordt pas afgerond op basis van deze echte uitkomsten. De administratieve
-statusovergangen blijven bovendien geraakt door de bekende Scrum4Me ISS-7.
+De echte callback om 12:35:30 UTC behield de interne eigenaar en hetzelfde
+Google-subject. De kandidaat kreeg een eigen refresh token bij clientversie 1;
+de actieve verbinding bleef versie 0. Om tokenvernieuwing daadwerkelijk uit te
+voeren zijn alleen de twee **lokale proef-expirytimestamps** op nul gezet, waarna
+het proefproces opnieuw is gestart. Dit is een geforceerd refreshmoment; er
+wordt geen natuurlijk verloop van tokens geclaimd.
+
+Om 12:36:26 vernieuwde de bestaande Google-library het oude token met client 0.
+Om 12:36:28 vernieuwde zij het nieuwe token met client 1. Beide echte
+CalendarList-aanvragen slaagden, elk met drie pagina's en twee schrijfbare
+agenda's. Op dat moment was client 0 nog actief. De afzonderlijke geschoonde
+responses staan in `calendar-list-old-client-still-works-{1,2,3}.json` en
+`calendar-list-new-client-candidate-{1,2,3}.json`.
+
+Pas na deze readbacks is de proefverbinding om 12:36:46 UTC bevestigd en werd
+client 1 actief; het kandidaatveld is leeg. De oude client en bijbehorende
+verbindingen zijn bewaard. De productieconfiguratie op max2 is niet veranderd.
+
+## Afronding en overdracht
+
+Alle B0-stappen zijn werkelijk uitgevoerd. De responsefixtures tellen nu 27
+bestanden; identificatoren en persoonlijke tekst zijn geschoond, veldvormen
+behouden. Op de bronversie voor deze proef slagen opnieuw **107 tests**, de
+typecheck, productiebuild en **83 HTTP-asserties** met echte Next/SQLite en
+synthetische sessies. Die HTTP-tests zijn afzonderlijk van het hierboven
+beschreven echte Google-bewijs.
+
+B1 neemt drie gemeten details mee: een lege lijstpagina kan een vervolgtoken
+hebben; een succesvolle login kan Calendar-rechten missen; NextAuth behoudt
+bij een expliciet gebonden kandidaatcallback de bestaande interne gebruiker.
+Tokens moeten steeds bij hun eigen OAuth-client blijven. De administratie
+blijft geraakt door de bekende Scrum4Me ISS-7; er is geen statusbypass gebruikt.
+
+B2 moet nog herstel van onderbroken wissels bewijzen en C1 de installatie en
+melding voor een nieuwe eigenaar. B0 claimt die latere acceptatie niet.
 
 ## Primaire bronnen
 
