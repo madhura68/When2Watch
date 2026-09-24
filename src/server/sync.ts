@@ -41,14 +41,14 @@ export class SyncService {
     return this.config;
   }
 
-  add(userId: string, tvmazeId: number): Promise<SyncResult> {
-    return serializeCalendarMutation(userId, async () => (await this.configured()).addLocked(userId, tvmazeId));
+  add(userId: string, tvmazeId: number, trying = false): Promise<SyncResult> {
+    return serializeCalendarMutation(userId, async () => (await this.configured()).addLocked(userId, tvmazeId, trying));
   }
 
-  private async addLocked(userId: string, tvmazeId: number) {
+  private async addLocked(userId: string, tvmazeId: number, trying: boolean) {
       const snapshot = await this.source.snapshot(tvmazeId);
       const show = await this.db.trackedShow.upsert({ where: { userId_tvmazeId: { userId, tvmazeId } },
-        create: { userId, tvmazeId, ...this.showData(snapshot) }, update: this.showData(snapshot) });
+        create: { userId, tvmazeId, trying, ...this.showData(snapshot) }, update: this.showData(snapshot) });
       return this.run(userId, "add", [show], snapshot);
   }
 

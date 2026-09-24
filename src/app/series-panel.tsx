@@ -37,10 +37,10 @@ export function SeriesPanel({data}:{data:Overview}) {
   function changeQuery(value:string) {
     search.cancel();setQuery(value);setMatches([]);setMore(false);setSearched(false);setSearchError("");setSearching(value.trim().length >= MIN_SEARCH_LENGTH);
   }
-  async function action(showId?:number) {
+  async function action(showId?:number,trying=false) {
     setBusy(true);setFailed(false);setMessage(showId?"Serie toevoegen en agenda bijwerken…":"Agenda synchroniseren…");
     try {
-      const response=await fetch(showId?"/api/shows":"/api/sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(showId?{showId:String(showId)}:{})});
+      const response=await fetch(showId?"/api/shows":"/api/sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(showId?{showId:String(showId),trying}:{})});
       const body:SyncResult & {error?:string}=await response.json();
       if(body.series) {
         const counts=body.series.reduce((a,s)=>({created:a.created+s.created,updated:a.updated+s.updated,deleted:a.deleted+s.deleted,unchanged:a.unchanged+s.unchanged}),{created:0,updated:0,deleted:0,unchanged:0});
@@ -49,6 +49,16 @@ export function SeriesPanel({data}:{data:Overview}) {
       } else throw new Error(body.error??"Deze actie is niet gelukt.");
     } catch(error) {setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer dezelfde actie opnieuw.");}
     finally {router.refresh();setBusy(false);}
+  }
+  async function changeTrying(showId:number,trying:boolean) {
+    setBusy(true);setFailed(false);setMessage("Voorkeur opslaan…");
+    try {
+      const response=await fetch("/api/shows",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({showId:String(showId),trying})});
+      const body=await response.json();
+      if(!response.ok)throw new Error(body.error??"Opslaan is niet gelukt. Probeer opnieuw.");
+      setMessage("Voorkeur opgeslagen. Deze serie blijft met je agenda synchroniseren.");
+    }catch(error){setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer opnieuw.");}
+    finally{router.refresh();setBusy(false);}
   }
   return <>
     {data.needsReauth&&<section className="notice error"><p>De Google-toegang moet opnieuw worden gekoppeld. Je series blijven bewaard.</p><a href="/settings#google">Google-toegang herstellen</a></section>}
@@ -67,7 +77,10 @@ export function SeriesPanel({data}:{data:Overview}) {
         return <li className="match" key={show.id}>
           {show.poster?<img src={show.poster} alt="" width={44} height={62}/>:<span className="poster-placeholder" aria-hidden="true">TV</span>}
           <div className="match-info"><strong>{show.name}</strong><p>{[show.year,show.platform,show.country].filter(Boolean).join(" · ")||"Geen aanvullende gegevens"}</p><a href={show.url} target="_blank" rel="noreferrer">Bekijk op TVmaze</a></div>
-          <button disabled={busy||followed} onClick={()=>void action(show.id)} aria-label={followed?`${show.name} volg je al`:`Volg ${show.name}`}>{followed?"Volg je al":"Volgen"}</button>
+          <div className="match-actions">
+            <button disabled={busy||followed} onClick={()=>void action(show.id)} aria-label={followed?`${show.name} volg je al`:`Volg ${show.name}`}>{followed?"Volg je al":"Volgen"}</button>
+            {!followed&&<button disabled={busy} onClick={()=>void action(show.id,true)} aria-label={`Probeer ${show.name}`}>Proberen</button>}
+          </div>
         </li>;
       })}</ul>
       {!more&&matches.length>5&&<button className="secondary" onClick={()=>setMore(true)}>Toon de overige {matches.length-5} resultaten</button>}
@@ -79,6 +92,7 @@ export function SeriesPanel({data}:{data:Overview}) {
     {data.shows.map(show=><section className="card followed-show" key={show.id}>
       <div className="show-identity">
       <div className="show-heading"><SeriesPoster src={show.poster}/><div className="show-info"><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
+      <div className="show-preference"><label htmlFor={`trying-${show.id}`}>Jouw keuze voor {show.title}</label><select id={`trying-${show.id}`} value={show.trying?"trying":"following"} disabled={busy} onChange={e=>void changeTrying(show.id,e.target.value==="trying")}><option value="following">Volgen</option><option value="trying">Proberen</option></select></div>
       {show.error&&<p className="notice error">{show.error}</p>}
       </div>
       <div className="show-content">

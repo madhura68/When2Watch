@@ -53,6 +53,26 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  afterEach(async()=>{await storage?.close();});
  const active=()=>[...google.events.values()].filter(e=>e.status!=="cancelled");
+ it("adds a trying series to Calendar and keeps the choice through retry and source updates", async()=>{
+  const first=await service.add("owner",45039,true);
+  expect(first.series[0]).toMatchObject({created:5,failed:0});
+  expect((await overview("owner",storage.db,now)).shows[0]).toMatchObject({trying:true});
+  const links=await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}});
+  google.writes.length=0;
+  input.status="Ended";
+  await service.add("owner",45039);
+  await service.sync("owner","manual");
+  expect((await overview("owner",storage.db,now)).shows[0]).toMatchObject({trying:true,status:"Ended"});
+  expect(await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}})).toEqual(links);
+  expect(google.writes).toEqual([]);
+ });
+ it("defaults new series to following and does not undo a later preference on delayed add",async()=>{
+  await service.add("owner",45039);
+  expect(await storage.db.trackedShow.findFirst()).toMatchObject({trying:false});
+  await storage.db.trackedShow.updateMany({data:{trying:true}});
+  await service.add("owner",45039,false);
+  expect(await storage.db.trackedShow.findFirst()).toMatchObject({trying:true});
+ });
  it("keeps following and local episodes usable before a calendar is selected", async () => {
   await storage.db.calendarSettings.deleteMany();
   const result = await service.add("owner", 45039);

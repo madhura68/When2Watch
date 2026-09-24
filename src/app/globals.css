@@ -91,6 +91,10 @@ a { color: var(--accent); }
 .match-info { flex: 1; min-width: 0; }
 .match-info p { margin: 2px 0; font-size: 13px; color: var(--muted); }
 .match-info a { font-size: 12px; }
+.match-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.show-preference { margin-top: 20px; }
+.show-preference select { max-width: 100%; }
+@media (max-width: 700px) { .match { flex-wrap: wrap; } .match-actions { width: 100%; padding-left: 58px; } .match .match-actions button { margin-left: 0; } }
 .section-heading { margin-top: 32px; }
 .episodes li { padding: 13px 0; border-top: 1px solid var(--line); }
 .episode-heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; }

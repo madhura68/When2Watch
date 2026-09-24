@@ -77,7 +77,7 @@ try {
   const sessionText = await sessionResponse.text();
   check(sessionResponse.status === 200 && sessionText.includes(env.ALLOWED_GOOGLE_EMAIL), "NextAuth session route must work with current Next version");
   check(!sessionText.includes("never-serialize-") && !sessionText.includes(sessions.owner), "session endpoint leaked credentials");
-  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"], ["/api/shows", "POST"], ["/api/sync", "POST"], ["/api/settings/preferences", "PATCH"], ["/api/settings/google", "POST"], ["/api/settings/calendars", "POST"], ["/api/settings/calendar", "POST"]]) {
+  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"], ["/api/shows", "POST"], ["/api/shows", "PATCH"], ["/api/sync", "POST"], ["/api/settings/preferences", "PATCH"], ["/api/settings/google", "POST"], ["/api/settings/calendars", "POST"], ["/api/settings/calendar", "POST"]]) {
     check((await request(path, { method, headers: { origin } })).status === 401, "anonymous calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("other"), origin } })).status === 401, "other user's calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("owner"), origin: "https://attacker.example.test" } })).status === 403, "foreign-origin write must be denied before Google");
@@ -133,6 +133,23 @@ try {
   await db.episode.create({data:{trackedShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});
   const ownerShows = await request("/api/shows",{headers:cookie("owner")});
   const ownerData = await ownerShows.json();
+  const changeTrying = body => request("/api/shows",{method:"PATCH",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body});
+  check(ownerData.shows[0].trying === false,"existing series defaults to following");
+  const changed = await changeTrying(JSON.stringify({showId:"45039",trying:true}));
+  check(changed.ok && (await changed.json()).trying === true,"owner can mark an existing show as trying");
+  check((await (await request("/api/shows",{headers:cookie("owner")})).json()).shows[0].trying === true,"trying survives another HTTP request");
+  for (const invalid of ["null","{broken",JSON.stringify({showId:"45039"}),JSON.stringify({showId:45039,trying:true}),JSON.stringify({showId:"45039",trying:"true"}),JSON.stringify({showId:"45039",trying:true,userId:"other"})]) {
+    check((await changeTrying(invalid)).status === 400,"invalid trying input must be rejected");
+  }
+  check((await changeTrying(JSON.stringify({showId:"99998",trying:true}))).status === 404,"changing an untracked show must not add it");
+  const foreignShow = await db.trackedShow.create({data:{userId:"other",tvmazeId:99997,title:"Foreign",sourceUrl:"https://www.tvmaze.com/shows/99997",status:"Ended"}});
+  check((await changeTrying(JSON.stringify({showId:"99997",trying:true}))).status === 404,"owner cannot change a show belonging to another user");
+  check((await db.trackedShow.findUniqueOrThrow({where:{id:foreignShow.id}})).trying === false,"foreign preference stays unchanged");
+  for (const trying of ["true",1,null,{}]) {
+    check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"45039",trying})})).status === 400,"POST rejects invalid trying before any provider request");
+  }
+  check(await db.syncRun.count() === 1,"preference changes do not start provider synchronization");
+
   check(ownerShows.ok && ownerData.shows[0].summaryText === synopsis && ownerData.shows[0].runtimeMinutes === 45 && ownerData.shows[0].genres.join(",") === "Drama,Thriller", "owner must receive locally stored series metadata");
   check(ownerData.shows[0].upcoming[0].summaryText.startsWith("PRIVATE_EPISODE"), "owner must receive locally stored episode text");
   for(const identity of [null,"other"]){

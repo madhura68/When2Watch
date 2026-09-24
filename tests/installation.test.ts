@@ -59,7 +59,8 @@ it("adds installation tables without changing legacy owners, sessions, credentia
   await db.user.create({data:{id:"owner",email:legacy.allowedEmail}});
   await db.$executeRaw`INSERT INTO Account (id,userId,type,provider,providerAccountId,refresh_token) VALUES ('account','owner','oauth','google','subject','preserved-token')`;
   await db.session.create({data:{userId:"owner",sessionToken:"preserved-session",expires:new Date(Date.now()+3600000)}});
-  const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Preserved",status:"Running",sourceUrl:"https://example.test"},select:{id:true}});
+  await db.$executeRaw`INSERT INTO TrackedShow(id,userId,tvmazeId,title,status,sourceUrl) VALUES ('old-show','owner',45039,'Preserved','Running','https://example.test')`;
+  const show = {id:"old-show"};
   const episode = await db.episode.create({data:{trackedShowId:show.id,sourceId:1,sourceUrl:"https://example.test/1",airdate:"2026-09-30"}});
   await db.calendarEventLink.create({data:{episodeId:episode.id,calendarId:"old",eventId:"preserved",desiredJson:"{}",status:"synced"}});
   const before = {users:await db.user.findMany(),sessions:await db.session.findMany(),shows:await db.$queryRaw`SELECT * FROM TrackedShow ORDER BY id`,episodes:await db.episode.findMany(),links:await db.calendarEventLink.findMany()};

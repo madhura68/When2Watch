@@ -17,7 +17,7 @@ const day=86400_000, start=new Date("2026-09-24T07:00:00Z");
 it("adds only nullable banner columns while preserving populated series",async()=>{
   const migration="20260924121000_series_banners";storage=testDatabase(migration);const db=storage.db;
   await db.user.create({data:{id:"owner"}});
-  await db.trackedShow.create({data:{id:"existing",userId:"owner",tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:"Existing synopsis"},select:{id:true}});
+  await db.$executeRaw`INSERT INTO TrackedShow(id,userId,tvmazeId,title,sourceUrl,status,summaryText) VALUES ('existing','owner',45039,'Slow Horses','https://www.tvmaze.com/shows/45039','Running','Existing synopsis')`;
   const before=await db.$queryRaw<Record<string,unknown>[]>`SELECT * FROM TrackedShow`;
   storage.applyMigration(migration);
   const columns=Object.keys(before[0]).map(column=>`"${column}"`).join(",");
@@ -92,11 +92,13 @@ it("does not let banner failure block following/Calendar sync or let new banners
 it("adds a nullable background while preserving every existing show field and the old negative cache",async()=>{
   const migration="20260924180000_series_backgrounds";storage=testDatabase(migration);const db=storage.db;
   await db.user.create({data:{id:"owner"}});
-  await db.trackedShow.create({data:{id:"existing",userId:"owner",tvmazeId:44776,title:"Lanterns",sourceUrl:"https://www.tvmaze.com/shows/44776",status:"Running",poster:"https://static.tvmaze.com/uploads/images/medium_portrait/637/1592971.jpg",bannerUrl:null,bannerNextCheckAt:new Date(+start+7*day)},select:{id:true}});
+  await db.$executeRaw`INSERT INTO TrackedShow(id,userId,tvmazeId,title,sourceUrl,status,poster,bannerNextCheckAt) VALUES ('existing','owner',44776,'Lanterns','https://www.tvmaze.com/shows/44776','Running','https://static.tvmaze.com/uploads/images/medium_portrait/637/1592971.jpg',${+start+7*day})`;
   const before=await db.$queryRaw<Record<string,unknown>[]>`SELECT * FROM TrackedShow`;
   storage.applyMigration(migration);
   const columns=Object.keys(before[0]).map(column=>`"${column}"`).join(",");
   expect(await db.$queryRawUnsafe(`SELECT ${columns} FROM TrackedShow`)).toEqual(before);
+  // Preservation above covers the historical migration; runtime code uses the current schema.
+  storage.applyMigration("20260924200000_series_trying");
   const show=await db.trackedShow.findUniqueOrThrow({where:{id:"existing"}});
   expect(show.backgroundUrl).toBeNull();
   const artwork=vi.fn(async()=>({bannerUrl:null,backgroundUrl}));
