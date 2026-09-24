@@ -1,6 +1,6 @@
 # When2Watch — praktijkproef ST-001.1
 
-Status op 24 september 2026: JP bevestigt dat de proefmelding is ontvangen en werkt. Dit is de bevestiging van de Apple Agenda-proef waar de voorgaande vraag over ging; het exacte ontvangsttijdstip is niet afzonderlijk opgegeven. De eerdere proef bewees Google-login, schrijfrecht op When2Watch, het all-day proefitem en behoud van de koppeling na containerherstart op max2 via https://when2watch.jp-visser.nl. Ontvangst in Google Agenda/Chrome is nog niet bevestigd. ST-001.1 blijft in uitvoering zolang die afgesproken scope of de keuze om Apple Agenda te laten volstaan en het opruimen openstaan.
+Status op 24 september 2026: JP bevestigt ontvangst in zowel Apple Agenda als Google Agenda in Chrome. Het eigen proefitem is via When2Watch opgeruimd; Google bevestigt status cancelled. De meldingproef is geslaagd en de all-day aanpak blijft behouden. Exacte ontvangsttijden zijn niet afzonderlijk opgegeven. De normale appactie vernieuwde ook het verlopen Google-token zonder nieuwe login. De uitvoering gaat verder met de echte afleveringen van Slow Horses.
 
 ## Vastgelegde proef
 
@@ -96,13 +96,17 @@ Op 23 september is via When2Watch één all-day item aangemaakt voor **24 septem
 - Start `2026-09-24`, exclusieve einddatum `2026-09-25`; status `confirmed`.
 - Geschoond werkelijk request/readback: `docs/evidence/2026-09-23-google-proef.json`.
 
-**Google Agenda in Chrome:** vóór de insert is de all-day standaard voor When2Watch op dezelfde dag om 09:00 gezet; Google bevestigde dat de meldingsinstellingen waren opgeslagen. Desondanks is de CalendarList-readback `defaultReminders: []`. Het eventrequest bevat `reminders.useDefault: true`, maar de echte event-readback bevat `useDefault: false` zonder overrides. Het item is zichtbaar in Chrome; de bewerkingspagina heeft een lege lijst Meldingen. Die pagina is zonder wijzigingen verlaten. Dit bewijst een beperking van deze geteste route, niet dat elke mogelijke all-day oplossing onmogelijk is. Er is geen Google-melding voor dit item bewezen of ingesteld.
+**Google Agenda in Chrome:** vóór de insert is de all-day standaard voor When2Watch op dezelfde dag om 09:00 gezet; Google bevestigde dat de meldingsinstellingen waren opgeslagen. Desondanks is de CalendarList-readback `defaultReminders: []`. Het eventrequest bevat `reminders.useDefault: true`, maar de echte event-readback bevat `useDefault: false` zonder overrides. Het item is zichtbaar in Chrome; de bewerkingspagina heeft een lege lijst Meldingen. Die pagina is zonder wijzigingen verlaten. Dit bewijst een beperking van deze geteste route, niet dat elke mogelijke all-day oplossing onmogelijk is. Op 23 september was ontvangst nog onbewezen; op 24 september bevestigt JP dat de Chrome-melding toch is ontvangen. De eerdere API/UI-observatie voorspelde de werkelijke ontvangst dus niet correct.
 
 **Apple Agenda op Mac:** When2Watch is aangevinkt en het echte proefitem is zichtbaar. JP heeft uitdrukkelijk gekozen voor de accountbrede Google-standaard op de Mac: dezelfde dag om 09:00, ook voor andere hele-dagafspraken van dat Google-account. Bij de controle op 23 september stond deze voorkeur al ingesteld; het bestaande proefitem toonde `Alert on day of event at 09:00 (default)`. Er is geen afzonderlijke handmatige eventmelding toegevoegd.
 
-**Ontvangst op 24 september:** JP meldt in reactie op de vraag naar de Apple Agenda-melding: “melding is binnen gekomen. dit werkt”. Dit is werkelijk gebruikersbewijs van ontvangst, geen simulatie of afleiding uit een API-response. De ingestelde tijd was 09:00 Europe/Amsterdam; een exact waargenomen tijdstip is niet gegeven en wordt niet ingevuld. Er is geen afzonderlijke ontvangstbevestiging voor Google Agenda/Chrome.
+**Ontvangst op 24 september:** JP meldt in reactie op de vraag naar de Apple Agenda-melding: “melding is binnen gekomen. dit werkt”. Dit is werkelijk gebruikersbewijs van ontvangst, geen simulatie of afleiding uit een API-response. De ingestelde tijd was 09:00 Europe/Amsterdam; een exact waargenomen tijdstip is niet gegeven en wordt niet ingevuld. Op dat moment stond de afzonderlijke Chrome-bevestiging nog open; die volgde in de volgende reactie.
 
-Het bestaande proefitem is nog niet opgeruimd. JP is gevraagd of Apple Agenda voor zijn gebruik volstaat en we verdergaan met echte afleveringen, of eerst ook Google Agenda/Chrome moet worden bewezen, zoals het huidige plan noemt. Het eerder voorgestelde korte proefitem om 09:00 is niet aangemaakt. De eventvorm en acceptatie zijn niet stilzwijgend gewijzigd.
+**Ook Chrome ontvangen:** JP bevestigt op 24 september: “Chrome heb ik ook binnen, we kunnen verder”. Daarmee zijn beide clients praktisch beproefd. Het all-day model met de ingestelde standaardmeldingen blijft behouden; een tijdgebonden alternatief is niet nodig. Exacte ontvangsttijden blijven niet afzonderlijk gemeten.
+
+**Opruiming en tokenvernieuwing:** de app verwijderde uitsluitend proefitem `pbf32054e863a4d64a2480246e77fb163`. Readback op 24 september om 07:09:01 UTC: lokale status deleted, Google HTTP 200/status cancelled. De normale appactie vernieuwde het reeds verlopen toegangstoken: expires_at ging van 1790191848 naar 1790237300 zonder nieuwe login; needsReauth bleef false. Tokenwaarden blijven buiten bewijs.
+
+De MCP-planverificatie kon niet draaien omdat deze nieuwe repo geen origin/main heeft. De tool probeerde git diff origin/main...HEAD. Er is geen fictieve branch aangemaakt. De taakcriteria zijn handmatig tegen tests, live OAuth/agenda/herstartbewijs, beide gebruikersbevestigingen en de cleanup-readback gecontroleerd.
 
 | Bewijs | Status |
 |---|---|
@@ -114,10 +118,10 @@ Het bestaande proefitem is nog niet opgeruimd. JP is gevraagd of Apple Agenda vo
 | Apple Agenda: instelling op het proefitem | Dezelfde dag om 09:00 (standaard) |
 | Google Agenda in Chrome: instelling op het proefitem | Geen melding, ondanks all-day agendastandaard 09:00 |
 | Apple Agenda: ontvangen datum/tijd | Ontvangst bevestigd door JP op 24 september; exacte tijd niet opgegeven |
-| Google Agenda in Chrome: ontvangen datum/tijd | Open |
+| Google Agenda in Chrome: ontvangen datum/tijd | Ontvangst bevestigd door JP op 24 september; exacte tijd niet opgegeven |
 | Blijvende Google-koppeling na containerherstart | Bewezen met dezelfde sessie en nieuwe Google-agendacontrole |
-| Echte refresh-tokenvernieuwing | Nog niet uitgevoerd; taak 3 |
-| Eigen proefitem opgeruimd | Open |
+| Echte refresh-tokenvernieuwing | Normale appactie vernieuwde verlopen token op 24 september zonder nieuwe login; taak 3 herhaalt dit na serie-opslag |
+| Eigen proefitem opgeruimd | App meldt verwijderd; Google bevestigt cancelled op 24 september |
 | Gebruik na dag zeven | Later te observeren |
 
 Alleen API-succes sluit de meldingsproef niet af. Als all-day om 09:00 niet werkt: noteer de echte beperking en laat JP het alternatief kiezen. Taken ST-001.2 (echte afleveringen) en ST-001.3 (dagelijkse synchronisatie) beginnen pas na het vereiste bewijs van taak 1.

@@ -4,6 +4,7 @@ node_modules
 .next
 data
 tests
+scripts/prove-*.ts
 docs
 .superpowers
 *.tsbuildinfo

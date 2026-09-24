@@ -74,7 +74,7 @@
   ],
   "notification_receipt": {
     "apple_calendar": "Ontvangst door JP bevestigd op 2026-09-24; exacte ontvangsttijd niet opgegeven",
-    "google_calendar_chrome": "Nog niet waargenomen"
+    "google_calendar_chrome": "Ontvangst door JP bevestigd op 2026-09-24; exacte tijd niet opgegeven"
   },
   "runtime": {
     "commit": "961fc09330236e86c20d449f2d42ee9b836c1436",
@@ -105,7 +105,7 @@
   },
   "fallback": {
     "timed_probe_proposed": true,
-    "user_choice": "pending",
+    "user_choice": "Niet nodig; beide clients ontvingen all-day melding",
     "created": false
   },
   "receipt_report": {
@@ -118,5 +118,24 @@
     "scheduled_time_local": "09:00",
     "time_zone": "Europe/Amsterdam",
     "google_calendar_chrome_confirmed": false
+  },
+  "chrome_receipt_report": {
+    "reported_on": "2026-09-24",
+    "source": "JP",
+    "verbatim": "Chrome heb ik ook binnen, we kunnen verder",
+    "received_time_local": null
+  },
+  "cleanup": {
+    "observed_at": "2026-09-24T07:09:01.061Z",
+    "local_status": "deleted",
+    "google_http_status": 200,
+    "google_event_status": "cancelled"
+  },
+  "token_refresh": {
+    "before_expires_at": 1790191848,
+    "after_expires_at": 1790237300,
+    "trigger": "Normale opruimactie na verlopen token",
+    "interactive_login": false,
+    "needs_reauth": false
   }
 }

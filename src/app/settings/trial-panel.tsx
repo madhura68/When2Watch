@@ -37,7 +37,7 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
     </section>
     <section className="card">
       <span className="step">03</span><h2>Een melding om 09:00</h2>
-      <p>Het proefitem duurt de hele dag. Het gebruikt de standaardmeldingen van de agenda. <strong>Een melding om 09:00 is nog niet bewezen.</strong></p>
+      <p>Het proefitem duurt de hele dag en gebruikt de standaardmeldingen van de agenda. De ontvangst hangt ook af van de instellingen op je apparaat.</p>
       <ol className="checklist">
         <li>Controleer in Google Agenda de meldingen voor afspraken die de hele dag duren: 09:00 op dezelfde dag.</li>
         <li>Controleer dat When2Watch zichtbaar is in Agenda op je Mac en dat meldingen voor Agenda en Chrome zijn toegestaan.</li>
@@ -53,7 +53,7 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
     {probes.map((probe) => <section className="card" key={probe.id}>
       <span className="tag">{probe.status === "created" ? "Teruggelezen uit Google" : probe.status === "deleted" ? "Opgeruimd" : "Aanvraag nog niet bevestigd"}</span>
       <h2>Proef van {probe.date}</h2>
-      <p>Gewenst: <strong>09:00 Europe/Amsterdam</strong>. Ontvangst in Apple Agenda en Google Agenda in Chrome staat nog open. Geef na de proef per app de waargenomen datum en tijd door.</p>
+      <p>Gewenst: <strong>09:00 Europe/Amsterdam</strong>. Controleer bij een nieuwe proef de ontvangst in Apple Agenda en Google Agenda in Chrome.</p>
       {probe.status === "prepared" && <button disabled={busy} onClick={() => action("/api/probe", "POST", { date: probe.date }, "Het bestaande proefitem is teruggevonden en bevestigd.")}>Dezelfde aanvraag hervatten</button>}
       <details><summary>Verzoek en antwoord bekijken</summary><p className="small">Deze gegevens bewijzen het agenda-item. Ze bewijzen geen ontvangen melding.</p><pre>{JSON.stringify({ request: JSON.parse(probe.request), readback: probe.readback ? JSON.parse(probe.readback) : null }, null, 2)}</pre></details>
       {probe.status !== "deleted" && <button className="secondary" disabled={busy} onClick={() => action("/api/probe", "DELETE", { id: probe.id }, "Alleen dit eigen proefitem is opgeruimd.")}>Ruim dit proefitem op</button>}

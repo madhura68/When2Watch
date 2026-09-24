@@ -22,11 +22,11 @@ export async function saveGoogleTokens(db: PrismaClient, userId: string, account
   if (result.count !== 1) throw new AppError("ACCOUNT_NOT_FOUND", 401, "Koppel je Google-account opnieuw.");
 }
 
-export async function getGoogleAccessToken(db: PrismaClient, userId: string, refresh: Refresher): Promise<string> {
+export async function getGoogleAccessToken(db: PrismaClient, userId: string, refresh: Refresher, forceRefresh = false): Promise<string> {
   const account = await db.account.findFirst({ where: { userId, provider: "google" } });
   const reconnect = () => new AppError("RECONNECT_GOOGLE", 401, "Koppel Google opnieuw en geef beide agendatoestemmingen.");
   if (!account || account.needsReauth || !hasCalendarScopes(account.scope)) throw reconnect();
-  if (account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60) return account.access_token;
+  if (!forceRefresh && account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60) return account.access_token;
   if (!account.refresh_token) throw reconnect();
 
   let tokens: Awaited<ReturnType<Refresher>>;

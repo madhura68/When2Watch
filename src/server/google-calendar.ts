@@ -10,6 +10,7 @@ export type CalendarEvent = {
   description?: string;
   status?: string;
   etag?: string;
+  transparency?: "transparent" | "opaque";
   start: { date?: string; dateTime?: string };
   end: { date?: string; dateTime?: string };
   reminders: { useDefault: boolean; overrides?: Reminder[] };
@@ -69,6 +70,32 @@ export class GoogleCalendar {
     return this.request(`calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=none`, { method: "POST", body: JSON.stringify(event) });
   }
 
+  async ownedEpisodes(calendarId: string, userId: string, showId: number): Promise<CalendarEvent[]> {
+    const events: CalendarEvent[] = [], seen = new Set<string>();
+    let pageToken: string | undefined;
+    do {
+      const query = new URLSearchParams({ maxResults: "2500", showDeleted: "false" });
+      // Repeated private properties are ORed by Google. Fetch app candidates,
+      // then check the full identity locally (developers.google.com/calendar/api/guides/extended-properties).
+      query.append("privateExtendedProperty", "app=when2watch");
+      if (pageToken) query.set("pageToken", pageToken);
+      const result = await this.request<{ items?: CalendarEvent[]; nextPageToken?: string }>(`calendars/${encodeURIComponent(calendarId)}/events?${query}`);
+      if (result.items !== undefined && !Array.isArray(result.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google gaf geen geldige lijst agenda-items.");
+      events.push(...(result.items ?? []));
+      pageToken = result.nextPageToken;
+      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De lijst agenda-items kon niet volledig worden gelezen.");
+      if (pageToken) seen.add(pageToken);
+    } while (pageToken);
+    return events.filter(event => Object.entries({ app:"when2watch",kind:"episode",userId,showId:String(showId) })
+      .every(([key,value]) => event.extendedProperties?.private?.[key] === value));
+  }
+
+  patch(calendarId: string, eventId: string, event: CalendarEvent, etag: string): Promise<CalendarEvent> {
+    return this.request(`calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`, {
+      method: "PATCH", headers: { "If-Match": etag }, body: JSON.stringify(event),
+    });
+  }
+
   remove(calendarId: string, eventId: string, etag: string): Promise<void> {
     return this.request(`calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`, {
       method: "DELETE", headers: { "If-Match": etag },
@@ -78,7 +105,7 @@ export class GoogleCalendar {
 
 export function safeEvent(event: CalendarEvent): CalendarEvent {
   return {
-    id: event.id, summary: event.summary, status: event.status, etag: event.etag,
+    id: event.id, summary: event.summary, description: event.description, transparency: event.transparency, status: event.status, etag: event.etag,
     start: event.start, end: event.end, reminders: event.reminders,
     extendedProperties: event.extendedProperties,
   };

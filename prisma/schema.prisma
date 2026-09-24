@@ -17,6 +17,8 @@ model User {
   sessions      Session[]
   calendar      CalendarSettings?
   probes        Probe[]
+  shows         TrackedShow[]
+  syncRuns      SyncRun[]
 }
 
 model Account {
@@ -81,4 +83,64 @@ model Probe {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
+}
+
+model TrackedShow {
+  id            String @id @default(cuid())
+  userId        String
+  tvmazeId      Int
+  title         String
+  sourceUrl     String
+  year          String?
+  poster        String?
+  platform      String?
+  country       String?
+  status        String
+  lastAttemptAt DateTime?
+  lastSuccessAt DateTime?
+  lastError     String?
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodes      Episode[]
+  @@unique([userId, tvmazeId])
+}
+
+model Episode {
+  id            String @id @default(cuid())
+  trackedShowId String
+  sourceId      Int
+  title         String?
+  season        Int?
+  number        Int?
+  airdate       String?
+  sourceUrl     String
+  present       Boolean @default(true)
+  show          TrackedShow @relation(fields: [trackedShowId], references: [id], onDelete: Cascade)
+  links         CalendarEventLink[]
+  @@unique([trackedShowId, sourceId])
+}
+
+model CalendarEventLink {
+  id                   String @id @default(cuid())
+  episodeId            String
+  calendarId           String
+  eventId              String @unique
+  status               String @default("prepared")
+  desiredJson          String
+  confirmedDesiredHash String?
+  confirmedRemoteHash  String?
+  lastDate             String?
+  episode              Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  @@unique([episodeId, calendarId])
+}
+
+model SyncRun {
+  id         String @id @default(cuid())
+  userId     String
+  trigger    String
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  status     String @default("running")
+  resultJson String?
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, startedAt])
 }

@@ -1,0 +1,428 @@
+[
+  {
+    "score": 1.1880059,
+    "show": {
+      "id": 45039,
+      "url": "https://www.tvmaze.com/shows/45039/slow-horses",
+      "name": "Slow Horses",
+      "type": "Scripted",
+      "language": "English",
+      "genres": [
+        "Drama",
+        "Thriller",
+        "Espionage"
+      ],
+      "status": "Running",
+      "runtime": null,
+      "averageRuntime": 45,
+      "premiered": "2022-04-01",
+      "ended": null,
+      "officialSite": "https://tv.apple.com/us/show/slow-horses/umc.cmc.2szz3fdt71tl1ulnbp8utgq5o",
+      "schedule": {
+        "time": "",
+        "days": [
+          "Wednesday"
+        ]
+      },
+      "rating": {
+        "average": 8.1
+      },
+      "weight": 100,
+      "network": null,
+      "webChannel": {
+        "id": 310,
+        "name": "Apple TV",
+        "country": null,
+        "officialSite": "https://tv.apple.com/"
+      },
+      "dvdCountry": null,
+      "externals": {
+        "tvrage": null,
+        "thetvdb": 372264,
+        "imdb": "tt5875444"
+      },
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/641/1604425.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/641/1604425.jpg"
+      },
+      "summary": "<p><b>Slow Horses</b> follows the story of a group of British intelligence agents who serve in a dumping ground department of MI5 called Slough House after the big mistakes they've made that resulted in the end of their mainstream careers.</p><p>This quick-witted spy drama follows a dysfunctional team of MI5 agents—and their obnoxious boss, the notorious Jackson Lamb—as they navigate the espionage world's smoke and mirrors to defend England from sinister forces.</p>",
+      "updated": 1790131913,
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/shows/45039"
+        },
+        "previousepisode": {
+          "href": "https://api.tvmaze.com/episodes/3643506",
+          "name": "Daddy Issues"
+        },
+        "nextepisode": {
+          "href": "https://api.tvmaze.com/episodes/3643507",
+          "name": "Resurrection"
+        }
+      }
+    }
+  },
+  {
+    "score": 0.4089263,
+    "show": {
+      "id": 26602,
+      "url": "https://www.tvmaze.com/shows/26602/heroes-slow-burn",
+      "name": "Heroes: Slow Burn",
+      "type": "Scripted",
+      "language": "English",
+      "genres": [
+        "Drama",
+        "Action",
+        "Science-Fiction"
+      ],
+      "status": "Ended",
+      "runtime": null,
+      "averageRuntime": 2,
+      "premiered": "2009-09-28",
+      "ended": "2009-11-30",
+      "officialSite": null,
+      "schedule": {
+        "time": "",
+        "days": [
+          "Monday"
+        ]
+      },
+      "rating": {
+        "average": null
+      },
+      "weight": 40,
+      "network": null,
+      "webChannel": {
+        "id": 11,
+        "name": "NBC.com",
+        "country": {
+          "name": "United States",
+          "code": "US",
+          "timezone": "America/New_York"
+        },
+        "officialSite": null
+      },
+      "dvdCountry": null,
+      "externals": {
+        "tvrage": null,
+        "thetvdb": null,
+        "imdb": "tt1570825"
+      },
+      "image": null,
+      "summary": "<p>Follows the exploits of Lydia (The Painted Lady) as she secretly seeks to reclaim her long lost daughter, with some help from Edgar.</p>",
+      "updated": 1757858901,
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/shows/26602"
+        },
+        "previousepisode": {
+          "href": "https://api.tvmaze.com/episodes/1116540",
+          "name": "Part 10"
+        }
+      }
+    }
+  },
+  {
+    "score": 0.37135375,
+    "show": {
+      "id": 2630,
+      "url": "https://www.tvmaze.com/shows/2630/verses-and-flow",
+      "name": "Verses and Flow",
+      "type": "Variety",
+      "language": "English",
+      "genres": [],
+      "status": "Ended",
+      "runtime": 30,
+      "averageRuntime": 30,
+      "premiered": "2011-11-10",
+      "ended": "2015-09-17",
+      "officialSite": "http://tvone.tv/category/shows/verses-and-flow/",
+      "schedule": {
+        "time": "22:00",
+        "days": [
+          "Thursday"
+        ]
+      },
+      "rating": {
+        "average": null
+      },
+      "weight": 42,
+      "network": {
+        "id": 224,
+        "name": "TV One",
+        "country": {
+          "name": "United States",
+          "code": "US",
+          "timezone": "America/New_York"
+        },
+        "officialSite": null
+      },
+      "webChannel": null,
+      "dvdCountry": null,
+      "externals": {
+        "tvrage": 30082,
+        "thetvdb": null,
+        "imdb": null
+      },
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/331/827720.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/331/827720.jpg"
+      },
+      "summary": "<p><b>Verses and Flow</b>, hosted by noted author, community activist and CSI's Hill Harper, this fabulous show features dynamic singers and spoken word artists. Among those, Angie Stone, Kem, Ledsi, Tyrese, Estelle, Marsha Amborsius, and poets like Thea Monyee! Check out our convo with this LA based performer!</p>",
+      "updated": 1624118231,
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/shows/2630"
+        },
+        "previousepisode": {
+          "href": "https://api.tvmaze.com/episodes/201443",
+          "name": "Jussie Smollett"
+        }
+      }
+    }
+  },
+  {
+    "score": 0.32425672,
+    "show": {
+      "id": 61621,
+      "url": "https://www.tvmaze.com/shows/61621/the-horne-section-tv-show",
+      "name": "The Horne Section TV Show",
+      "type": "Scripted",
+      "language": "English",
+      "genres": [
+        "Comedy",
+        "Music"
+      ],
+      "status": "Ended",
+      "runtime": null,
+      "averageRuntime": 23,
+      "premiered": "2022-11-03",
+      "ended": "2025-05-22",
+      "officialSite": "https://www.channel4.com/programmes/the-horne-section-tv-show",
+      "schedule": {
+        "time": "",
+        "days": []
+      },
+      "rating": {
+        "average": null
+      },
+      "weight": 53,
+      "network": null,
+      "webChannel": {
+        "id": 52,
+        "name": "Channel 4",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB",
+          "timezone": "Europe/London"
+        },
+        "officialSite": "https://www.channel4.com/"
+      },
+      "dvdCountry": null,
+      "externals": {
+        "tvrage": null,
+        "thetvdb": null,
+        "imdb": null
+      },
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/429/1073155.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/429/1073155.jpg"
+      },
+      "summary": "<p>Alex Horne steps out of Greg Davies' shadow as he gets the chance to host his own late-night chat show with his loyal band. But will all go to plan in this mash-up of comedy, celebs, music and mayhem?</p>",
+      "updated": 1781457492,
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/shows/61621"
+        },
+        "previousepisode": {
+          "href": "https://api.tvmaze.com/episodes/3236571",
+          "name": "The End?"
+        }
+      }
+    }
+  },
+  {
+    "score": 0.3221125,
+    "show": {
+      "id": 6229,
+      "url": "https://www.tvmaze.com/shows/6229/the-pete-holmes-show",
+      "name": "The Pete Holmes Show",
+      "type": "Talk Show",
+      "language": "English",
+      "genres": [
+        "Comedy"
+      ],
+      "status": "Ended",
+      "runtime": 30,
+      "averageRuntime": 30,
+      "premiered": "2013-10-28",
+      "ended": "2014-06-18",
+      "officialSite": null,
+      "schedule": {
+        "time": "00:00",
+        "days": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday"
+        ]
+      },
+      "rating": {
+        "average": null
+      },
+      "weight": 31,
+      "network": {
+        "id": 32,
+        "name": "TBS",
+        "country": {
+          "name": "United States",
+          "code": "US",
+          "timezone": "America/New_York"
+        },
+        "officialSite": "https://www.tbs.com/"
+      },
+      "webChannel": null,
+      "dvdCountry": null,
+      "externals": {
+        "tvrage": 36809,
+        "thetvdb": 271728,
+        "imdb": "tt3278316"
+      },
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/23/59977.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/23/59977.jpg"
+      },
+      "summary": "<p>Comedian Pete Holmes hosts the late night talk show <i><b>\"The Pete Holmes Show\"</b></i> (formerly known as <i>The Midnight Show with Pete Holmes</i>) which is produced by Conan O'Brien and airs right after CONAN on TBS.</p>",
+      "updated": 1645942220,
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/shows/6229"
+        },
+        "previousepisode": {
+          "href": "https://api.tvmaze.com/episodes/371130",
+          "name": "Andrew W.K., Scott Hutchinson"
+        }
+      }
+    }
+  },
+  {
+    "score": 0.2793656,
+    "show": {
+      "id": 62335,
+      "url": "https://www.tvmaze.com/shows/62335/vick-hopes-breakfast-show",
+      "name": "Vick Hope's Breakfast Show",
+      "type": "Talk Show",
+      "language": "English",
+      "genres": [],
+      "status": "Running",
+      "runtime": 55,
+      "averageRuntime": 55,
+      "premiered": "2022-06-12",
+      "ended": null,
+      "officialSite": null,
+      "schedule": {
+        "time": "08:30",
+        "days": [
+          "Sunday"
+        ]
+      },
+      "rating": {
+        "average": null
+      },
+      "weight": 18,
+      "network": {
+        "id": 35,
+        "name": "ITV1",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB",
+          "timezone": "Europe/London"
+        },
+        "officialSite": "https://www.itv.com/"
+      },
+      "webChannel": null,
+      "dvdCountry": null,
+      "externals": {
+        "tvrage": null,
+        "thetvdb": null,
+        "imdb": null
+      },
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/472/1181615.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/472/1181615.jpg"
+      },
+      "summary": "<p>In her brand-new chat show, Vick Hope will be filling your weekend with amazing guests, delicious cocktail recipes and brilliant summer read recommendations.</p><p>On top of all that, she'll be joined each week by a best-selling author and having a bit of fun in the studio with some fun and games to brighten up your Sunday.</p>",
+      "updated": 1692058852,
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/shows/62335"
+        },
+        "previousepisode": {
+          "href": "https://api.tvmaze.com/episodes/2365214",
+          "name": "Episode 8"
+        }
+      }
+    }
+  },
+  {
+    "score": 0.2576772,
+    "show": {
+      "id": 78897,
+      "url": "https://www.tvmaze.com/shows/78897/dublin-horse-show",
+      "name": "Dublin Horse Show",
+      "type": "Sports",
+      "language": "English",
+      "genres": [],
+      "status": "To Be Determined",
+      "runtime": null,
+      "averageRuntime": 173,
+      "premiered": "2024-08-16",
+      "ended": null,
+      "officialSite": null,
+      "schedule": {
+        "time": "",
+        "days": [
+          "Friday",
+          "Saturday",
+          "Sunday"
+        ]
+      },
+      "rating": {
+        "average": null
+      },
+      "weight": 1,
+      "network": {
+        "id": 1054,
+        "name": "RTÉ2",
+        "country": {
+          "name": "Ireland",
+          "code": "IE",
+          "timezone": "Europe/Dublin"
+        },
+        "officialSite": "https://www.rte.ie/tv/"
+      },
+      "webChannel": null,
+      "dvdCountry": null,
+      "externals": {
+        "tvrage": null,
+        "thetvdb": null,
+        "imdb": null
+      },
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/531/1328268.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/531/1328268.jpg"
+      },
+      "summary": "<p>Ruby Walsh presents live coverage from the RDS including the Nations Cup</p>",
+      "updated": 1731861559,
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/shows/78897"
+        },
+        "previousepisode": {
+          "href": "https://api.tvmaze.com/episodes/2978996",
+          "name": "Day Five"
+        }
+      }
+    }
+  }
+]

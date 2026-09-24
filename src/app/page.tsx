@@ -1,12 +1,18 @@
-import { redirect } from "next/navigation";
 import { signedInUser } from "@/server/auth";
 import { oauthReady } from "@/server/config";
 import { AuthButton } from "./auth-buttons";
+import { overview } from "@/server/overview";
+import { SeriesPanel } from "./series-panel";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  if (await signedInUser()) redirect("/settings");
+  const user=await signedInUser();
+  if (user) return <>
+    <header><a className="brand" href="/">When2Watch<span className="brand-dot">.</span></a><AuthButton logout/></header>
+    <section className="hero compact"><p className="eyebrow">Je series, in je agenda</p><h1>Weet wanneer je<br/>verder kunt kijken.</h1><p className="intro">Volg je favoriete serie. Nieuwe afleveringen komen vanzelf in je When2Watch-agenda.</p></section>
+    <SeriesPanel data={await overview(user.id)}/>
+  </>;
   const { error } = await searchParams;
   return <>
     <header><a className="brand" href="/">When2Watch<span className="brand-dot">.</span></a><span className="tag">Eerste proef</span></header>

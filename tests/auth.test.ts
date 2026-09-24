@@ -85,6 +85,12 @@ describe("persisted Google credentials", () => {
     await expect(getGoogleAccessToken(database.db, "owner", async () => { throw new Error("must not refresh a valid token"); })).resolves.toBe("renewed-access");
   });
 
+  it("can explicitly renew a still-valid token through the same client for the restart proof",async()=>{
+    await database.db.account.updateMany({data:{access_token:"still-valid",expires_at:Math.floor(Date.now()/1000)+3600}});
+    const token=await getGoogleAccessToken(database.db,"owner",async()=>({access_token:"operator-renewed",expiry_date:Date.now()+3600000}),true);
+    expect(token).toBe("operator-renewed");expect((await database.db.account.findFirstOrThrow()).access_token).toBe("operator-renewed");
+  });
+
   it("marks revoked consent as reconnect-needed without disclosing provider errors", async () => {
     await database.db.account.updateMany({ data: { expires_at: 1 } });
     await expect(getGoogleAccessToken(database.db, "owner", async () => {

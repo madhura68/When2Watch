@@ -1,0 +1,9 @@
+{
+  "fetched_at": "2026-09-24T07:08:42.388548+00:00",
+  "source": "TVmaze",
+  "license": "CC BY-SA",
+  "documents": {
+    "slow-horses-search": "https://api.tvmaze.com/search/shows?q=Slow%20Horses",
+    "slow-horses": "https://api.tvmaze.com/shows/45039?embed=episodes"
+  }
+}

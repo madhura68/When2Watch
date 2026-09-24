@@ -19,7 +19,7 @@ export default async function Settings() {
   ]);
   return <>
     <header><a className="brand" href="/">When2Watch<span className="brand-dot">.</span></a><AuthButton logout /></header>
-    <section className="hero compact"><p className="eyebrow">Eerste proef · Slow Horses</p><h1>Komt jouw seintje aan?</h1><p className="intro">Eén proefitem, twee apps. We controleren een melding om 09:00 op de gekozen datum.</p></section>
+    <section className="hero compact"><p className="eyebrow"><a href="/">← Jouw series</a></p><h1>Je agenda en meldingen.</h1><p className="intro">Controleer de Google-koppeling of maak een apart proefitem om je meldingen te testen.</p></section>
     <section className="account-row"><div><strong>Google gekoppeld</strong><br /><span className="muted">{user.email}</span></div><span className="tag success">Ingelogd</span></section>
     {(account?.needsReauth || !account?.refresh_token) && <section className="notice error"><p>De blijvende toegang ontbreekt of is verlopen. Koppel Google opnieuw en geef beide agendatoestemmingen.</p><AuthButton /></section>}
     <TrialPanel calendarId={settings.calendarId} calendar={calendar ? { name: calendar.summary, timeZone: calendar.timeZone, confirmedAt: calendar.confirmedAt.toISOString(), reminders: calendar.defaultRemindersJson } : null} tomorrow={nextDate(localDate(new Date()))} probes={probes.map((probe) => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />

@@ -20,6 +20,7 @@ const env = {
   NEXTAUTH_SECRET: randomBytes(32).toString("hex"),
   GOOGLE_CLIENT_ID: "http-test.apps.googleusercontent.com", GOOGLE_CLIENT_SECRET: "synthetic-client-secret",
   GOOGLE_CALENDAR_ID: "chosen@example.test", ALLOWED_GOOGLE_EMAIL: "owner@example.test",
+  CRON_SECRET: randomBytes(32).toString("hex"),
 };
 const db = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
 let server;
@@ -62,11 +63,28 @@ try {
   const sessionText = await sessionResponse.text();
   check(sessionResponse.status === 200 && sessionText.includes(env.ALLOWED_GOOGLE_EMAIL), "NextAuth session route must work with current Next version");
   check(!sessionText.includes("never-serialize-") && !sessionText.includes(sessions.owner), "session endpoint leaked credentials");
-  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"]]) {
+  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"], ["/api/shows", "POST"], ["/api/sync", "POST"]]) {
     check((await request(path, { method, headers: { origin } })).status === 401, "anonymous calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("other"), origin } })).status === 401, "other user's calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("owner"), origin: "https://attacker.example.test" } })).status === 403, "foreign-origin write must be denied before Google");
   }
+  for (const path of ["/api/shows", "/api/shows/search?q=Slow"]) {
+    check((await request(path)).status === 401, "anonymous show read must be denied");
+    check((await request(path,{headers:cookie("other")})).status === 401, "other account's show read must be denied");
+  }
+  const home = await request("/",{headers:cookie("owner")});
+  check(home.ok && (await home.text()).includes("Jouw series"), "signed-in home must display the series dashboard");
+  const emptySearch = await request("/api/shows/search?q=",{headers:cookie("owner")});
+  check(emptySearch.ok && (await emptySearch.json()).shows.length === 0, "empty search must return without a provider request");
+  for(const credential of [undefined, "incorrect"]) {
+    const response = await request("/api/cron/sync",{method:"POST",headers: credential ? {authorization:`Bearer ${credential}`} : {}});
+    check(response.status === 401,"cron must reject absent or wrong credentials");
+  }
+  check(await db.syncRun.count() === 0,"denied cron must perform no sync work");
+  const cron = await request("/api/cron/sync",{method:"POST",headers:{authorization:`Bearer ${env.CRON_SECRET}`}});
+  check(cron.status === 200 && (await cron.json()).status === "success","authorized empty cron must use the shared service");
+  check(await db.syncRun.count({where:{userId:"owner",trigger:"cron"}}) === 1,"cron must resolve the configured owner on the server");
+  check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"x"})})).status === 400,"invalid show ID must fail before the provider");
   const invalid = await request("/api/probe", { method: "POST", headers: { ...cookie("owner"), origin, "Content-Type": "application/json" }, body: JSON.stringify({ date: "not-a-date" }) });
   check(invalid.status === 400, "invalid date must fail locally");
   const logout = await request("/api/auth/signout", { method: "POST", headers: { ...cookie("owner"), "Content-Type": "application/x-www-form-urlencoded" }, body: "json=true" });
