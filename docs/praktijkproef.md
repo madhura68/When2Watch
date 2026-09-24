@@ -172,3 +172,13 @@ De MCP-planverificatie kon niet draaien omdat deze nieuwe repo geen origin/main 
 | Gebruik na dag zeven | Later te observeren |
 
 De vereiste cliëntontvangst is door JP bevestigd. Daarna zijn taak 2 (echte afleveringen) en taak 3 (herstart en dagelijkse synchronisatie) uitgevoerd en bewezen zoals bovenaan vastgelegd. De all-day afspraakvorm blijft behouden.
+
+## ST-002 / T-4 — Posters, 24 september 2026
+
+Lokale presentatieproef met een eigen synthetische SQLite-database en geblokkeerde externe serverfetches: de bestaande Slow Horses-poster verschijnt, null en HTTP 404 geven een even groot TV-vlak. De browserproef reproduceerde een fout vóór hydration; de component controleert daarom ook reeds voltooide afbeeldingen bij DOM-koppeling. Een andere URL reset de foutstatus via de componentkey.
+
+Chrome desktop: 80×112 px; 375 px viewport: 60×84 px en documentbreedte exact 375 px. Lange titel, komende afleveringen, bronlink en zichtbare toetsenbordfocus blijven bruikbaar. Twee pagina-openingen: nul metadata-/sync-aanvragen; de gecontroleerde kapotte afbeelding één poging per paginalading. Geen productiedata gebruikt of gewijzigd voor de fallbackproef.
+
+`npm test`: 43/43 geslaagd; `npm run typecheck` en `npm run build` geslaagd. Alleen presentatiebestanden gewijzigd, geen schema-, dependency- of Calendar-wijziging. Live uitrol en JP-beoordeling worden hieronder afzonderlijk vastgelegd.
+
+Taakstatus via MCP blijft geblokkeerd door de reeds gemelde ISS-7 (`tasks.dispatch_request_id` ontbreekt). Geen database- of statusbypass; uitvoering en bewijs worden gelogd.

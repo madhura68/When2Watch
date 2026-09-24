@@ -6,6 +6,7 @@ import type { Overview } from "@/server/overview";
 import type { SyncResult } from "@/server/sync";
 import { LatestSearch, MIN_SEARCH_LENGTH } from "@/lib/latest-search";
 import { AuthButton } from "./auth-buttons";
+import { SeriesPoster } from "./series-poster";
 
 const timestamp=(value:string|null)=>value ? new Date(value).toLocaleString("nl-NL",{timeZone:"Europe/Amsterdam",dateStyle:"short",timeStyle:"short"}) : "Nog niet";
 const episodeDate=(value:string)=>new Date(`${value}T12:00:00Z`).toLocaleDateString("nl-NL",{timeZone:"Europe/Amsterdam",day:"numeric",month:"long"});
@@ -72,7 +73,7 @@ export function SeriesPanel({data}:{data:Overview}) {
     <div className="section-heading"><h2>Jouw series <span className="muted">{data.shows.length}</span></h2><button disabled={busy||!data.shows.length} onClick={()=>void action()}>{busy?"Bezig…":"Nu synchroniseren"}</button></div>
     {!data.shows.length&&<p className="muted">Je volgt nog geen serie. Zoek hierboven je eerste serie.</p>}
     {data.shows.map(show=><section className="card" key={show.id}>
-      <div className="show-heading"><div><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
+      <div className="show-heading"><SeriesPoster src={show.poster}/><div className="show-info"><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
       {show.error&&<p className="notice error">{show.error}</p>}
       {show.upcoming.length?<ul className="episodes">{show.upcoming.map(e=><li key={e.id}><div><strong>{e.season!==null&&e.number!==null?`S${String(e.season).padStart(2,"0")}E${String(e.number).padStart(2,"0")}`:"Aflevering"}</strong> {e.title}<br/><span className="muted small">{e.linked?"In je agenda":"Agenda nog niet bevestigd"}</span></div><time dateTime={e.date}>{episodeDate(e.date)}</time></li>)}</ul>:<p className="muted">{show.status==="Ended"?"Deze serie is beëindigd; er zijn geen komende uitzenddatums bekend.":"Nog geen volgende uitzenddatum bekend. Je blijft deze serie volgen."}</p>}
       {show.unknownDates>0&&<p className="muted small">{show.unknownDates} aflevering(en) zonder bekende uitzenddatum; daarvoor staat er geen agenda-item.</p>}
