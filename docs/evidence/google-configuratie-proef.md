@@ -1,6 +1,6 @@
 # B0 — Google-configuratieproef
 
-Status op 24 september 2026: **harnas gereed; echte Google-proef nog niet uitgevoerd**.
+Status op 24 september 2026: **harnas gereed; Google-aanvraag geblokkeerd op de proefredirect**.
 T-8 / ST-004, sprint S-2026-09-24-2. A1/A2 zijn op max2 bewezen; B1/B2/C1 zijn
 nog niet gestart. Dit document wordt aangevuld met echte uitkomsten.
 
@@ -80,10 +80,43 @@ Dit zijn lokale controles, **geen bewijs van werkende Google-koppelingen**.
 Er is nog geen nieuwe Google-toestemming verleend, geen proefagenda aangemaakt
 en geen proefevent geschreven.
 
+### Vervolg op 24 september: gewenste proefeigenaar en aanmeldstart
+
+De eigenaar verduidelijkte welk van de twee opgegeven accounts de proefeigenaar
+moet zijn en bevestigde dat dit account als testgebruiker is toegevoegd. De
+private configuratie is daarop aangepast. Eerst is geverifieerd dat de
+proefdatabase nul gebruikers, accounts en sessies had; er zijn geen bestaande
+eigenaarsgegevens verplaatst. De startpagina toont nu het gekozen account en
+Google ontvangt dit account als login-hint.
+
+Een losse/oude NextAuth-aanmeldpagina had geen bijbehorende proefaanvraag.
+Een regressiecheck gaf eerst HTTP 200; na de correctie geeft zo'n ongekoppelde
+aanmeld- of callbackroute HTTP 303 naar de proefstart. Drie tests controleren
+vervaltijd, cookie-/sessiebinding en veilige foutclassificatie. De suite telt nu
+107 geslaagde tests; typecheck slaagt.
+
+De echte browser onthulde vervolgens dat de native formulier-POST werd
+geweigerd: CSRF-token aanwezig en passend, maar Origin week af. Het harnas
+stuurde `Referrer-Policy: no-referrer`; bij zulke formulieraanvragen maakt de
+browser de Origin `null`. Dit is beschreven in de
+[MDN-uitleg over Referrer-Policy en Origin](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy).
+Na wijziging naar `same-origin` bereikte dezelfde browser via dezelfde knop de
+echte NextAuth-aanmeldpagina en vervolgens Google. De Origin- en CSRF-controles
+blijven vereist; het gaat niet om een uitzondering op die controles.
+
+Google toont nu concreet **HTTP 400 / `redirect_uri_mismatch`** voor
+`http://localhost:3401/api/auth/callback/google`. Dit bevestigt dat de aangevraagde
+proefredirect nog niet door de gebruikte webclient wordt geaccepteerd. Geen
+succesvolle callback of nieuwe toestemming geclaimd. De oorspronkelijke drie
+`OAuthCallback`-fouten hadden geen gedetailleerde foutregistratie; hun precieze
+provideroorzaak is daarmee niet achteraf vastgesteld.
+
 ## Openstaande externe voorwaarden en metingen
 
 - De eigenaar heeft twee proefaccounts aangewezen.
-- Bevestiging van de ingerichte proefredirect en tweede testgebruiker is gevraagd.
+- De gewenste proefeigenaar is volgens de eigenaar toegevoegd als testgebruiker.
+- Google weigert de proefredirect nog met `redirect_uri_mismatch`; de exacte
+  callback moet bij Authorized redirect URIs van de gebruikte webclient staan.
 - Het pad naar een tweede OAuth-webclient is gevraagd voor de vervangingsproef.
 - Nog te meten: echte callbacks met behoud van interne eigenaar, annuleren/
   gedeeltelijke toestemming, verleende scopes, create/list/readback na herstart,

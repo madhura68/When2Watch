@@ -13,6 +13,7 @@ import { googleTokenRefresher } from "../src/server/google-tokens";
 import { calendarScopes } from "../src/server/auth-policy";
 import { nextDate } from "../src/lib/dates";
 import { AppError } from "../src/server/errors";
+import { probeAttemptReady, probeAuthFailure } from "./google-probe-guards";
 
 if (!process.argv.includes("--authorized-configuration-probe")) throw Error("Explicit --authorized-configuration-probe is required.");
 const configPath = process.env.W2W_GOOGLE_PROBE_CONFIG;
@@ -70,14 +71,13 @@ function options(req: IncomingMessage): NextAuthOptions {
     secret: state.secret, adapter: PrismaAdapter(db), session: { strategy: "database" }, debug: false,
     cookies: { sessionToken: { name: sessionCookie, options: { httpOnly: true, sameSite: "lax", path: "/", secure: false } } },
     providers: [GoogleProvider({ ...client, checks: ["pkce", "state"], authorization: { params: {
-      scope: (attempt?.scopes ?? ["openid", "email", "profile"]).join(" "), access_type: "offline", prompt: "consent select_account", include_granted_scopes: "true",
+      scope: (attempt?.scopes ?? ["openid", "email", "profile"]).join(" "), access_type: "offline", prompt: "consent select_account", include_granted_scopes: "true", login_hint: attempt?.email,
     } } })],
     pages: { error: "/" },
     callbacks: {
       async signIn({ account, profile }) {
         const current = state.attempt, session = await ownerSession(req);
-        if (!current || current.completed || current.expires < Date.now() || cookies(req)["w2w-probe.attempt"] !== current.id) return false;
-        if ((current.sessionHash !== null && session?.hash !== current.sessionHash) || (current.sessionHash === null && state.ownerId)) return false;
+        if (!current || !probeAttemptReady(current, cookies(req)["w2w-probe.attempt"], session?.hash ?? null, !!state.ownerId)) return false;
         const google = profile as { email?: string; email_verified?: boolean } | undefined;
         if (account?.provider !== "google" || google?.email_verified !== true || google.email?.toLowerCase() !== current.email.toLowerCase()) return false;
         if (state.active && current.mode !== "candidate" && account.providerAccountId !== state.connections[state.active].providerAccountId) return false;
@@ -102,7 +102,7 @@ function options(req: IncomingMessage): NextAuthOptions {
           grantedScopes: (account.scope ?? "").split(/\s+/).sort(), hasRefreshToken: !!state.connections[key].refresh_token, activeUnchanged: state.active !== key });
       },
     },
-    logger: { error(code) { observe("auth-error", { code }); }, warn(code) { observe("auth-warning", { code }); }, debug() {} },
+    logger: { error(code, metadata) { observe("auth-error", { code, reason: probeAuthFailure(metadata) }); }, warn(code) { observe("auth-warning", { code }); }, debug() {} },
   };
 }
 async function accessToken(key: string): Promise<string> {
@@ -216,9 +216,17 @@ function redirect(res: ServerResponse, path: string) { res.writeHead(303, { Loca
 let lane = Promise.resolve();
 async function handle(req: IncomingMessage, res: ServerResponse) {
   if (req.headers.host !== "localhost:3401") { res.writeHead(403); res.end(); return; }
-  res.setHeader("Cache-Control", "no-store"); res.setHeader("Referrer-Policy", "no-referrer"); res.setHeader("X-Frame-Options", "DENY");
+  // no-referrer also nulls Origin on native form POSTs, rejecting our own forms.
+  res.setHeader("Cache-Control", "no-store"); res.setHeader("Referrer-Policy", "same-origin"); res.setHeader("X-Frame-Options", "DENY");
   const url = new URL(req.url!, origin), session = await ownerSession(req);
   if (url.pathname.startsWith("/api/auth/")) {
+    if (/^\/api\/auth\/(signin|callback)(\/|$)/.test(url.pathname) && !probeAttemptReady(state.attempt, cookies(req)["w2w-probe.attempt"], session?.hash ?? null, !!state.ownerId)) {
+      redirect(res,"/?restart=1"); return;
+    }
+    if (url.pathname === "/api/auth/callback/google") observe("callback-arrived", {
+      hasStateCookie: !!cookies(req)["next-auth.state"], hasPkceCookie: !!cookies(req)["next-auth.pkce.code_verifier"],
+      hasCode: url.searchParams.has("code"), hasProviderError: url.searchParams.has("error"),
+    });
     const query = Object.fromEntries(url.searchParams);
     const request = Object.assign(req, { query: { ...query, nextauth: url.pathname.slice(10).split("/") }, cookies: cookies(req), body: req.method === "POST" ? await body(req) : undefined });
     const response = Object.assign(res, { status(code: number) { res.statusCode = code; return response; }, json(value: unknown) { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(value)); }, send(value: unknown) { if (typeof value === "string") res.end(value); else response.json(value); } });
@@ -226,7 +234,11 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (req.method === "POST") {
     const input = await body(req);
-    if (req.headers.origin !== origin || input.csrf !== state.csrf) { res.writeHead(403); res.end(); return; }
+    if (req.headers.origin !== origin || input.csrf !== state.csrf) {
+      observe("probe-mutation-denied", { sameOrigin: req.headers.origin === origin, hasCsrf: !!input.csrf, csrfMatches: input.csrf === state.csrf });
+      res.writeHead(403,{"Content-Type":"text/html; charset=utf-8"});
+      res.end('<p>Deze browseraanvraag kon niet worden bevestigd. Open de proefstart opnieuw in dezelfde browser.</p><a href="/">Proefstart</a>'); return;
+    }
     if (state.ownerId && !session) { res.writeHead(401); res.end(); return; }
     if (url.pathname === "/begin") {
       const mode = input.action;
@@ -259,7 +271,8 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.end(`<!doctype html><html lang="nl"><head><title>When2Watch Google-proef</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:17px system-ui;max-width:850px;margin:40px auto;padding:20px;background:#f3f8f5;color:#183835}button{font:inherit;padding:10px;margin:5px 0;cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}</style></head><body><h1>When2Watch Google-proef</h1><p>Lokale proef op poort 3401. Alleen herkenbare proefagenda's en gemarkeerde proefitems worden gewijzigd.</p>
     ${url.searchParams.has("error") ? "<p>Google-koppeling niet afgerond. De actieve verbinding is behouden.</p>" : ""}
-    ${!state.ownerId ? form("/begin", "Inloggen met proefeigenaar", "owner") : !owner ? "<p>De bestaande proefsessie ontbreekt. Herstel de oorspronkelijke browser; deze proef wordt niet opnieuw geclaimd.</p>" : `
+    ${url.searchParams.has("restart") ? "<p>Deze koppelpoging is verlopen of hoort bij een andere browser. Start de koppeling hier opnieuw en rond haar in dezelfde browser af.</p>" : ""}
+    ${!state.ownerId ? `<p>Proefeigenaar: <strong>${escape(settings.emails[0])}</strong></p>${form("/begin", "Inloggen met proefeigenaar", "owner")}` : !owner ? "<p>De bestaande proefsessie ontbreekt. Herstel de oorspronkelijke browser; deze proef wordt niet opnieuw geclaimd.</p>" : `
     <p>Eigenaar ingelogd. Interne eigenaar behouden: ${state.observations.filter(item=>item.kind==="real-nextauth-callback" && item.sameInternalOwner).length} vervolgcallbacks.</p>
     ${form("/begin", "Eigenaar opnieuw verbinden", "reconnect")}${form("/begin", "Agenda lezen en events toestaan", "calendar")}${form("/begin", "Proefagenda aanmaken toestaan", "create")}${form("/begin", "Tweede proefaccount verbinden", "candidate")}${clients.length===2?form("/begin", "Nieuwe OAuth-client beproeven", "replace-client"):"<p>Tweede OAuth-client nog niet ingesteld.</p>"}
     ${state.proposed?form("/action", "Bevestig proefverbinding", "confirm"):""}${form("/action", "Maak proefbronagenda", "source")}${form("/action", "Maak proefdoelagenda", "target")}${form("/action", "Lees proefagenda's opnieuw", "readback")}${form("/action", "Beproef één toekomstig item verplaatsen", "move")}${form("/action", "Ruim bevestigd doelproefitem op", "cleanup")}
