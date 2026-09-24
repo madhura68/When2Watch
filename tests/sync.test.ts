@@ -26,13 +26,14 @@ it("adds detail columns to a populated old database without changing existing re
    const columns=Object.keys(before[table][0]).map(c=>`"${c}"`).join(",");
    expect(await old.db.$queryRawUnsafe(`SELECT ${columns} FROM "${table}"`)).toEqual(before[table]);
   }
-  expect(await old.db.trackedShow.findUnique({where:{id:"old-show"}})).toMatchObject({summaryText:null,genresJson:"[]",runtimeMinutes:null});
+  const detailColumns={summaryText:true,genresJson:true,runtimeMinutes:true} as const;
+  expect(await old.db.trackedShow.findUnique({where:{id:"old-show"},select:detailColumns})).toEqual({summaryText:null,genresJson:"[]",runtimeMinutes:null});
   expect(await old.db.episode.findUnique({where:{id:"old-episode"}})).toMatchObject({summaryText:null});
-  await old.db.trackedShow.update({where:{id:"old-show"},data:{summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45}});
+  await old.db.trackedShow.update({where:{id:"old-show"},data:{summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45},select:detailColumns});
   await old.db.episode.update({where:{id:"old-episode"},data:{summaryText:"Persisted episode"}});
   await old.db.$disconnect();const reopened=old.reopen();
   try {
-   expect(await reopened.trackedShow.findUnique({where:{id:"old-show"}})).toMatchObject({summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45});
+   expect(await reopened.trackedShow.findUnique({where:{id:"old-show"},select:detailColumns})).toEqual({summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45});
    expect(await reopened.episode.findUnique({where:{id:"old-episode"}})).toMatchObject({summaryText:"Persisted episode"});
   }finally{await reopened.$disconnect();}
  }finally{await old.close();}

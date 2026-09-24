@@ -19,7 +19,7 @@ export function AgendaPanel({ data }: { data: AgendaOverview }) {
     {data.groups.map(group => <section className="agenda-day" key={group.date} aria-labelledby={`day-${group.date}`}>
       <h2 id={`day-${group.date}`} className="agenda-day-label"><time dateTime={group.date}>{dayLabel(group.date, true)}</time></h2>
       <ul className="agenda-episodes">{group.episodes.map(episode => <li key={`${episode.show.id}-${episode.id}`} className="agenda-episode">
-        <SeriesBanner />
+        <SeriesBanner url={episode.show.bannerUrl} />
         <div className="agenda-episode-body">
           <div className="agenda-episode-heading"><div><p className="eyebrow">{episode.show.platform ?? "Gevolgde serie"}</p><h3>{episode.show.title}</h3></div>
             <span className={`tag${episode.linked ? " success" : ""}`}>{episode.linked ? "In je agenda" : "Nog niet bevestigd"}</span></div>

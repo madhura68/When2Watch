@@ -1,7 +1,45 @@
 import { describe, expect, it } from "vitest";
 import source from "./fixtures/tvmaze/slow-horses.json";
 import matches from "./fixtures/tvmaze/slow-horses-search.json";
-import { TVmaze, parseSnapshot, parseSearch } from "@/server/tvmaze";
+import images from "./fixtures/tvmaze/slow-horses-images.json";
+import { TVmaze, parseSnapshot, parseSearch, parseBanner } from "@/server/tvmaze";
+
+describe("TVmaze banner contract", () => {
+  const banners = images.filter(image => image.type === "banner");
+  it("selects the lowest image ID from the unmodified real response, regardless of list order", () => {
+    expect(parseBanner(images)).toBe("https://static.tvmaze.com/uploads/images/medium_leaderboard/595/1489665.jpg");
+    expect(parseBanner([...images].reverse())).toBe(parseBanner(images));
+  });
+  it("prefers an explicit main banner and falls back to its original resolution", () => {
+    const input = structuredClone(banners);
+    input[1].main = true;
+    expect(parseBanner(input)).toBe(input[1].resolutions.medium!.url);
+    delete (input[1].resolutions as any).medium;
+    expect(parseBanner(input)).toBe(input[1].resolutions.original.url);
+    input[2].main = true;
+    expect(parseBanner(input.reverse())).toBe(banners[1].resolutions.original.url);
+  });
+  it("accepts an empty list or a list without banners as no banner", () => {
+    expect(parseBanner([])).toBeNull();
+    expect(parseBanner(images.filter(image => image.type !== "banner"))).toBeNull();
+  });
+  it.each([null, {}, [null], [{type:"banner"}], [{...banners[0],resolutions:{}}],
+    ...["http://static.tvmaze.com/image.jpg", "https://other.test/image.jpg", "https://static.tvmaze.com.other.test/x", "https://user:password@static.tvmaze.com/x"].map(url => [{...banners[0],resolutions:{original:{url}}}]),
+  ].map(input=>({input})))("rejects malformed lists or unsafe banner URLs: $input", ({input}) => {
+    expect(() => parseBanner(input)).toThrowError(expect.objectContaining({code:"INVALID_SOURCE"}));
+  });
+  it("uses the same bounded request/retry path for image lists", async () => {
+    const calls:string[] = [], pauses:number[] = [];
+    const api = new TVmaze(async url => { calls.push(String(url)); return calls.length < 3 ? new Response(null,{status:429,headers:{"retry-after":"1"}}) : Response.json(images); }, async ms => {pauses.push(ms);});
+    expect(await api.banner(45039)).toBe(parseBanner(images));
+    expect(calls).toEqual(Array(3).fill("https://api.tvmaze.com/shows/45039/images"));
+    expect(pauses.filter(ms=>ms===1000)).toHaveLength(2);
+    let attempts=0;
+    const exhausted=new TVmaze(async()=>{attempts++;return new Response(null,{status:429});},async()=>{});
+    await expect(exhausted.banner(45039)).rejects.toMatchObject({code:"SOURCE_UNAVAILABLE"});
+    expect(attempts).toBe(3);
+  });
+});
 
 describe("TVmaze real response contract", () => {
   it("reads display details and partial future descriptions from the unmodified source fixture", () => {

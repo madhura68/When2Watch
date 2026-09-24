@@ -132,6 +132,10 @@ try {
   }
   const banner = await request("/images/when2watch-banner.svg");
   check(banner.ok && banner.headers.get("content-type")?.includes("image/svg+xml"),"generic banner must be served as an image");
+  const selectedBanner="https://static.tvmaze.com/uploads/images/medium_leaderboard/595/1489665.jpg";
+  await db.trackedShow.update({where:{id:show.id},data:{bannerUrl:selectedBanner,bannerNextCheckAt:new Date(Date.now()+7*86400_000)}});
+  check((await (await request("/api/shows",{headers:cookie("owner")})).json()).shows[0].bannerUrl === selectedBanner,"overview must serve the stored banner URL");
+  for(let visit=0;visit<2;visit++) check((await (await request("/",{headers:cookie("owner")})).text()).includes(`src="${selectedBanner}"`),"repeated Agenda reads must render the stored banner");
   check(await db.syncRun.count() === 1,"reading enriched pages must not start a sync");
   check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"x"})})).status === 400,"invalid show ID must fail before the provider");
   const invalid = await request("/api/probe", { method: "POST", headers: { ...cookie("owner"), origin, "Content-Type": "application/json" }, body: JSON.stringify({ date: "not-a-date" }) });
