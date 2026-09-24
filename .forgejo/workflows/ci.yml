@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Tests, build and HTTP checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      RUST_LOG: info
+      DATABASE_URL: file:/tmp/when2watch-ci.db
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Unit and database tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Typecheck including generated Next types
+        run: npm run typecheck
+      - name: HTTP checks with temporary SQLite and synthetic sessions
+        run: npm run test:http
+      - name: Production Docker image
+        run: docker build -t when2watch:ci .
