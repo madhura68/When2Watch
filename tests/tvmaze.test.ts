@@ -4,6 +4,29 @@ import matches from "./fixtures/tvmaze/slow-horses-search.json";
 import { TVmaze, parseSnapshot, parseSearch } from "@/server/tvmaze";
 
 describe("TVmaze real response contract", () => {
+  it("reads display details and partial future descriptions from the unmodified source fixture", () => {
+    const snapshot = parseSnapshot(source, 45039);
+    expect(snapshot.show).toMatchObject({genres:["Drama","Thriller","Espionage"],runtimeMinutes:45});
+    expect(snapshot.show.summaryText).toContain("Slow Horses");
+    expect(snapshot.show.summaryText).not.toMatch(/<\/?p>/);
+    expect(snapshot.episodes.filter(e=>e.airdate && e.airdate>="2026-09-24" && e.summaryText).map(e=>e.id)).toEqual([3643507]);
+    expect(parseSearch(matches)[0]).not.toHaveProperty("summaryText");
+  });
+  it.each([
+    {summary:null,genres:null,averageRuntime:null,runtime:null,wantGenres:[],wantRuntime:null},
+    {summary:42,genres:[" Drama ",42,"","Drama",null,"Thriller"],averageRuntime:0,runtime:30,wantGenres:["Drama","Thriller"],wantRuntime:30},
+    {summary:[],genres:"Drama",averageRuntime:2.5,runtime:2147483648,wantGenres:[],wantRuntime:null},
+    {summary:{},genres:{},averageRuntime:2147483648,runtime:45,wantGenres:[],wantRuntime:45},
+    {summary:"",genres:[],averageRuntime:-5,runtime:"45",wantGenres:[],wantRuntime:null},
+    {summary:undefined,genres:undefined,averageRuntime:undefined,runtime:undefined,wantGenres:[],wantRuntime:null},
+  ])("does not let optional display metadata block valid episodes: %j", ({wantGenres,wantRuntime,...fields}) => {
+    const input = {...structuredClone(source),...fields};
+    (input._embedded.episodes[0] as any).summary = {invalid:true};
+    const snapshot = parseSnapshot(input,45039);
+    expect(snapshot.show).toMatchObject({summaryText:null,genres:wantGenres,runtimeMinutes:wantRuntime});
+    expect(snapshot.episodes).toHaveLength(36);
+    expect(snapshot.episodes[0].summaryText).toBeNull();
+  });
   it("keeps source dates, regular episode identities and ranked matches", () => {
     const snapshot = parseSnapshot(source, 45039);
     expect(snapshot.show).toMatchObject({ id: 45039, name: "Slow Horses", year: "2022", status: "Running" });
