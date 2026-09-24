@@ -1,3 +1,4 @@
+import type { SyncConfiguration } from "./sync";
 import type { PrismaClient, Probe, CalendarSettings } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { GoogleCalendar, safeEvent, type CalendarEvent } from "./google-calendar";
@@ -6,12 +7,19 @@ import { localDate, nextDate } from "@/lib/dates";
 import { serializeCalendarMutation } from "./calendar-mutations";
 
 export class CalendarProbeService {
-  constructor(private readonly db: PrismaClient, private readonly google: GoogleCalendar, private readonly config: { calendarId: string; timeZone: string }, private readonly now = () => new Date()) {}
+  constructor(private readonly db: PrismaClient, private readonly google: GoogleCalendar, private readonly config: SyncConfiguration | (() => Promise<SyncConfiguration>), private readonly now = () => new Date()) {}
+  private async configured() {
+    return typeof this.config === "function" ? new CalendarProbeService(this.db, this.google, await this.config(), this.now) : this;
+  }
+  private get settings(): SyncConfiguration {
+    if (typeof this.config === "function") throw new Error("Configuration must be resolved inside the owner lock");
+    return this.config;
+  }
   async verifyCalendar(userId: string): Promise<CalendarSettings> {
-    const calendar = await this.google.calendar(this.config.calendarId);
-    if (calendar.timeZone !== this.config.timeZone) {
-      throw new AppError("WRONG_TIMEZONE", 409, "Zet de gekozen agenda op Europe/Amsterdam voordat je de proef start.");
-    }
+    return serializeCalendarMutation(userId, async () => (await this.configured()).verifyLocked(userId));
+  }
+  private async verifyLocked(userId: string): Promise<CalendarSettings> {
+    const calendar = await this.google.calendar(this.settings.calendarId);
     const data = {
       calendarId: calendar.id, summary: calendar.summary, timeZone: calendar.timeZone,
       accessRole: calendar.accessRole, defaultRemindersJson: JSON.stringify(calendar.defaultReminders), confirmedAt: this.now(),
@@ -20,29 +28,29 @@ export class CalendarProbeService {
   }
 
   async create(userId: string, date: string): Promise<Probe> {
-    return serializeCalendarMutation(userId, () => this.createLocked(userId, date));
+    return serializeCalendarMutation(userId, async () => (await this.configured()).createLocked(userId, date));
   }
 
   private async createLocked(userId: string, date: string): Promise<Probe> {
     const parsedDate = new Date(`${date}T00:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedDate.getTime()) ||
         parsedDate.toISOString().slice(0, 10) !== date || date >= "9999-12-31") {
-      throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de ochtendproef.");
+      throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de meldingsproef.");
     }
     const existing = await this.db.probe.findUnique({ where: { userId_date: { userId, date } } });
-    const futureDate = date > localDate(this.now(), this.config.timeZone);
-    if (!existing && !futureDate) throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de ochtendproef.");
+    const futureDate = date > localDate(this.now(), this.settings.timeZone);
+    if (!existing && !futureDate) throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de meldingsproef.");
     const calendar = await this.db.calendarSettings.findUnique({ where: { userId } });
-    if (calendar?.calendarId !== this.config.calendarId) {
+    if (calendar?.calendarId !== this.settings.calendarId) {
       throw new AppError("CALENDAR_NOT_CONFIRMED", 409, "Controleer en bevestig eerst de gekozen agenda.");
     }
-    await this.verifyCalendar(userId);
+    await this.verifyLocked(userId);
     const id = randomUUID();
     const eventId = `p${randomUUID().replaceAll("-", "")}`;
     const request: CalendarEvent = {
       id: eventId,
-      summary: "When2Watch — meldingsproef Slow Horses",
-      description: "Proefitem voor When2Watch, geen echte aflevering. Gewenste melding: 09:00 Europe/Amsterdam op deze datum. Ontvangst in Apple Agenda en Google Agenda in Chrome moet nog afzonderlijk worden bevestigd.",
+      summary: "When2Watch — meldingsproef",
+      description: "Proefitem voor When2Watch, geen echte aflevering. Stel de meldingstijd voor hele-dagafspraken in je agenda-app in. Controleer de ontvangst in elke agenda-app die je gebruikt.",
       start: { date }, end: { date: nextDate(date) }, reminders: { useDefault: true },
       extendedProperties: { private: { app: "when2watch", kind: "probe", userId, probeId: id } },
     };
@@ -76,7 +84,7 @@ export class CalendarProbeService {
   }
 
   async remove(userId: string, probeId: string): Promise<void> {
-    return serializeCalendarMutation(userId, () => this.removeLocked(userId, probeId));
+    return serializeCalendarMutation(userId, async () => (await this.configured()).removeLocked(userId, probeId));
   }
 
   private async removeLocked(userId: string, probeId: string): Promise<void> {

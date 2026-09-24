@@ -1,0 +1,51 @@
+{
+  "kind": "calendar#calendarList",
+  "etag": "redacted-etag-49e5033e",
+  "nextPageToken": "redacted-nextPageToken-08947167",
+  "items": [
+    {
+      "kind": "calendar#calendarListEntry",
+      "etag": "redacted-etag-46b5b71b",
+      "id": "redacted-id-bfcbc257",
+      "summary": "redacted-summary-bfcbc257",
+      "timeZone": "Europe/Amsterdam",
+      "colorId": "15",
+      "backgroundColor": "#9fc6e7",
+      "foregroundColor": "#000000",
+      "selected": true,
+      "accessRole": "owner",
+      "defaultReminders": [
+        {
+          "method": "popup",
+          "minutes": 10
+        }
+      ],
+      "notificationSettings": {
+        "notifications": [
+          {
+            "type": "redacted-type-d45834c4",
+            "method": "email"
+          },
+          {
+            "type": "redacted-type-12e9faae",
+            "method": "email"
+          },
+          {
+            "type": "redacted-type-f17d0175",
+            "method": "email"
+          },
+          {
+            "type": "redacted-type-dc8fd024",
+            "method": "email"
+          }
+        ]
+      },
+      "primary": true,
+      "conferenceProperties": {
+        "allowedConferenceSolutionTypes": [
+          "redacted-allowedConferenceSolutionTypes-1241b2c8"
+        ]
+      }
+    }
+  ]
+}

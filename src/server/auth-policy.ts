@@ -4,6 +4,7 @@ export const calendarScopes = [
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events",
 ] as const;
+export const calendarCreationScope = "https://www.googleapis.com/auth/calendar.app.created";
 
 export function hasCalendarScopes(scope?: string | null): boolean {
   const granted = new Set(scope?.split(/\s+/));
@@ -11,26 +12,24 @@ export function hasCalendarScopes(scope?: string | null): boolean {
 }
 
 export function isAllowedGoogleSignIn(
-  account: { provider?: string; scope?: string } | null,
+  account: { provider?: string; providerAccountId?: string; scope?: string } | null,
   profile: { email?: string; email_verified?: boolean } | undefined,
-  allowedEmail: string,
+  activeSubject: string,
 ): boolean {
   return Boolean(
-    allowedEmail.trim() && account?.provider === "google" &&
-    profile?.email_verified === true &&
-    profile.email?.trim().toLowerCase() === allowedEmail.trim().toLowerCase() &&
-    hasCalendarScopes(account.scope),
+    activeSubject && account?.provider === "google" &&
+    profile?.email_verified === true && profile.email?.trim() &&
+    account.providerAccountId === activeSubject,
   );
 }
 
 export function requireIdentity(
   session: { user?: { id?: string; email?: string | null } } | null,
-  allowedEmail: string,
+  ownerId: string,
 ): { id: string; email: string } {
   const user = session?.user;
-  if (!user?.id || !user.email || !allowedEmail.trim() ||
-      user.email.trim().toLowerCase() !== allowedEmail.trim().toLowerCase()) {
-    throw new AppError("UNAUTHORIZED", 401, "Log in met het toegelaten Google-account.");
+  if (!ownerId || !user?.id || !user.email || user.id !== ownerId) {
+    throw new AppError("UNAUTHORIZED", 401, "Log in als eigenaar van deze installatie.");
   }
   return { id: user.id, email: user.email };
 }

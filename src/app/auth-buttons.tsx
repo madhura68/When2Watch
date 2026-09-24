@@ -8,7 +8,7 @@ export function AuthButton({ logout = false }: { logout?: boolean }) {
     setBusy(true);
     try {
       if (logout) await signOut({ callbackUrl: "/" });
-      else await signIn("google", { callbackUrl: "/settings" });
+      else await signIn("google", { callbackUrl: "/" });
     } finally { setBusy(false); }
-  }}>{busy ? "Even geduld…" : logout ? "Uitloggen" : "Koppel Google Agenda"}</button>;
+  }}>{busy ? "Even geduld…" : logout ? "Uitloggen" : "Inloggen met Google"}</button>;
 }

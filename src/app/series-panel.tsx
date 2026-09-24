@@ -5,11 +5,10 @@ import type { Show } from "@/server/tvmaze";
 import type { Overview } from "@/server/overview";
 import type { SyncResult } from "@/server/sync";
 import { LatestSearch, MIN_SEARCH_LENGTH } from "@/lib/latest-search";
-import { AuthButton } from "./auth-buttons";
 import { SeriesPoster } from "./series-poster";
 
-const timestamp=(value:string|null)=>value ? new Date(value).toLocaleString("nl-NL",{timeZone:"Europe/Amsterdam",dateStyle:"short",timeStyle:"short"}) : "Nog niet";
-const episodeDate=(value:string)=>new Date(`${value}T12:00:00Z`).toLocaleDateString("nl-NL",{timeZone:"Europe/Amsterdam",day:"numeric",month:"long"});
+const timestamp=(value:string|null,timeZone:string)=>value ? new Date(value).toLocaleString("nl-NL",{timeZone,dateStyle:"short",timeStyle:"short"}) : "Nog niet";
+const episodeDate=(value:string)=>new Date(`${value}T12:00:00Z`).toLocaleDateString("nl-NL",{timeZone:"UTC",day:"numeric",month:"long"});
 const sourceStatus=(value:string)=>({Running:"Lopend",Ended:"Beëindigd","To Be Determined":"Vervolg nog onzeker"}[value]??"Status onbekend");
 const summaryExcerpt=(text:string)=>{
   if(text.length<=400)return text;
@@ -45,14 +44,14 @@ export function SeriesPanel({data}:{data:Overview}) {
       const body:SyncResult & {error?:string}=await response.json();
       if(body.series) {
         const counts=body.series.reduce((a,s)=>({created:a.created+s.created,updated:a.updated+s.updated,deleted:a.deleted+s.deleted,unchanged:a.unchanged+s.unchanged}),{created:0,updated:0,deleted:0,unchanged:0});
-        setMessage(`${response.ok?"Agenda bijgewerkt.":"Synchronisatie niet volledig gelukt."} ${counts.created} toegevoegd · ${counts.updated} bijgewerkt · ${counts.deleted} opgeruimd · ${counts.unchanged} ongewijzigd.${response.ok?"":" Bekijk de fout bij de serie en probeer opnieuw."}`);
+        setMessage(body.calendarState === "unconfigured" && response.ok ? "Je series en afleveringen zijn bijgewerkt. Kies bij Instellingen een agenda om afspraken toe te voegen." : `${response.ok?"Agenda bijgewerkt.":"Synchronisatie niet volledig gelukt."} ${counts.created} toegevoegd · ${counts.updated} bijgewerkt · ${counts.deleted} opgeruimd · ${counts.unchanged} ongewijzigd.${response.ok?"":" Bekijk de fout bij de serie en probeer opnieuw."}`);
         setFailed(!response.ok);
       } else throw new Error(body.error??"Deze actie is niet gelukt.");
     } catch(error) {setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer dezelfde actie opnieuw.");}
     finally {router.refresh();setBusy(false);}
   }
   return <>
-    {data.needsReauth&&<section className="notice error"><p>De Google-toegang moet opnieuw worden gekoppeld. Je series blijven bewaard.</p><AuthButton/></section>}
+    {data.needsReauth&&<section className="notice error"><p>De Google-toegang moet opnieuw worden gekoppeld. Je series blijven bewaard.</p><a href="/settings#google">Google-toegang herstellen</a></section>}
     <section className="calendar-summary"><div><strong>{data.calendar?.summary??"Bevestig je agenda"}</strong><p className="muted small">{data.calendar?"Hele-dagafspraken · oorspronkelijke uitzenddatum":"Ga naar Instellingen om je When2Watch-agenda te controleren."}</p></div><a href="/settings">Instellingen</a></section>
     <section className="card search-card">
       <h2>Een serie volgen</h2><label htmlFor="series-query">Naam van de tv-serie</label>
@@ -90,9 +89,9 @@ export function SeriesPanel({data}:{data:Overview}) {
         {e.summaryText?<details className="episode-description"><summary>Beschrijving (spoilers)</summary><p>{e.summaryText}</p></details>:<p className="muted small episode-empty">Nog geen beschrijving beschikbaar.</p>}
       </li>)}</ul>:<p className="muted">{show.status==="Ended"?"Deze serie is beëindigd; er zijn geen komende uitzenddatums bekend.":"Nog geen volgende uitzenddatum bekend. Je blijft deze serie volgen."}</p>}
       {show.unknownDates>0&&<p className="muted small">{show.unknownDates} aflevering(en) zonder bekende uitzenddatum; daarvoor staat er geen agenda-item.</p>}
-      <p className="muted small">Laatste poging: {timestamp(show.lastAttempt)}<br/>Laatste succes: {timestamp(show.lastSuccess)}</p>
+      <p className="muted small">Laatste poging: {timestamp(show.lastAttempt,data.timeZone)}<br/>Laatste succes: {timestamp(show.lastSuccess,data.timeZone)}</p>
     </section>)}
     <p className="muted small">De agenda bevat afleveringen vanaf zeven dagen geleden en alle bekende komende datums. Beschikbaarheid in Nederland kan afwijken.</p>
-    <p className="muted small">Gegevens: <a href="https://www.tvmaze.com/" target="_blank" rel="noreferrer">TVmaze</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA</a>. Omschrijvingen worden als gewone tekst en waar nodig verkort getoond. Laatste synchronisatie: {timestamp(data.lastRun?.finishedAt??null)}.</p>
+    <p className="muted small">Gegevens: <a href="https://www.tvmaze.com/" target="_blank" rel="noreferrer">TVmaze</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA</a>. Omschrijvingen worden als gewone tekst en waar nodig verkort getoond. Laatste synchronisatie: {timestamp(data.lastRun?.finishedAt??null,data.timeZone)}.</p>
   </>;
 }

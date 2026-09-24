@@ -31,25 +31,26 @@ describe("Google account adapter", () => {
 });
 
 describe("Google authorization boundary", () => {
-  it("accepts only the verified allowlisted Google identity with both Calendar scopes", () => {
-    expect(isAllowedGoogleSignIn(account, profile, email)).toBe(true);
-    expect(isAllowedGoogleSignIn(account, { ...profile, email: "intruder@example.com" }, email)).toBe(false);
-    expect(isAllowedGoogleSignIn(account, { ...profile, email_verified: false }, email)).toBe(false);
-    expect(isAllowedGoogleSignIn({ ...account, provider: "other" }, profile, email)).toBe(false);
+  it("accepts only the verified allowlisted Google identity independently of Calendar scopes", () => {
+    expect(isAllowedGoogleSignIn(account, profile, account.providerAccountId)).toBe(true);
+    expect(isAllowedGoogleSignIn(account, { ...profile, email: "renamed@example.com" }, account.providerAccountId)).toBe(true);
+    expect(isAllowedGoogleSignIn(account, { ...profile, email_verified: false }, account.providerAccountId)).toBe(false);
+    expect(isAllowedGoogleSignIn({ ...account, provider: "other" }, profile, account.providerAccountId)).toBe(false);
     expect(isAllowedGoogleSignIn(account, profile, "")).toBe(false);
+    expect(isAllowedGoogleSignIn({ ...account, providerAccountId: "different-subject" }, profile, account.providerAccountId)).toBe(false);
   });
 
-  it("rejects partial consent and missing verified-email claims", () => {
-    expect(isAllowedGoogleSignIn({ ...account, scope: "openid email profile" }, profile, email)).toBe(false);
-    expect(isAllowedGoogleSignIn({ ...account, scope: scope.replace(" https://www.googleapis.com/auth/calendar.events", "") }, profile, email)).toBe(false);
-    expect(isAllowedGoogleSignIn(account, { email }, email)).toBe(false);
+  it("permits partial Calendar consent but still requires a verified Google identity", () => {
+    expect(isAllowedGoogleSignIn({ ...account, scope: "openid email profile" }, profile, account.providerAccountId)).toBe(true);
+    expect(isAllowedGoogleSignIn({ ...account, scope: scope.replace(" https://www.googleapis.com/auth/calendar.events", "") }, profile, account.providerAccountId)).toBe(true);
+    expect(isAllowedGoogleSignIn(account, { email }, account.providerAccountId)).toBe(false);
   });
 
   it("requires a server session for every private operation", () => {
-    expect(() => requireIdentity(null, email)).toThrow();
-    expect(() => requireIdentity({ user: { id: "u2", email: "intruder@example.com" } }, email)).toThrow();
-    expect(() => requireIdentity({ user: { email } }, email)).toThrow();
-    expect(requireIdentity({ user: { id: "u1", email } }, email)).toEqual({ id: "u1", email });
+    expect(() => requireIdentity(null, "u1")).toThrow();
+    expect(() => requireIdentity({ user: { id: "u2", email: "intruder@example.com" } }, "u1")).toThrow();
+    expect(() => requireIdentity({ user: { email } }, "u1")).toThrow();
+    expect(requireIdentity({ user: { id: "u1", email } }, "u1")).toEqual({ id: "u1", email });
   });
 });
 
@@ -58,12 +59,13 @@ describe("persisted Google credentials", () => {
   beforeAll(async () => {
     database = testDatabase();
     await database.db.user.create({ data: { id: "owner", email } });
-    await database.db.account.create({ data: { ...account, userId: "owner", refresh_token: "existing-refresh", access_token: "expired", expires_at: 1 } });
+    await database.db.oAuthClientConfig.create({ data: { id: "client", clientId: "expected-client", clientSecret: "expected-secret" } });
+    await database.db.account.create({ data: { ...account, id: "account", oauthClientConfigId: "client", userId: "owner", refresh_token: "existing-refresh", access_token: "expired", expires_at: 1 } });
   });
   afterAll(async () => { await database?.close(); });
 
   it("retains a refresh token when a later sign-in omits it, including across a DB reopen", async () => {
-    await saveGoogleTokens(database.db, "owner", { ...account, access_token: "fresh-access", expires_at: 1 });
+    await saveGoogleTokens(database.db, "account", "client", { ...account, access_token: "fresh-access", expires_at: 1 });
     const reopened = database.reopen();
     try {
       const saved = await reopened.account.findFirstOrThrow();
@@ -74,7 +76,8 @@ describe("persisted Google credentials", () => {
   });
 
   it("refreshes an expired access token and saves the result without losing the refresh token", async () => {
-    const token = await getGoogleAccessToken(database.db, "owner", async (refresh) => {
+    const token = await getGoogleAccessToken(database.db, "account", (clientId, secret) => async (refresh) => {
+      expect(clientId).toBe("expected-client"); expect(secret).toBe("expected-secret");
       expect(refresh).toBe("existing-refresh");
       return { access_token: "renewed-access", expiry_date: Date.now() + 3_600_000 };
     });
@@ -82,18 +85,18 @@ describe("persisted Google credentials", () => {
     const saved = await database.db.account.findFirstOrThrow();
     expect(saved.refresh_token).toBe("existing-refresh");
     expect(saved.access_token).toBe("renewed-access");
-    await expect(getGoogleAccessToken(database.db, "owner", async () => { throw new Error("must not refresh a valid token"); })).resolves.toBe("renewed-access");
+    await expect(getGoogleAccessToken(database.db, "account", () => async () => { throw new Error("must not refresh a valid token"); })).resolves.toBe("renewed-access");
   });
 
   it("can explicitly renew a still-valid token through the same client for the restart proof",async()=>{
     await database.db.account.updateMany({data:{access_token:"still-valid",expires_at:Math.floor(Date.now()/1000)+3600}});
-    const token=await getGoogleAccessToken(database.db,"owner",async()=>({access_token:"operator-renewed",expiry_date:Date.now()+3600000}),true);
+    const token=await getGoogleAccessToken(database.db,"account",()=>async()=>({access_token:"operator-renewed",expiry_date:Date.now()+3600000}),true);
     expect(token).toBe("operator-renewed");expect((await database.db.account.findFirstOrThrow()).access_token).toBe("operator-renewed");
   });
 
   it("marks revoked consent as reconnect-needed without disclosing provider errors", async () => {
     await database.db.account.updateMany({ data: { expires_at: 1 } });
-    await expect(getGoogleAccessToken(database.db, "owner", async () => {
+    await expect(getGoogleAccessToken(database.db, "account", () => async () => {
       throw { response: { data: { error: "invalid_grant", error_description: "sensitive-provider-detail" } } };
     })).rejects.toMatchObject({ code: "RECONNECT_GOOGLE" });
     expect((await database.db.account.findFirstOrThrow()).needsReauth).toBe(true);

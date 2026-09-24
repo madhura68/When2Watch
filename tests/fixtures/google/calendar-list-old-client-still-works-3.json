@@ -1,0 +1,27 @@
+{
+  "kind": "calendar#calendarList",
+  "etag": "redacted-etag-071d12bc",
+  "nextSyncToken": "redacted-nextSyncToken-13e84b2b",
+  "items": [
+    {
+      "kind": "calendar#calendarListEntry",
+      "etag": "redacted-etag-471714ae",
+      "id": "redacted-id-3d9f7ad2",
+      "summary": "redacted-summary-70bb2f61",
+      "description": "redacted-description-d956abae",
+      "timeZone": "Europe/Amsterdam",
+      "dataOwner": "redacted-dataOwner-78ee086f",
+      "colorId": "17",
+      "backgroundColor": "#9a9cff",
+      "foregroundColor": "#000000",
+      "selected": true,
+      "accessRole": "owner",
+      "defaultReminders": [],
+      "conferenceProperties": {
+        "allowedConferenceSolutionTypes": [
+          "redacted-allowedConferenceSolutionTypes-1241b2c8"
+        ]
+      }
+    }
+  ]
+}

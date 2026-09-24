@@ -5,24 +5,27 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import fixture from "../tests/fixtures/tvmaze/slow-horses.json";
-import { config } from "../src/server/config";
+import { getInstallation } from "../src/server/installation";
+import { getPreferences } from "../src/server/preferences";
 import { GoogleCalendar } from "../src/server/google-calendar";
-import { getGoogleAccessToken, googleTokenRefresher } from "../src/server/google-tokens";
+import { getGoogleAccessToken } from "../src/server/google-tokens";
 import { SyncService } from "../src/server/sync";
 import { parseSnapshot } from "../src/server/tvmaze";
 import { localDate, nextDate } from "../src/lib/dates";
 
 async function main() {
   assert(process.argv.includes("--authorized-recovery-probe"),"Explicit operator invocation required");
-  const settings=config(), production=new PrismaClient(), path=`/tmp/when2watch-recovery-${randomUUID()}.db`;
+  const production=new PrismaClient(), path=`/tmp/when2watch-recovery-${randomUUID()}.db`;
   const url=`file:${path}`, syntheticId=2147483600;
   let trial:PrismaClient|undefined, cleanup:(()=>Promise<unknown>)|undefined, cleaned=false;
   const evidence:Record<string,unknown>={at:new Date().toISOString(),kind:"simulated-source-and-lost-response-with-real-Google",syntheticEpisodeId:syntheticId};
   try {
-    const user=await production.user.findUniqueOrThrow({where:{email:settings.allowedEmail},select:{id:true,email:true}});
+    const installation=await getInstallation(production); assert(installation?.ownerId && installation.activeAccountId);
+    const user=await production.user.findUniqueOrThrow({where:{id:installation.ownerId},select:{id:true,email:true}});
+    const settings={...(await getPreferences(user.id,production)),calendarId:(await production.calendarSettings.findUniqueOrThrow({where:{userId:user.id}})).calendarId};
     const calendar=await production.calendarSettings.findUniqueOrThrow({where:{userId:user.id}});
     assert.equal(calendar.calendarId,settings.calendarId);
-    const token=()=>getGoogleAccessToken(production,user.id,googleTokenRefresher(settings.clientId,settings.clientSecret));
+    const token=()=>getGoogleAccessToken(production,installation.activeAccountId!);
     const writes:{method:string;id:string;httpStatus:number}[]=[];
     let loseFirstInsert=true;
     const fetcher:typeof fetch=async(input,init)=>{
@@ -60,7 +63,7 @@ async function main() {
     const input=structuredClone(fixture);
     input.name="[PROEF When2Watch] Slow Horses";
     const episode=structuredClone(input._embedded.episodes.at(-1)!);
-    episode.id=syntheticId;episode.name="SIMULATIE — geen echte aflevering";episode.airdate=nextDate(localDate(new Date()));
+    episode.id=syntheticId;episode.name="SIMULATIE — geen echte aflevering";episode.airdate=nextDate(localDate(new Date(),settings.timeZone));
     input._embedded.episodes=[episode];
     const source={snapshot:async()=>parseSnapshot(input,45039)};
     const service=()=>new SyncService(trial!,google,source,settings);

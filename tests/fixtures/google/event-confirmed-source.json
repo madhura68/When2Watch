@@ -1,0 +1,37 @@
+{
+  "kind": "calendar#event",
+  "etag": "redacted-etag-1b2db37c",
+  "id": "redacted-id-fc6c9966",
+  "status": "confirmed",
+  "htmlLink": "redacted-htmlLink-d96b4926",
+  "created": "2026-09-24T12:26:07.000Z",
+  "updated": "2026-09-24T12:26:07.987Z",
+  "summary": "redacted-summary-0e85e060",
+  "creator": {
+    "email": "redacted-email-78ee086f"
+  },
+  "organizer": {
+    "email": "redacted-email-3d9f7ad2",
+    "displayName": "redacted-displayName-70bb2f61",
+    "self": true
+  },
+  "start": {
+    "date": "2026-10-01"
+  },
+  "end": {
+    "date": "2026-10-02"
+  },
+  "iCalUID": "redacted-iCalUID-3ae6e3fe",
+  "sequence": 0,
+  "extendedProperties": {
+    "private": {
+      "app": "when2watch",
+      "owner": "redacted-owner-c7e285d5",
+      "probe": "configuration-b0"
+    }
+  },
+  "reminders": {
+    "useDefault": false
+  },
+  "eventType": "default"
+}
