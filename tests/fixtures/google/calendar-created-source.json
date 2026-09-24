@@ -1,0 +1,114 @@
+{
+  "kind": "calendar#calendar",
+  "etag": "redacted-etag-c0690a8f",
+  "id": "redacted-id-3d9f7ad2",
+  "summary": "redacted-summary-70bb2f61",
+  "description": "redacted-description-d956abae",
+  "timeZone": "Europe/Amsterdam",
+  "dataOwner": "redacted-dataOwner-78ee086f",
+  "conferenceProperties": {
+    "allowedConferenceSolutionTypes": [
+      "redacted-allowedConferenceSolutionTypes-1241b2c8"
+    ]
+  },
+  "labelProperties": {
+    "eventLabels": [
+      {
+        "id": "redacted-id-d82bcb0f",
+        "backgroundColor": "#d50000"
+      },
+      {
+        "id": "redacted-id-cdf98a7d",
+        "backgroundColor": "#9e69af"
+      },
+      {
+        "id": "redacted-id-929b3a75",
+        "backgroundColor": "#8e24aa"
+      },
+      {
+        "id": "redacted-id-1709929c",
+        "backgroundColor": "#039be5"
+      },
+      {
+        "id": "redacted-id-200169ec",
+        "backgroundColor": "#7986cb"
+      },
+      {
+        "id": "redacted-id-65e98b73",
+        "backgroundColor": "#d81b60"
+      },
+      {
+        "id": "redacted-id-ec53cbee",
+        "backgroundColor": "#3f51b5"
+      },
+      {
+        "id": "redacted-id-5527cc2e",
+        "backgroundColor": "#33b679"
+      },
+      {
+        "id": "redacted-id-52ee91fc",
+        "backgroundColor": "#e4c441"
+      },
+      {
+        "id": "redacted-id-d01fc450",
+        "backgroundColor": "#f09300"
+      },
+      {
+        "id": "redacted-id-7442510e",
+        "backgroundColor": "#c0ca33"
+      },
+      {
+        "id": "redacted-id-ddfa59de",
+        "backgroundColor": "#f6bf26"
+      },
+      {
+        "id": "redacted-id-55fb944d",
+        "backgroundColor": "#f4511e"
+      },
+      {
+        "id": "redacted-id-6f47f54d",
+        "backgroundColor": "#ef6c00"
+      },
+      {
+        "id": "redacted-id-8812f558",
+        "backgroundColor": "#795548"
+      },
+      {
+        "id": "redacted-id-56463270",
+        "backgroundColor": "#616161"
+      },
+      {
+        "id": "redacted-id-a10ac56a",
+        "backgroundColor": "#0b8043"
+      },
+      {
+        "id": "redacted-id-8b5fc61a",
+        "backgroundColor": "#7cb342"
+      },
+      {
+        "id": "redacted-id-852d2aca",
+        "backgroundColor": "#e67c73"
+      },
+      {
+        "id": "redacted-id-55e98511",
+        "backgroundColor": "#009688"
+      },
+      {
+        "id": "redacted-id-7332b6f3",
+        "backgroundColor": "#ad1457"
+      },
+      {
+        "id": "redacted-id-66055a07",
+        "backgroundColor": "#a79b8e"
+      },
+      {
+        "id": "redacted-id-22f62e02",
+        "backgroundColor": "#4285f4"
+      },
+      {
+        "id": "redacted-id-5e296726",
+        "backgroundColor": "#b39ddb"
+      }
+    ]
+  }
+}
