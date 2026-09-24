@@ -46,8 +46,8 @@ export class SyncService {
   }
 
   private showData(snapshot: Snapshot) {
-    const { name: title, url: sourceUrl, year, poster, platform, country, status } = snapshot.show;
-    return { title, sourceUrl, year, poster, platform, country, status };
+    const { name: title, url: sourceUrl, year, poster, platform, country, status, summaryText, genres, runtimeMinutes } = snapshot.show;
+    return { title, sourceUrl, year, poster, platform, country, status, summaryText, genresJson: JSON.stringify(genres), runtimeMinutes };
   }
 
   private async run(userId: string, trigger: string, shows: TrackedShow[], initial?: Snapshot): Promise<SyncResult> {
@@ -69,7 +69,7 @@ export class SyncService {
           await tx.trackedShow.update({ where: { id: show.id }, data: this.showData(snapshot) });
           await tx.episode.updateMany({ where: { trackedShowId: show.id }, data: { present: false } });
           for (const e of snapshot.episodes) {
-            const data = { title: e.name, season: e.season, number: e.number, airdate: e.airdate, sourceUrl: e.url, present: true };
+            const data = { title: e.name, season: e.season, number: e.number, airdate: e.airdate, sourceUrl: e.url, present: true, summaryText: e.summaryText };
             await tx.episode.upsert({ where: { trackedShowId_sourceId: { trackedShowId: show.id, sourceId: e.id } },
               create: { ...data, trackedShowId: show.id, sourceId: e.id }, update: data });
           }

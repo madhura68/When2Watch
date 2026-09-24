@@ -1,9 +1,11 @@
 import { AppError } from "./errors";
 import { MIN_SEARCH_LENGTH } from "@/lib/latest-search";
+import { summaryText } from "./summary-text";
 
 export type Show = { id: number; name: string; url: string; year: string | null; poster: string | null; platform: string | null; country: string | null; status: string };
-export type SourceEpisode = { id: number; name: string | null; season: number | null; number: number | null; airdate: string | null; url: string };
-export type Snapshot = { show: Show; episodes: SourceEpisode[] };
+export type ShowDetails = { summaryText: string | null; genres: string[]; runtimeMinutes: number | null };
+export type SourceEpisode = { id: number; name: string | null; season: number | null; number: number | null; airdate: string | null; url: string; summaryText: string | null };
+export type Snapshot = { show: Show & ShowDetails; episodes: SourceEpisode[] };
 export interface EpisodeSource { snapshot(id: number): Promise<Snapshot> }
 const invalid = () => new AppError("INVALID_SOURCE", 502, "TVmaze gaf onvolledige of ongeldige gegevens. Je agenda blijft behouden.");
 const object = (v: unknown): Record<string, any> => { if (!v || typeof v !== "object" || Array.isArray(v)) throw invalid(); return v; };
@@ -44,9 +46,11 @@ export function parseSnapshot(input: unknown, expectedId: number): Snapshot {
     const unknownDate = e.airdate === "" || e.airdate === null;
     if (!unknownDate && !validDate(e.airdate)) throw invalid();
     episodes.push({ id, name: text(e.name), season: optionalNumber(e.season), number: optionalNumber(e.number),
-      airdate: unknownDate ? null : e.airdate, url: safeUrl(e.url,"www.tvmaze.com") ?? `https://www.tvmaze.com/episodes/${id}` });
+      airdate: unknownDate ? null : e.airdate, url: safeUrl(e.url,"www.tvmaze.com") ?? `https://www.tvmaze.com/episodes/${id}`, summaryText: summaryText(e.summary) });
   }
-  return { show, episodes };
+  const genres = Array.isArray(raw.genres) ? [...new Set(raw.genres.filter((g): g is string => typeof g === "string").map(g => g.trim()).filter(Boolean))] : [];
+  const runtimeMinutes = [raw.averageRuntime, raw.runtime].find(value => typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 2147483647) ?? null;
+  return { show: { ...show, summaryText: summaryText(raw.summary), genres, runtimeMinutes }, episodes };
 }
 
 // The single app process spaces all source requests, including search and cron.

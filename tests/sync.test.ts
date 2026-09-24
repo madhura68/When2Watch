@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import raw from "./fixtures/tvmaze/slow-horses.json";
 import { parseSnapshot } from "@/server/tvmaze";
 import { SyncService } from "@/server/sync";
@@ -7,6 +7,36 @@ import { AppError } from "@/server/errors";
 import { testDatabase } from "./database";
 import { simulatedCalendar } from "./simulated-calendar";
 import { overview } from "@/server/overview";
+
+it("adds detail columns to a populated old database without changing existing records",async()=>{
+ const migration="20260924100000_series_details", old=testDatabase(migration);
+ try {
+  await old.db.$executeRawUnsafe(`INSERT INTO User(id,email) VALUES ('old-owner','old@example.test')`);
+  await old.db.$executeRawUnsafe(`INSERT INTO Session(id,sessionToken,userId,expires) VALUES ('old-session','synthetic-session','old-owner',1799999999999)`);
+  await old.db.$executeRawUnsafe(`INSERT INTO Account(id,userId,type,provider,providerAccountId,refresh_token) VALUES ('old-account','old-owner','oauth','google','old-google','synthetic-token')`);
+  await old.db.$executeRawUnsafe(`INSERT INTO CalendarSettings(userId,calendarId,summary,timeZone,accessRole,defaultRemindersJson) VALUES ('old-owner','chosen@example.test','When2Watch','Europe/Amsterdam','owner','[]')`);
+  await old.db.$executeRawUnsafe(`INSERT INTO TrackedShow(id,userId,tvmazeId,title,sourceUrl,status) VALUES ('old-show','old-owner',45039,'Slow Horses','https://www.tvmaze.com/shows/45039','Running')`);
+  await old.db.$executeRawUnsafe(`INSERT INTO Episode(id,trackedShowId,sourceId,title,airdate,sourceUrl) VALUES ('old-episode','old-show',3643507,'Resurrection','2026-09-30','https://www.tvmaze.com/episodes/3643507')`);
+  await old.db.$executeRawUnsafe(`INSERT INTO CalendarEventLink(id,episodeId,calendarId,eventId,status,desiredJson,confirmedDesiredHash) VALUES ('old-link','old-episode','chosen@example.test','existing-google-event','synced','{}','existing-hash')`);
+  const tables=["User","Session","Account","CalendarSettings","TrackedShow","Episode","CalendarEventLink"];
+  const before:Record<string,Record<string,unknown>[]>={};
+  for(const table of tables)before[table]=await old.db.$queryRawUnsafe(`SELECT * FROM "${table}"`);
+  old.applyMigration(migration);
+  for(const table of tables){
+   const columns=Object.keys(before[table][0]).map(c=>`"${c}"`).join(",");
+   expect(await old.db.$queryRawUnsafe(`SELECT ${columns} FROM "${table}"`)).toEqual(before[table]);
+  }
+  expect(await old.db.trackedShow.findUnique({where:{id:"old-show"}})).toMatchObject({summaryText:null,genresJson:"[]",runtimeMinutes:null});
+  expect(await old.db.episode.findUnique({where:{id:"old-episode"}})).toMatchObject({summaryText:null});
+  await old.db.trackedShow.update({where:{id:"old-show"},data:{summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45}});
+  await old.db.episode.update({where:{id:"old-episode"},data:{summaryText:"Persisted episode"}});
+  await old.db.$disconnect();const reopened=old.reopen();
+  try {
+   expect(await reopened.trackedShow.findUnique({where:{id:"old-show"}})).toMatchObject({summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45});
+   expect(await reopened.episode.findUnique({where:{id:"old-episode"}})).toMatchObject({summaryText:"Persisted episode"});
+  }finally{await reopened.$disconnect();}
+ }finally{await old.close();}
+});
 
 describe("Episode synchronization with real SQLite and simulated providers",()=>{
  let storage:ReturnType<typeof testDatabase>, google:ReturnType<typeof simulatedCalendar>, service:SyncService;
@@ -21,6 +51,44 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  afterEach(async()=>{await storage?.close();});
  const active=()=>[...google.events.values()].filter(e=>e.status!=="cancelled");
+ it("stores metadata corrections without Calendar writes or changed payloads, IDs and hashes",async()=>{
+  await service.add("owner",45039);
+  const linksBefore=await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}});
+  const eventsBefore=structuredClone([...google.events.entries()]);
+  input.summary="<p>A new <b>local</b> synopsis.</p>";input.genres=["Comedy"];input.averageRuntime=52;
+  input._embedded.episodes.find(e=>e.id===3643507)!.summary="<p>Episode-only details.</p>";
+  google.writes.length=0;
+  const result=await service.sync("owner","manual");
+  expect(result.series[0]).toMatchObject({created:0,updated:0,deleted:0,unchanged:5,failed:0});
+  expect(google.writes).toEqual([]);
+  expect(await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}})).toEqual(linksBefore);
+  expect([...google.events.entries()]).toEqual(eventsBefore);
+  expect(await storage.db.trackedShow.findFirst()).toMatchObject({summaryText:"A new local synopsis.",genresJson:'["Comedy"]',runtimeMinutes:52});
+  expect(await storage.db.episode.findFirst({where:{sourceId:3643507}})).toMatchObject({summaryText:"Episode-only details."});
+  const reopened=storage.reopen();
+  try {
+   sourceError=true;
+   vi.stubGlobal("fetch",()=>{throw new Error("Provider disabled during overview");});
+   const view=await overview("owner",reopened,now);
+   expect(view.shows[0]).toMatchObject({summaryText:"A new local synopsis.",genres:["Comedy"],runtimeMinutes:52});
+   expect(view.shows[0].upcoming.find(e=>e.id===3643507)).toMatchObject({summaryText:"Episode-only details.",linked:true});
+   expect((await overview("other",reopened,now)).shows).toEqual([]);
+  }finally{vi.unstubAllGlobals();await reopened.$disconnect();}
+ });
+ it("keeps cached details after source failure and clears them on a valid empty response",async()=>{
+  await service.add("owner",45039);
+  const before=await storage.db.trackedShow.findFirst();
+  expect(before?.summaryText).toContain("Slow Horses");
+  sourceError=true;google.writes.length=0;
+  expect((await service.sync("owner","manual")).status).toBe("failed");
+  expect((await storage.db.trackedShow.findFirst())?.summaryText).toBe(before?.summaryText);
+  sourceError=false;input.summary="";input.genres=[];(input as any).averageRuntime=null;
+  input._embedded.episodes.find(e=>e.id===3643507)!.summary="";
+  expect((await service.sync("owner","manual")).status).toBe("success");
+  expect(await storage.db.trackedShow.findFirst()).toMatchObject({summaryText:null,genresJson:"[]",runtimeMinutes:null});
+  expect(await storage.db.episode.findFirst({where:{sourceId:3643507}})).toMatchObject({summaryText:null});
+  expect(google.writes).toEqual([]);
+ });
  it("adds one relation and five eligible dated all-day events; repeat causes zero writes",async()=>{
   const first=await service.add("owner",45039);
   expect(first.status).toBe("success");expect(first.series[0]).toMatchObject({created:5,failed:0});

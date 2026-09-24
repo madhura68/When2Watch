@@ -56,8 +56,17 @@ a { color: var(--accent); }
 .match-info p { margin: 2px 0; font-size: 13px; color: var(--muted); }
 .match-info a { font-size: 12px; }
 .section-heading { margin-top: 32px; }
-.episodes li { display: flex; align-items: start; justify-content: space-between; gap: 18px; padding: 13px 0; border-top: 1px solid var(--line); }
+.episodes li { padding: 13px 0; border-top: 1px solid var(--line); }
+.episode-heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; }
+.episode-heading > div { min-width: 0; overflow-wrap: anywhere; }
+.series-details { margin: 16px 0; }
+.series-details p { margin: 8px 0; }
+.series-details > a { font-size: 14px; }
+.series-synopsis, .episode-description p { white-space: pre-line; overflow-wrap: anywhere; }
+.episode-description { margin: 6px 0 0; }
+.episode-description p { margin: 8px 0 0; }
+.episode-empty { margin: 6px 0 0; }
 .episodes time { white-space: nowrap; font-size: 14px; }
-@media (max-width: 420px) { .match { flex-wrap: wrap; } .match button { margin-left: 58px; } .episodes li { flex-wrap: wrap; gap: 4px; } .calendar-summary, .section-heading { flex-wrap: wrap; } }
+@media (max-width: 420px) { .match { flex-wrap: wrap; } .match button { margin-left: 58px; } .episode-heading { flex-wrap: wrap; gap: 4px; } .calendar-summary, .section-heading { flex-wrap: wrap; } }
 @media (max-width: 560px) { main { padding: 20px 18px; } .hero { padding: 35px 0 20px; } .card { padding: 22px 20px; } .steps-summary { grid-template-columns: 1fr; gap: 0; } .account-row { flex-wrap: wrap; } .form-row > * { width: 100%; } }
 @media (max-width: 560px) { .show-heading { grid-template-columns: 60px minmax(0, 1fr); gap: 12px 14px; } .show-heading > a { grid-column: 2; } .series-poster { width: 60px; height: 84px; } }

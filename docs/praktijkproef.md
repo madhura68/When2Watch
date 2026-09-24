@@ -182,3 +182,19 @@ Chrome desktop: 80×112 px; 375 px viewport: 60×84 px en documentbreedte exact 
 `npm test`: 43/43 geslaagd; `npm run typecheck` en `npm run build` geslaagd. Alleen presentatiebestanden gewijzigd, geen schema-, dependency- of Calendar-wijziging. Live uitrol en JP-beoordeling worden hieronder afzonderlijk vastgelegd.
 
 Taakstatus via MCP blijft geblokkeerd door de reeds gemelde ISS-7 (`tasks.dispatch_request_id` ontbreekt). Geen database- of statusbypass; uitvoering en bewijs worden gelogd.
+
+**T-4 live:** release `2153d945fb6527837a466a4d901388f19b329439` op max2, container healthy en HTTPS health 200. Consistente backup `/srv/apps/when2watch/db-backups/when2watch.20260924T090225Z.before-2153d94.db`, integrity_check ok. Bestaande sessie, 9 series, 170 episodes en 11 Calendar-links behouden. Hashes van TrackedShow/Episode/CalendarEventLink/SyncRun zijn vóór en na gelijk; geen sync gestart. Chrome toont 9 posterplaatsen, de echte Slow Horses-poster en vier komende afleveringen met hun bestaande agendabevestiging. `current` en `RELEASE_TAG` wijzen naar `2153d94`; vorige release en configuratie bewaard.
+
+**JP-beoordeling:** “Ja, ziet er goed uit; details mogen straks worden uitgerold”. Hiermee is de voorwaarde voor taak B vervuld.
+
+## ST-002 / T-5 — Lokale details, 24 september 2026
+
+Tekstconversie, normalisatie, SQLite-opslag en de toevoegende migratie zijn eerst met falende regressies beproefd en daarna geïmplementeerd. `npm test`: 64/64 geslaagd. De migratieproef begint met een gevulde oude database en vergelijkt alle bestaande kolommen van User, Session, Account, CalendarSettings, TrackedShow, Episode en CalendarEventLink; ze blijven gelijk. Nieuwe velden starten met null/[] en zijn na heropening leesbaar.
+
+De metadataregressie wijzigt alleen synopsis, genres, speelduur en episodeomschrijving: nul Google-writes, identieke event-ID's, payloads en beide hashes, wel gewijzigde lokale gegevens. Bronfout behoudt de waarden; een geldige lege respons wist ze. `overview()` blijft uit SQLite lezen met providerfetch uitgeschakeld en sluit een andere eigenaar uit.
+
+Typecheck en productiebuild slagen. De HTTP-proef met echte Next/SQLite en synthetische sessies telt 50 geslaagde controles, inclusief toegang, metadata, veilige tekstweergave, verkorting en geen sync bij lezen.
+
+Chrome desktop en 375 px: echte ongewijzigde Slow Horses-fixture toont Drama/Thriller/Espionage en circa 45 min. Synopsis is 400 tekens op woordgrens met TVmaze-link; de volledige tekst blijft lokaal. Slechts één van vier komende afleveringen heeft brontekst (3643507), dus één spoilerknop en drie neutrale lege toestanden. Enter opent alleen het gekozen onderdeel, focus blijft zichtbaar en herladen sluit alles. Geen horizontale scroll (375/375), geen synopsis-afbeeldingen of actieve bron-HTML. Twee pagina-openingen en uitklappen: nul metadata-/sync-aanvragen in de lokale proef met geblokkeerde providerfetch.
+
+Alleen html-to-text 10.0.1 en @types/html-to-text 9.0.4 toegevoegd; bestaande dependencyversies zijn behouden. Live metadata-uitrol en herstartbewijs volgen afzonderlijk hieronder.

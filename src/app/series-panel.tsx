@@ -11,6 +11,11 @@ import { SeriesPoster } from "./series-poster";
 const timestamp=(value:string|null)=>value ? new Date(value).toLocaleString("nl-NL",{timeZone:"Europe/Amsterdam",dateStyle:"short",timeStyle:"short"}) : "Nog niet";
 const episodeDate=(value:string)=>new Date(`${value}T12:00:00Z`).toLocaleDateString("nl-NL",{timeZone:"Europe/Amsterdam",day:"numeric",month:"long"});
 const sourceStatus=(value:string)=>({Running:"Lopend",Ended:"Beëindigd","To Be Determined":"Vervolg nog onzeker"}[value]??"Status onbekend");
+const summaryExcerpt=(text:string)=>{
+  if(text.length<=400)return text;
+  const boundary=text.slice(0,400).search(/\s+\S*$/);
+  return `${text.slice(0,Math.max(0,boundary)).trimEnd()}…`;
+};
 
 export function SeriesPanel({data}:{data:Overview}) {
   const router=useRouter();
@@ -75,11 +80,19 @@ export function SeriesPanel({data}:{data:Overview}) {
     {data.shows.map(show=><section className="card" key={show.id}>
       <div className="show-heading"><SeriesPoster src={show.poster}/><div className="show-info"><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
       {show.error&&<p className="notice error">{show.error}</p>}
-      {show.upcoming.length?<ul className="episodes">{show.upcoming.map(e=><li key={e.id}><div><strong>{e.season!==null&&e.number!==null?`S${String(e.season).padStart(2,"0")}E${String(e.number).padStart(2,"0")}`:"Aflevering"}</strong> {e.title}<br/><span className="muted small">{e.linked?"In je agenda":"Agenda nog niet bevestigd"}</span></div><time dateTime={e.date}>{episodeDate(e.date)}</time></li>)}</ul>:<p className="muted">{show.status==="Ended"?"Deze serie is beëindigd; er zijn geen komende uitzenddatums bekend.":"Nog geen volgende uitzenddatum bekend. Je blijft deze serie volgen."}</p>}
+      <details className="series-details"><summary>Over deze serie</summary>
+        {show.genres.length>0&&<p className="muted small">{show.genres.join(" · ")}</p>}
+        {show.runtimeMinutes!==null&&<p className="muted small">Speelduur: circa {show.runtimeMinutes} min.</p>}
+        {show.summaryText?<><p className="series-synopsis">{summaryExcerpt(show.summaryText)}</p>{show.summaryText.length>400&&<a href={show.sourceUrl} target="_blank" rel="noreferrer">Lees verder op TVmaze</a>}</>:<p className="muted small">Nog geen omschrijving beschikbaar.</p>}
+      </details>
+      {show.upcoming.length?<ul className="episodes">{show.upcoming.map(e=><li key={e.id}>
+        <div className="episode-heading"><div><strong>{e.season!==null&&e.number!==null?`S${String(e.season).padStart(2,"0")}E${String(e.number).padStart(2,"0")}`:"Aflevering"}</strong> {e.title}<br/><span className="muted small">{e.linked?"In je agenda":"Agenda nog niet bevestigd"}</span></div><time dateTime={e.date}>{episodeDate(e.date)}</time></div>
+        {e.summaryText?<details className="episode-description"><summary>Beschrijving (spoilers)</summary><p>{e.summaryText}</p></details>:<p className="muted small episode-empty">Nog geen beschrijving beschikbaar.</p>}
+      </li>)}</ul>:<p className="muted">{show.status==="Ended"?"Deze serie is beëindigd; er zijn geen komende uitzenddatums bekend.":"Nog geen volgende uitzenddatum bekend. Je blijft deze serie volgen."}</p>}
       {show.unknownDates>0&&<p className="muted small">{show.unknownDates} aflevering(en) zonder bekende uitzenddatum; daarvoor staat er geen agenda-item.</p>}
       <p className="muted small">Laatste poging: {timestamp(show.lastAttempt)}<br/>Laatste succes: {timestamp(show.lastSuccess)}</p>
     </section>)}
     <p className="muted small">De agenda bevat afleveringen vanaf zeven dagen geleden en alle bekende komende datums. Beschikbaarheid in Nederland kan afwijken.</p>
-    <p className="muted small">Gegevens: <a href="https://www.tvmaze.com/" target="_blank" rel="noreferrer">TVmaze</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA</a>. Laatste synchronisatie: {timestamp(data.lastRun?.finishedAt??null)}.</p>
+    <p className="muted small">Gegevens: <a href="https://www.tvmaze.com/" target="_blank" rel="noreferrer">TVmaze</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA</a>. Omschrijvingen worden als gewone tekst en waar nodig verkort getoond. Laatste synchronisatie: {timestamp(data.lastRun?.finishedAt??null)}.</p>
   </>;
 }

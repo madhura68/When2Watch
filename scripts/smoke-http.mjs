@@ -84,6 +84,27 @@ try {
   const cron = await request("/api/cron/sync",{method:"POST",headers:{authorization:`Bearer ${env.CRON_SECRET}`}});
   check(cron.status === 200 && (await cron.json()).status === "success","authorized empty cron must use the shared service");
   check(await db.syncRun.count({where:{userId:"owner",trigger:"cron"}}) === 1,"cron must resolve the configured owner on the server");
+  const synopsis = "OWNER_DETAILS Een zorgvuldig opgeslagen omschrijving. ".repeat(15);
+  const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:synopsis,genresJson:'["Drama","Thriller"]',runtimeMinutes:45}});
+  await db.episode.create({data:{trackedShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});
+  const ownerShows = await request("/api/shows",{headers:cookie("owner")});
+  const ownerData = await ownerShows.json();
+  check(ownerShows.ok && ownerData.shows[0].summaryText === synopsis && ownerData.shows[0].runtimeMinutes === 45 && ownerData.shows[0].genres.join(",") === "Drama,Thriller", "owner must receive locally stored series metadata");
+  check(ownerData.shows[0].upcoming[0].summaryText.startsWith("PRIVATE_EPISODE"), "owner must receive locally stored episode text");
+  for(const identity of [null,"other"]){
+    const headers=identity?cookie(identity):{};
+    for(const path of ["/","/api/shows"]){
+      const response=await request(path,{headers}); const body=await response.text();
+      check(!body.includes("OWNER_DETAILS") && !body.includes("PRIVATE_EPISODE"), "anonymous or other account must not receive enriched data");
+    }
+  }
+  const detailsPage = await (await request("/",{headers:cookie("owner")})).text();
+  const excerpt=detailsPage.match(/<p class="series-synopsis">([\s\S]*?)<\/p>/)?.[1];
+  check(excerpt && excerpt.length <= 400 && excerpt.endsWith("…") && synopsis.startsWith(excerpt.slice(0,-1)) && /\s/.test(synopsis[excerpt.length-1]), "long synopsis must end at a word boundary within 400 characters");
+  check(detailsPage.includes("Lees verder op TVmaze"), "truncated synopsis must link to its source");
+  check(detailsPage.includes('class="series-details"') && detailsPage.includes('class="episode-description"') && !/<details[^>]*\sopen(?:[=>\s])/.test(detailsPage), "series and episode disclosures must initially be closed");
+  check(detailsPage.includes("&lt;img") && !detailsPage.includes('<img src="https://example.test/should-not-load"'), "stored text must render escaped instead of executable markup");
+  check(await db.syncRun.count() === 1,"reading enriched pages must not start a sync");
   check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"x"})})).status === 400,"invalid show ID must fail before the provider");
   const invalid = await request("/api/probe", { method: "POST", headers: { ...cookie("owner"), origin, "Content-Type": "application/json" }, body: JSON.stringify({ date: "not-a-date" }) });
   check(invalid.status === 400, "invalid date must fail locally");
