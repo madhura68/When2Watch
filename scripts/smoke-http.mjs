@@ -51,6 +51,20 @@ try {
   const publicPage = await request("/");
   check(publicPage.status === 200, "login page must render");
   const publicText = await publicPage.text();
+  const manifestResponse = await request("/manifest.webmanifest");
+  check(manifestResponse.ok && manifestResponse.headers.get("content-type")?.includes("manifest+json"), "PWA manifest must be publicly available without login");
+  const manifest = await manifestResponse.json();
+  check(manifest.id === "/" && manifest.start_url === "/" && manifest.scope === "/" && manifest.display === "standalone", "installed app must have a stable identity and open at Agenda");
+  check(publicText.includes('rel="manifest"') && publicText.includes('rel="apple-touch-icon"'), "login page must expose installation metadata");
+  for (const icon of [...manifest.icons, {src:"/icons/apple-touch-icon-180.png", sizes:"180x180"}]) {
+    check(icon.src.startsWith("/icons/"), "installation artwork must stay on this origin");
+    const response = await request(icon.src);
+    check(response.ok && response.headers.get("content-type")?.includes("image/png"), "installation icon must load without authentication");
+    const png = Buffer.from(await response.arrayBuffer());
+    const [width,height] = icon.sizes.split("x").map(Number);
+    check(png.subarray(1,4).toString() === "PNG" && png.readUInt32BE(16) === width && png.readUInt32BE(20) === height, "served icon dimensions must match advertised size");
+  }
+  check(manifest.icons.some(icon=>icon.purpose === "maskable") && manifest.icons.some(icon=>icon.purpose === "any"), "standard and maskable installations must have appropriate artwork");
   check(!publicText.includes(env.ALLOWED_GOOGLE_EMAIL) && !publicText.includes(env.GOOGLE_CALENDAR_ID), "public page leaked private configuration");
   check((await request("/settings")).status === 307, "private page must redirect anonymous user");
   check((await request("/settings", { headers: cookie("other") })).status === 307, "private page must reject another account's session");
