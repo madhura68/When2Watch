@@ -1,0 +1,1 @@
+ALTER TABLE "TrackedShow" ADD COLUMN "trying" BOOLEAN NOT NULL DEFAULT false;

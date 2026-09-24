@@ -32,7 +32,8 @@ it("persists a valid timezone independently without resetting the chosen horizon
 it("adds preferences to a populated old database while preserving owner, episodes and event mappings", async () => {
   const migration = "20260924120000_user_preferences"; storage = testDatabase(migration); const db = storage.db;
   await db.user.create({ data: { id: "existing-owner", email: "owner@example.test" } });
-  const show = await db.trackedShow.create({ data: { userId: "existing-owner", tvmazeId: 45039, title: "Slow Horses", status: "Running", sourceUrl: "https://www.tvmaze.com/shows/45039" }, select: {id:true} });
+  await db.$executeRaw`INSERT INTO TrackedShow(id,userId,tvmazeId,title,status,sourceUrl) VALUES ('old-show','existing-owner',45039,'Slow Horses','Running','https://www.tvmaze.com/shows/45039')`;
+  const show = {id:"old-show"};
   const episode = await db.episode.create({ data: { trackedShowId: show.id, sourceId: 123, title: "Existing", airdate: "2026-09-30", sourceUrl: "https://www.tvmaze.com/episodes/123" } });
   await db.calendarEventLink.create({ data: { episodeId: episode.id, calendarId: "test", eventId: "unchanged", status: "synced", desiredJson: "{}", confirmedDesiredHash: "unchanged-hash" } });
   const before = { users: await db.user.findMany(), shows: await db.$queryRaw`SELECT * FROM TrackedShow`, episodes: await db.episode.findMany(), links: await db.calendarEventLink.findMany() };

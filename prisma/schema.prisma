@@ -103,6 +103,7 @@ model Probe {
 
 model TrackedShow {
   id            String @id @default(cuid())
+  trying        Boolean @default(false)
   userId        String
   tvmazeId      Int
   title         String

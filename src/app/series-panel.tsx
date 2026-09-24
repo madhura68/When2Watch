@@ -6,10 +6,10 @@ import type { Overview } from "@/server/overview";
 import type { SyncResult } from "@/server/sync";
 import { LatestSearch, MIN_SEARCH_LENGTH } from "@/lib/latest-search";
 import { SeriesPoster } from "./series-poster";
+import { sourceStatus, visibleSeries, type SourceFilter, type ChoiceFilter } from "@/lib/series-list";
 
 const timestamp=(value:string|null,timeZone:string)=>value ? new Date(value).toLocaleString("nl-NL",{timeZone,dateStyle:"short",timeStyle:"short"}) : "Nog niet";
 const episodeDate=(value:string)=>new Date(`${value}T12:00:00Z`).toLocaleDateString("nl-NL",{timeZone:"UTC",day:"numeric",month:"long"});
-const sourceStatus=(value:string)=>({Running:"Lopend",Ended:"Beëindigd","To Be Determined":"Vervolg nog onzeker"}[value]??"Status onbekend");
 const summaryExcerpt=(text:string)=>{
   if(text.length<=400)return text;
   const boundary=text.slice(0,400).search(/\s+\S*$/);
@@ -21,6 +21,8 @@ export function SeriesPanel({data}:{data:Overview}) {
   const [query,setQuery]=useState(""),[matches,setMatches]=useState<Show[]>([]),[more,setMore]=useState(false);
   const [searching,setSearching]=useState(false),[searched,setSearched]=useState(false),[searchError,setSearchError]=useState("");
   const [busy,setBusy]=useState(false),[message,setMessage]=useState(""),[failed,setFailed]=useState(false);
+  const [sourceFilter,setSourceFilter]=useState<SourceFilter>("all"),[choiceFilter,setChoiceFilter]=useState<ChoiceFilter>("all");
+  const shown=useMemo(()=>visibleSeries(data.shows,sourceFilter,choiceFilter),[data.shows,sourceFilter,choiceFilter]);
   const search=useMemo(()=>new LatestSearch<Show[]>(async(q,signal)=>{
     const response=await fetch(`/api/shows/search?q=${encodeURIComponent(q)}`,{signal});const body=await response.json();
     if(!response.ok)throw new Error(body.error??"Zoeken is niet gelukt. Probeer opnieuw.");return body.shows;
@@ -37,10 +39,10 @@ export function SeriesPanel({data}:{data:Overview}) {
   function changeQuery(value:string) {
     search.cancel();setQuery(value);setMatches([]);setMore(false);setSearched(false);setSearchError("");setSearching(value.trim().length >= MIN_SEARCH_LENGTH);
   }
-  async function action(showId?:number) {
+  async function action(showId?:number,trying=false) {
     setBusy(true);setFailed(false);setMessage(showId?"Serie toevoegen en agenda bijwerken…":"Agenda synchroniseren…");
     try {
-      const response=await fetch(showId?"/api/shows":"/api/sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(showId?{showId:String(showId)}:{})});
+      const response=await fetch(showId?"/api/shows":"/api/sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(showId?{showId:String(showId),trying}:{})});
       const body:SyncResult & {error?:string}=await response.json();
       if(body.series) {
         const counts=body.series.reduce((a,s)=>({created:a.created+s.created,updated:a.updated+s.updated,deleted:a.deleted+s.deleted,unchanged:a.unchanged+s.unchanged}),{created:0,updated:0,deleted:0,unchanged:0});
@@ -49,6 +51,16 @@ export function SeriesPanel({data}:{data:Overview}) {
       } else throw new Error(body.error??"Deze actie is niet gelukt.");
     } catch(error) {setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer dezelfde actie opnieuw.");}
     finally {router.refresh();setBusy(false);}
+  }
+  async function changeTrying(showId:number,trying:boolean) {
+    setBusy(true);setFailed(false);setMessage("Voorkeur opslaan…");
+    try {
+      const response=await fetch("/api/shows",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({showId:String(showId),trying})});
+      const body=await response.json();
+      if(!response.ok)throw new Error(body.error??"Opslaan is niet gelukt. Probeer opnieuw.");
+      setMessage("Voorkeur opgeslagen. Deze serie blijft met je agenda synchroniseren.");
+    }catch(error){setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer opnieuw.");}
+    finally{router.refresh();setBusy(false);}
   }
   return <>
     {data.needsReauth&&<section className="notice error"><p>De Google-toegang moet opnieuw worden gekoppeld. Je series blijven bewaard.</p><a href="/settings#google">Google-toegang herstellen</a></section>}
@@ -67,18 +79,32 @@ export function SeriesPanel({data}:{data:Overview}) {
         return <li className="match" key={show.id}>
           {show.poster?<img src={show.poster} alt="" width={44} height={62}/>:<span className="poster-placeholder" aria-hidden="true">TV</span>}
           <div className="match-info"><strong>{show.name}</strong><p>{[show.year,show.platform,show.country].filter(Boolean).join(" · ")||"Geen aanvullende gegevens"}</p><a href={show.url} target="_blank" rel="noreferrer">Bekijk op TVmaze</a></div>
-          <button disabled={busy||followed} onClick={()=>void action(show.id)} aria-label={followed?`${show.name} volg je al`:`Volg ${show.name}`}>{followed?"Volg je al":"Volgen"}</button>
+          <div className="match-actions">
+            <button disabled={busy||followed} onClick={()=>void action(show.id)} aria-label={followed?`${show.name} volg je al`:`Volg ${show.name}`}>{followed?"Volg je al":"Volgen"}</button>
+            {!followed&&<button disabled={busy} onClick={()=>void action(show.id,true)} aria-label={`Probeer ${show.name}`}>Proberen</button>}
+          </div>
         </li>;
       })}</ul>
       {!more&&matches.length>5&&<button className="secondary" onClick={()=>setMore(true)}>Toon de overige {matches.length-5} resultaten</button>}
       {searched&&matches.length>0&&<p className="muted small">Staat jouw serie er niet bij? Probeer een andere spelling of de oorspronkelijke titel.</p>}
     </section>
     <div aria-live="polite" aria-atomic="true">{message&&<p className={`notice ${failed?"error":"success"}`}>{message}</p>}</div>
-    <div className="section-heading"><h2>Jouw series <span className="muted">{data.shows.length}</span></h2><button disabled={busy||!data.shows.length} onClick={()=>void action()}>{busy?"Bezig…":"Nu synchroniseren"}</button></div>
+    <div className="section-heading"><h2>Jouw series <span className="muted">{shown.length} van {data.shows.length}</span></h2><button disabled={busy||!data.shows.length} onClick={()=>void action()}>{busy?"Bezig…":"Nu synchroniseren"}</button></div>
+    {data.shows.length>0&&<div className="series-filters">
+      <div><label htmlFor="source-filter">Status van de serie</label><select id="source-filter" value={sourceFilter} onChange={e=>setSourceFilter(e.target.value as SourceFilter)}><option value="all">Alle statussen</option><option value="Running">Lopend</option><option value="To Be Determined">Vervolg nog onzeker</option><option value="Ended">Beëindigd</option><option value="unknown">Status onbekend</option></select></div>
+      <div><label htmlFor="choice-filter">Jouw keuze</label><select id="choice-filter" value={choiceFilter} onChange={e=>setChoiceFilter(e.target.value as ChoiceFilter)}><option value="all">Alle keuzes</option><option value="following">Volgen</option><option value="trying">Proberen</option></select></div>
+      <button className="secondary" onClick={()=>{setSourceFilter("all");setChoiceFilter("all");}}>Alle series tonen</button>
+    </div>}
+    <p className="muted small" aria-live="polite">{shown.length} van {data.shows.length} series zichtbaar. Synchroniseren werkt altijd je hele overzicht bij.</p>
     {!data.shows.length&&<p className="muted">Je volgt nog geen serie. Zoek hierboven je eerste serie.</p>}
-    {data.shows.map(show=><section className="card" key={show.id}>
+    {data.shows.length>0&&shown.length===0&&<p className="notice">Geen series met deze filters. Kies ‘Alle series tonen’ om je overzicht te herstellen.</p>}
+    {shown.map(show=><section className="card followed-show" key={show.id}>
+      <div className="show-identity">
       <div className="show-heading"><SeriesPoster src={show.poster}/><div className="show-info"><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
+      <div className="show-preference"><label htmlFor={`trying-${show.id}`}>Jouw keuze voor {show.title}</label><select id={`trying-${show.id}`} value={show.trying?"trying":"following"} disabled={busy} onChange={e=>void changeTrying(show.id,e.target.value==="trying")}><option value="following">Volgen</option><option value="trying">Proberen</option></select></div>
       {show.error&&<p className="notice error">{show.error}</p>}
+      </div>
+      <div className="show-content">
       <details className="series-details"><summary>Over deze serie</summary>
         {show.genres.length>0&&<p className="muted small">{show.genres.join(" · ")}</p>}
         {show.runtimeMinutes!==null&&<p className="muted small">Speelduur: circa {show.runtimeMinutes} min.</p>}
@@ -90,6 +116,7 @@ export function SeriesPanel({data}:{data:Overview}) {
       </li>)}</ul>:<p className="muted">{show.status==="Ended"?"Deze serie is beëindigd; er zijn geen komende uitzenddatums bekend.":"Nog geen volgende uitzenddatum bekend. Je blijft deze serie volgen."}</p>}
       {show.unknownDates>0&&<p className="muted small">{show.unknownDates} aflevering(en) zonder bekende uitzenddatum; daarvoor staat er geen agenda-item.</p>}
       <p className="muted small">Laatste poging: {timestamp(show.lastAttempt,data.timeZone)}<br/>Laatste succes: {timestamp(show.lastSuccess,data.timeZone)}</p>
+      </div>
     </section>)}
     <p className="muted small">De agenda bevat afleveringen vanaf zeven dagen geleden en alle bekende komende datums. Beschikbaarheid in Nederland kan afwijken.</p>
     <p className="muted small">Gegevens: <a href="https://www.tvmaze.com/" target="_blank" rel="noreferrer">TVmaze</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA</a>. Omschrijvingen worden als gewone tekst en waar nodig verkort getoond. Laatste synchronisatie: {timestamp(data.lastRun?.finishedAt??null,data.timeZone)}.</p>

@@ -2,6 +2,17 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; }
 main { max-width: 840px; margin: 0 auto; padding: 28px 24px 40px; }
+main:has(> .following-page) { max-width: none; width: 90%; padding-inline: 0; }
+.followed-show { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.show-identity, .show-content { min-width: 0; overflow-wrap: anywhere; }
+.show-content .series-details { margin-top: 0; }
+.show-content .series-synopsis, .show-content .episode-description p { max-width: 70ch; }
+.match-info { overflow-wrap: anywhere; }
+@media (min-width: 1100px) {
+  .followed-show { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 40px; }
+  .show-content { border-left: 1px solid var(--line); padding-left: 32px; }
+}
+@media (max-width: 560px) { main:has(> .following-page) { width: auto; padding-inline: 18px; } }
 header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 0 24px; border-bottom: 1px solid var(--line); }
 .brand { color: var(--ink); font-size: 25px; font-weight: 800; letter-spacing: -1px; text-decoration: none; }
 .brand-dot { color: var(--accent); }
@@ -80,6 +91,13 @@ a { color: var(--accent); }
 .match-info { flex: 1; min-width: 0; }
 .match-info p { margin: 2px 0; font-size: 13px; color: var(--muted); }
 .match-info a { font-size: 12px; }
+.match-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.show-preference { margin-top: 20px; }
+.show-preference select { max-width: 100%; }
+.series-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin-top: 20px; }
+.series-filters > div { min-width: 0; }
+.series-filters select { max-width: 100%; }
+@media (max-width: 700px) { .match { flex-wrap: wrap; } .match-actions { width: 100%; padding-left: 58px; } .match .match-actions button { margin-left: 0; } }
 .section-heading { margin-top: 32px; }
 .episodes li { padding: 13px 0; border-top: 1px solid var(--line); }
 .episode-heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; }
