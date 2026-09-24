@@ -1,6 +1,10 @@
-# When2Watch — praktijkproef ST-001
+# When2Watch — praktijkproeven ST-001 en ST-002
 
-**Status op 24 september 2026: het eerste praktijkincrement is inhoudelijk geslaagd.** JP ontving de proefmelding in Apple Agenda én Chrome. Slow Horses is via zoekmatches toegevoegd; vijf echte afleveringen staan in de gekozen Google-agenda. Herhaling, gecontroleerde datumcorrectie/herstel, containerherstart, echte tokenvernieuwing en een daadwerkelijk door max2-cron gestarte run zijn bewezen. De app draait op release `4379141`. De taakstatussen in Scrum4Me konden door ISS-7 niet worden bijgewerkt; de geslaagde bewijzen zijn wel gelogd. Gebruik na dag zeven en de overige v1-criteria blijven apart open.
+**Huidige status — sprint S-2026-09-24-1:** posters en lokale seriedetails zijn op 24 september uitgerold op max2, release `b31af0565eda836f5a784549e20fef739a7eae03`. JP heeft de posterproef goedgekeurd. De normale synchronisatie vulde negen series en liet elf agenda-items ongewijzigd. Migratie, desktop/smal scherm en herstart zijn beproefd. De technische review gaf GO met één klein uitgesteld weergavepunt (tekst langer dan 400 tekens zonder spaties). Zie de ST-002-secties hieronder. Administratief afvinken blijft geblokkeerd door ISS-7.
+
+## Eerdere proef — ST-001
+
+**Status op 24 september 2026: het eerste praktijkincrement is inhoudelijk geslaagd.** JP ontving de proefmelding in Apple Agenda én Chrome. Slow Horses is via zoekmatches toegevoegd; vijf echte afleveringen staan in de gekozen Google-agenda. Herhaling, gecontroleerde datumcorrectie/herstel, containerherstart, echte tokenvernieuwing en een daadwerkelijk door max2-cron gestarte run zijn bewezen. De app draaide bij afronding van dat increment op release `4379141`. De taakstatussen in Scrum4Me konden door ISS-7 niet worden bijgewerkt; de geslaagde bewijzen zijn wel gelogd. Gebruik na dag zeven en de overige v1-criteria blijven apart open.
 
 ## Resultaat increment 1 — 24 september
 
@@ -198,3 +202,11 @@ Typecheck en productiebuild slagen. De HTTP-proef met echte Next/SQLite en synth
 Chrome desktop en 375 px: echte ongewijzigde Slow Horses-fixture toont Drama/Thriller/Espionage en circa 45 min. Synopsis is 400 tekens op woordgrens met TVmaze-link; de volledige tekst blijft lokaal. Slechts één van vier komende afleveringen heeft brontekst (3643507), dus één spoilerknop en drie neutrale lege toestanden. Enter opent alleen het gekozen onderdeel, focus blijft zichtbaar en herladen sluit alles. Geen horizontale scroll (375/375), geen synopsis-afbeeldingen of actieve bron-HTML. Twee pagina-openingen en uitklappen: nul metadata-/sync-aanvragen in de lokale proef met geblokkeerde providerfetch.
 
 Alleen html-to-text 10.0.1 en @types/html-to-text 9.0.4 toegevoegd; bestaande dependencyversies zijn behouden. Live metadata-uitrol en herstartbewijs volgen afzonderlijk hieronder.
+
+**T-5 live:** release `b31af0565eda836f5a784549e20fef739a7eae03` na onafhankelijke review GO uitgerold. Backup `/srv/apps/when2watch/db-backups/when2watch.20260924T091932Z.before-b31af05.db`, integriteit ok; oude release `2153d94` en configuratie behouden. Voor en direct na migratie zijn alle bestaande kolommen in User, Session, Account, CalendarSettings, Probe, TrackedShow, Episode, CalendarEventLink en SyncRun vergeleken: alle hashes gelijk. Nieuwe defaults: 9 series null/[] en 170 episodebeschrijvingen null.
+
+De ene gewone handmatige run `cmufbmr760001mn01a046dbnj` slaagde: **0 toegevoegd, 0 bijgewerkt, 0 verwijderd, 11 ongewijzigd, 0 fouten**. Alle negen series hebben lokaal een synopsis; 163 van 170 afleveringen hebben beschrijvingen. Slow Horses heeft 451 tekens volledige synopsis, drie genres en 45 min.; van de vier komende afleveringen heeft alleen 3643507 brontekst. De elf CalendarEventLink-records, inclusief event-ID's, payloads en hashes, bleven geheel gelijk.
+
+Daarna is uitsluitend de When2Watch-webcontainer opnieuw aangemaakt. Health en HTTPS geven 200; bestaande Chrome-sessie en negen series blijven beschikbaar. Hashes van TrackedShow, Episode, CalendarEventLink en SyncRun blijven gelijk na herstart. De teller blijft 12 sync-runs: er is geen extra appstart-synchronisatie. Bij opnieuw laden staan alle negen seriedetails en de ene aanwezige komende episodebeschrijving dicht; opnieuw openen toont de opgeslagen gegevens. `current`, `.env`/container-`RELEASE_TAG` en de image wijzen naar `b31af05`.
+
+**Review en open punten:** zie `docs/IDEA-216-review-posters-en-seriedetails.md`. Geen blokkerende bevindingen. Uitgesteld: meer dan 400 tekens zonder witruimte geeft alleen een ellipsis; de volledige tekst blijft lokaal en via TVmaze beschikbaar. ISS-7 staat nog open; statusmutaties zijn niet omzeild. Ook `origin/main` ontbreekt nog; er is geen fictieve referentie of geslaagde MCP-codeverificatie geclaimd. De taakacceptatie is tegen tests, onafhankelijke review en werkelijk uitrolbewijs gecontroleerd. Geen merge, cron-, proxy-, OAuth- of andere-appwijziging.
