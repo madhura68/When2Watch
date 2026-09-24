@@ -31,8 +31,9 @@ jobs:
         run: npm run db:generate
       - name: Unit and database tests
         # Each database test starts Prisma migrations. Bound file parallelism
-        # on shared runners; concurrency inside the tests stays enabled.
-        run: npm test -- --maxWorkers=2
+        # on shared runners; concurrency inside the tests stays enabled. Real
+        # migration startup exceeded 10s in CI; retain a bounded 30s watchdog.
+        run: npm test -- --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000
       - name: Production build
         run: npm run build
       - name: Typecheck including generated Next types
