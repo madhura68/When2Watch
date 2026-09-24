@@ -1,12 +1,15 @@
 import { expect } from "vitest";
 export function simulatedCalendar() {
   const events = new Map<string, any>(), writes: {method:string; id:string; body?:any}[] = [];
-  let loseInsert = false, failDelete = false, revision=0;
+  let loseInsert = false, failDelete = false, failCalendar = false, revision=0;
   const fetcher: typeof fetch = async (input, init) => {
     const url=new URL(String(input)), method=init?.method??"GET";
     expect(url.origin).toBe("https://www.googleapis.com");
     expect(new Headers(init?.headers).get("authorization")).toBe("Bearer synthetic-access");
-    if(url.pathname.includes("/calendarList/")) return Response.json({id:"chosen@example.test",summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultReminders:[]});
+    if(url.pathname.includes("/calendarList/")) {
+      if(failCalendar){failCalendar=false;return Response.json({},{status:503});}
+      return Response.json({id:"chosen@example.test",summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultReminders:[]});
+    }
     expect(decodeURIComponent(url.pathname.split("/calendars/")[1].split("/events")[0])).toBe("chosen@example.test");
     const id=url.pathname.split("/").at(-1)!;
     if(method==="GET" && id==="events") {
@@ -36,5 +39,5 @@ export function simulatedCalendar() {
     }
     return events.has(id)?Response.json(events.get(id)):Response.json({}, {status:404});
   };
-  return {events,writes,fetcher,loseNextInsert:()=>{loseInsert=true;},failNextDelete:()=>{failDelete=true;}};
+  return {events,writes,fetcher,loseNextInsert:()=>{loseInsert=true;},failNextDelete:()=>{failDelete=true;},failNextCalendarRead:()=>{failCalendar=true;}};
 }

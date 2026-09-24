@@ -6,6 +6,7 @@ import { GoogleCalendar } from "@/server/google-calendar";
 import { AppError } from "@/server/errors";
 import { testDatabase } from "./database";
 import { simulatedCalendar } from "./simulated-calendar";
+import { overview } from "@/server/overview";
 
 describe("Episode synchronization with real SQLite and simulated providers",()=>{
  let storage:ReturnType<typeof testDatabase>, google:ReturnType<typeof simulatedCalendar>, service:SyncService;
@@ -103,5 +104,19 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   google.events.set("foreign",{...structuredClone(active()[0]),id:"foreign",extendedProperties:{private:{app:"different-app",kind:"episode",userId:"owner",showId:"45039"}}});
   const own=await new GoogleCalendar(async()=>"synthetic-access",google.fetcher).ownedEpisodes(config.calendarId,"owner",45039);
   expect(own).toHaveLength(5);expect(own.some(e=>e.id==="foreign")).toBe(false);
+ });
+ it.each(["date","title","show title"])("does not label changed %s as confirmed after a Google read failure",async(field)=>{
+  await service.add("owner",45039);
+  const displayed=async()=>(await overview("owner",storage.db,now)).shows[0].upcoming.find(e=>e.id===3643507)!;
+  expect((await displayed()).linked).toBe(true);
+  const episode=input._embedded.episodes.find(e=>e.id===3643507)!;
+  if(field==="date")episode.airdate="2026-10-01";
+  else if(field==="title")episode.name="Corrected name";
+  else input.name="Corrected show title";
+  google.failNextCalendarRead();
+  expect((await service.sync("owner","manual")).status).toBe("failed");
+  expect((await displayed()).linked).toBe(false);
+  expect((await service.sync("owner","manual")).status).toBe("success");
+  expect((await displayed()).linked).toBe(true);
  });
 });

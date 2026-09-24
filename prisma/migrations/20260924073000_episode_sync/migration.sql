@@ -70,4 +70,3 @@ CREATE UNIQUE INDEX "CalendarEventLink_episodeId_calendarId_key" ON "CalendarEve
 
 -- CreateIndex
 CREATE INDEX "SyncRun_userId_startedAt_idx" ON "SyncRun"("userId", "startedAt");
-
