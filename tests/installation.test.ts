@@ -59,12 +59,12 @@ it("adds installation tables without changing legacy owners, sessions, credentia
   await db.user.create({data:{id:"owner",email:legacy.allowedEmail}});
   await db.$executeRaw`INSERT INTO Account (id,userId,type,provider,providerAccountId,refresh_token) VALUES ('account','owner','oauth','google','subject','preserved-token')`;
   await db.session.create({data:{userId:"owner",sessionToken:"preserved-session",expires:new Date(Date.now()+3600000)}});
-  const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Preserved",status:"Running",sourceUrl:"https://example.test"}});
+  const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Preserved",status:"Running",sourceUrl:"https://example.test"},select:{id:true}});
   const episode = await db.episode.create({data:{trackedShowId:show.id,sourceId:1,sourceUrl:"https://example.test/1",airdate:"2026-09-30"}});
   await db.calendarEventLink.create({data:{episodeId:episode.id,calendarId:"old",eventId:"preserved",desiredJson:"{}",status:"synced"}});
-  const before = {users:await db.user.findMany(),sessions:await db.session.findMany(),shows:await db.trackedShow.findMany(),episodes:await db.episode.findMany(),links:await db.calendarEventLink.findMany()};
+  const before = {users:await db.user.findMany(),sessions:await db.session.findMany(),shows:await db.$queryRaw`SELECT * FROM TrackedShow ORDER BY id`,episodes:await db.episode.findMany(),links:await db.calendarEventLink.findMany()};
   storage.applyMigration(migration);
-  expect({users:await db.user.findMany(),sessions:await db.session.findMany(),shows:await db.trackedShow.findMany(),episodes:await db.episode.findMany(),links:await db.calendarEventLink.findMany()}).toEqual(before);
+  expect({users:await db.user.findMany(),sessions:await db.session.findMany(),shows:await db.$queryRaw`SELECT * FROM TrackedShow ORDER BY id`,episodes:await db.episode.findMany(),links:await db.calendarEventLink.findMany()}).toEqual(before);
   expect((await db.account.findUniqueOrThrow({where:{id:"account"}})).refresh_token).toBe("preserved-token");
   expect(await db.installation.count()).toBe(0);
 });

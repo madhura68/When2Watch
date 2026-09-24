@@ -110,6 +110,7 @@ model TrackedShow {
   year          String?
   poster        String?
   bannerUrl     String?
+  backgroundUrl String?
   bannerNextCheckAt DateTime?
   platform      String?
   country       String?

@@ -6,8 +6,9 @@ export type Show = { id: number; name: string; url: string; year: string | null;
 export type ShowDetails = { summaryText: string | null; genres: string[]; runtimeMinutes: number | null };
 export type SourceEpisode = { id: number; name: string | null; season: number | null; number: number | null; airdate: string | null; url: string; summaryText: string | null };
 export type Snapshot = { show: Show & ShowDetails; episodes: SourceEpisode[] };
-export interface BannerSource { banner(id: number): Promise<string | null> }
-export interface EpisodeSource { snapshot(id: number): Promise<Snapshot>; banner?: BannerSource["banner"] }
+export type ShowArtwork = { bannerUrl: string | null; backgroundUrl: string | null };
+export interface ArtworkSource { artwork(id: number): Promise<ShowArtwork> }
+export interface EpisodeSource { snapshot(id: number): Promise<Snapshot>; artwork?: ArtworkSource["artwork"] }
 const invalid = () => new AppError("INVALID_SOURCE", 502, "TVmaze gaf onvolledige of ongeldige gegevens. Je agenda blijft behouden.");
 const object = (v: unknown): Record<string, any> => { if (!v || typeof v !== "object" || Array.isArray(v)) throw invalid(); return v; };
 const idNumber = (v: unknown): number => { if (!Number.isSafeInteger(v) || (v as number) <= 0) throw invalid(); return v as number; };
@@ -35,22 +36,33 @@ export function parseSearch(input: unknown): Show[] {
   const seen = new Set<number>();
   return input.map(x => parseShow(object(x).show)).filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
 }
-export function parseBanner(input: unknown): string | null {
+export function parseArtwork(input: unknown): ShowArtwork {
   if (!Array.isArray(input)) throw invalid();
   const banners: { id: number; main: boolean; url: string }[] = [];
+  const backgrounds: { id: number; main: boolean; url: string; width: number }[] = [];
   for (const item of input) {
     const image = object(item), id = idNumber(image.id);
     if (image.type !== null && typeof image.type !== "string") throw invalid();
-    if (image.type !== "banner") continue;
+    if (image.type !== "banner" && image.type !== "background") continue;
     const resolutions = object(image.resolutions);
-    const url = safeUrl(object(resolutions.medium ?? resolutions.original).url, "static.tvmaze.com");
+    const resolution = object(image.type === "banner" ? resolutions.medium ?? resolutions.original : resolutions.original);
+    const url = safeUrl(resolution.url, "static.tvmaze.com");
     if (!url) throw invalid();
     const parsed = new URL(url);
     if (parsed.username || parsed.password || parsed.port) throw invalid();
-    banners.push({ id, main: image.main === true, url });
+    const candidate = { id, main: image.main === true, url };
+    if (image.type === "banner") banners.push(candidate);
+    else {
+      const width = idNumber(resolution.width), height = idNumber(resolution.height);
+      if (width > height) backgrounds.push({ ...candidate, width });
+    }
   }
   banners.sort((a, b) => Number(b.main) - Number(a.main) || a.id - b.id);
-  return banners[0]?.url ?? null;
+  // Prefer a modest original that fits the banner area over unnecessary 4K downloads.
+  backgrounds.sort((a, b) => Number(b.main) - Number(a.main)
+    || Number(b.width >= 900) - Number(a.width >= 900)
+    || (a.width >= 900 ? a.width - b.width : b.width - a.width) || a.id - b.id);
+  return { bannerUrl: banners[0]?.url ?? null, backgroundUrl: backgrounds[0]?.url ?? null };
 }
 export function parseSnapshot(input: unknown, expectedId: number): Snapshot {
   const raw = object(input), show = parseShow(raw);
@@ -105,7 +117,7 @@ export class TVmaze implements EpisodeSource {
   async snapshot(id: number): Promise<Snapshot> {
     idNumber(id); return parseSnapshot(await this.request(`/shows/${id}?embed=episodes`),id);
   }
-  async banner(id: number): Promise<string | null> {
-    idNumber(id); return parseBanner(await this.request(`/shows/${id}/images`));
+  async artwork(id: number): Promise<ShowArtwork> {
+    idNumber(id); return parseArtwork(await this.request(`/shows/${id}/images`));
   }
 }

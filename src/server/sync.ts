@@ -5,7 +5,7 @@ import { serializeCalendarMutation } from "./calendar-mutations";
 import { AppError } from "./errors";
 import { GoogleCalendar, type CalendarEvent } from "./google-calendar";
 import type { EpisodeSource, Snapshot } from "./tvmaze";
-import { refreshBanner } from "./banners";
+import { refreshArtwork } from "./banners";
 
 export type SeriesResult = { showId: number; title: string; created: number; updated: number; deleted: number; unchanged: number; failed: number; errors: string[] };
 export type SyncResult = { id: string; status: "success" | "partial" | "failed"; calendarState?: "unconfigured"; startedAt: string; finishedAt: string; series: SeriesResult[] };
@@ -88,7 +88,7 @@ export class SyncService {
           }
         });
         result.title = snapshot.show.name;
-        if (this.source.banner) await refreshBanner(this.db, { banner: id => this.source.banner!(id) }, show, started);
+        if (this.source.artwork) await refreshArtwork(this.db, { artwork: id => this.source.artwork!(id) }, show, started);
         if (choice) {
         if (choice.calendarId !== this.settings.calendarId) throw new AppError("CONFIRM_CALENDAR", 409, "Controleer en bevestig eerst de When2Watch-agenda bij Instellingen.");
         await this.google.calendar(choice.calendarId);

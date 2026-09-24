@@ -19,7 +19,7 @@ export async function overview(userId: string, db: PrismaClient = database(), no
   const account = installation?.activeAccount;
   return {calendar,timeZone:zone,needsReauth:!account?.refresh_token || account.needsReauth,
     lastRun: lastRun ? {status:lastRun.status,startedAt:lastRun.startedAt.toISOString(),finishedAt:lastRun.finishedAt?.toISOString()??null} : null,
-    shows:shows.map(s=>({id:s.tvmazeId,title:s.title,sourceUrl:s.sourceUrl,poster:s.poster,bannerUrl:s.bannerUrl,year:s.year,platform:s.platform,country:s.country,status:s.status,
+    shows:shows.map(s=>({id:s.tvmazeId,title:s.title,sourceUrl:s.sourceUrl,poster:s.poster,bannerUrl:s.bannerUrl,backgroundUrl:s.backgroundUrl,year:s.year,platform:s.platform,country:s.country,status:s.status,
       summaryText:s.summaryText,genres:JSON.parse(s.genresJson) as string[],runtimeMinutes:s.runtimeMinutes,
       lastAttempt:s.lastAttemptAt?.toISOString()??null,lastSuccess:s.lastSuccessAt?.toISOString()??null,error:s.lastError,
       upcoming:s.episodes.filter(e=>e.airdate && e.airdate>=today).map(e=>({id:e.sourceId,title:e.title,season:e.season,number:e.number,date:e.airdate!,

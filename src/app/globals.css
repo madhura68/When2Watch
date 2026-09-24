@@ -51,6 +51,7 @@ select { min-height: 46px; padding: 9px 34px 9px 12px; font: inherit; border: 1p
 .agenda-episode { background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .series-banner { width: 100%; aspect-ratio: 5 / 1; background: #143d3c; overflow: hidden; }
 .series-banner img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.series-banner .series-artwork-poster { object-fit: contain; }
 .agenda-episode-body { padding: 22px 25px; }
 .agenda-episode-heading { display: flex; justify-content: space-between; align-items: start; gap: 18px; }
 .agenda-episode-heading > div { min-width: 0; }

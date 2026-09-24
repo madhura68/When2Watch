@@ -2,42 +2,88 @@ import { describe, expect, it } from "vitest";
 import source from "./fixtures/tvmaze/slow-horses.json";
 import matches from "./fixtures/tvmaze/slow-horses-search.json";
 import images from "./fixtures/tvmaze/slow-horses-images.json";
-import { TVmaze, parseSnapshot, parseSearch, parseBanner } from "@/server/tvmaze";
+import lanterns from "./fixtures/tvmaze/lanterns-images.json";
+import { TVmaze, parseSnapshot, parseSearch, parseArtwork } from "@/server/tvmaze";
 
 describe("TVmaze banner contract", () => {
   const banners = images.filter(image => image.type === "banner");
   it("selects the lowest image ID from the unmodified real response, regardless of list order", () => {
-    expect(parseBanner(images)).toBe("https://static.tvmaze.com/uploads/images/medium_leaderboard/595/1489665.jpg");
-    expect(parseBanner([...images].reverse())).toBe(parseBanner(images));
+    expect(parseArtwork(images).bannerUrl).toBe("https://static.tvmaze.com/uploads/images/medium_leaderboard/595/1489665.jpg");
+    expect(parseArtwork([...images].reverse())).toEqual(parseArtwork(images));
   });
   it("prefers an explicit main banner and falls back to its original resolution", () => {
     const input = structuredClone(banners);
     input[1].main = true;
-    expect(parseBanner(input)).toBe(input[1].resolutions.medium!.url);
+    expect(parseArtwork(input).bannerUrl).toBe(input[1].resolutions.medium!.url);
     delete (input[1].resolutions as any).medium;
-    expect(parseBanner(input)).toBe(input[1].resolutions.original.url);
+    expect(parseArtwork(input).bannerUrl).toBe(input[1].resolutions.original.url);
     input[2].main = true;
-    expect(parseBanner(input.reverse())).toBe(banners[1].resolutions.original.url);
+    expect(parseArtwork(input.reverse()).bannerUrl).toBe(banners[1].resolutions.original.url);
   });
   it("accepts an empty list or a list without banners as no banner", () => {
-    expect(parseBanner([])).toBeNull();
-    expect(parseBanner(images.filter(image => image.type !== "banner"))).toBeNull();
+    expect(parseArtwork([])).toEqual({bannerUrl:null,backgroundUrl:null});
+    expect(parseArtwork(images.filter(image => image.type !== "banner")).bannerUrl).toBeNull();
   });
   it.each([null, {}, [null], [{type:"banner"}], [{...banners[0],resolutions:{}}],
     ...["http://static.tvmaze.com/image.jpg", "https://other.test/image.jpg", "https://static.tvmaze.com.other.test/x", "https://user:password@static.tvmaze.com/x"].map(url => [{...banners[0],resolutions:{original:{url}}}]),
   ].map(input=>({input})))("rejects malformed lists or unsafe banner URLs: $input", ({input}) => {
-    expect(() => parseBanner(input)).toThrowError(expect.objectContaining({code:"INVALID_SOURCE"}));
+    expect(() => parseArtwork(input)).toThrowError(expect.objectContaining({code:"INVALID_SOURCE"}));
   });
   it("uses the same bounded request/retry path for image lists", async () => {
     const calls:string[] = [], pauses:number[] = [];
     const api = new TVmaze(async url => { calls.push(String(url)); return calls.length < 3 ? new Response(null,{status:429,headers:{"retry-after":"1"}}) : Response.json(images); }, async ms => {pauses.push(ms);});
-    expect(await api.banner(45039)).toBe(parseBanner(images));
+    expect(await api.artwork(45039)).toEqual(parseArtwork(images));
     expect(calls).toEqual(Array(3).fill("https://api.tvmaze.com/shows/45039/images"));
     expect(pauses.filter(ms=>ms===1000)).toHaveLength(2);
     let attempts=0;
     const exhausted=new TVmaze(async()=>{attempts++;return new Response(null,{status:429});},async()=>{});
-    await expect(exhausted.banner(45039)).rejects.toMatchObject({code:"SOURCE_UNAVAILABLE"});
+    await expect(exhausted.artwork(45039)).rejects.toMatchObject({code:"SOURCE_UNAVAILABLE"});
     expect(attempts).toBe(3);
+  });
+});
+
+describe("TVmaze background artwork", () => {
+  const backgroundUrl="https://static.tvmaze.com/uploads/images/original_untouched/631/1577977.jpg";
+  const backgrounds=lanterns.filter(image=>image.type==="background");
+  it("uses the real landscape original for Lanterns without inventing medium URLs",()=>{
+    expect(parseArtwork(lanterns)).toEqual({bannerUrl:null,backgroundUrl});
+    expect(parseArtwork([...lanterns].reverse())).toEqual({bannerUrl:null,backgroundUrl});
+    expect(parseArtwork(lanterns.filter(image=>image.type!=="background"))).toEqual({bannerUrl:null,backgroundUrl:null});
+  });
+  it("prefers an explicit main background over a smaller original",()=>{
+    const input=structuredClone(backgrounds);input[1].main=true;
+    expect(parseArtwork(input).backgroundUrl).toBe("https://static.tvmaze.com/uploads/images/original_untouched/616/1541208.jpg");
+  });
+  it("chooses the largest available small landscape and breaks equal sizes by image ID",()=>{
+    const input=structuredClone(backgrounds.slice(0,2));
+    input[0].resolutions.original.width=800;input[0].resolutions.original.height=450;
+    input[1].resolutions.original.width=700;input[1].resolutions.original.height=400;
+    expect(parseArtwork(input).backgroundUrl).toBe("https://static.tvmaze.com/uploads/images/original_untouched/256/642254.jpg");
+    input[1].resolutions.original.width=800;
+    expect(parseArtwork(input.reverse()).backgroundUrl).toBe("https://static.tvmaze.com/uploads/images/original_untouched/256/642254.jpg");
+  });
+  it("ignores portrait and square backgrounds instead of cropping them as landscapes",()=>{
+    const input=structuredClone(backgrounds.slice(0,2));
+    input[0].resolutions.original.height=input[0].resolutions.original.width;
+    input[1].resolutions.original.height=input[1].resolutions.original.width+1;
+    expect(parseArtwork(input)).toEqual({bannerUrl:null,backgroundUrl:null});
+  });
+  it.each([
+    {url:"http://static.tvmaze.com/x.jpg",width:1000,height:600},
+    {url:"https://other.test/x.jpg",width:1000,height:600},
+    {url:"https://static.tvmaze.com:444/x.jpg",width:1000,height:600},
+    {url:"https://user:pass@static.tvmaze.com/x.jpg",width:1000,height:600},
+    {url:backgroundUrl,width:0,height:600},
+    {url:backgroundUrl,width:1000,height:null},
+    {url:backgroundUrl,width:1000.5,height:600},
+  ])("rejects invalid background metadata: %j",original=>{
+    expect(()=>parseArtwork([{...backgrounds[0],resolutions:{original}}])).toThrowError(expect.objectContaining({code:"INVALID_SOURCE"}));
+  });
+  it("gets both artwork choices from one image-list request",async()=>{
+    const requests:string[]=[];
+    const api=new TVmaze(async url=>{requests.push(String(url));return Response.json(lanterns);},async()=>{});
+    expect(await api.artwork(44776)).toEqual({bannerUrl:null,backgroundUrl});
+    expect(requests).toEqual(["https://api.tvmaze.com/shows/44776/images"]);
   });
 });
 
