@@ -45,4 +45,3 @@ De reviewer kon echte iPhone-installatie/login/logout/update, echte Calendar-wij
 PWA-only release `7068455` is concreet voorbereid; uitroltoestemming is bij JP gevraagd en nog niet ontvangen. De rest van de code bevat een SQLite-migratie en hoort bij een afzonderlijk gecontroleerde vervolgrelease. Voor de migratie: consistente backup, normale migrate deploy, nooit reset. Een approllback behoudt de toegevoegde kolom.
 
 T-11 blijft in de wacht. Geen push, merge of deployment uitgevoerd. Alle bouwtakken en bewijsmateriaal blijven bewaard. De sprint blijft open totdat de vereiste praktijkproeven zijn bevestigd.
-
