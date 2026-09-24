@@ -30,7 +30,9 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
       - name: Unit and database tests
-        run: npm test
+        # Each database test starts Prisma migrations. Bound file parallelism
+        # on shared runners; concurrency inside the tests stays enabled.
+        run: npm test -- --maxWorkers=2
       - name: Production build
         run: npm run build
       - name: Typecheck including generated Next types
