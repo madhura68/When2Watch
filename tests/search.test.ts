@@ -15,10 +15,11 @@ it("ignores late success and failure even when a provider ignores cancellation",
   expect(seen).toEqual([["correct"]]);
 });
 
-it("allows one-character titles and clears empty searches without a request", async () => {
+it("only requests searches from four trimmed characters", async () => {
   const calls:string[]=[];const found:string[][]=[];
   const search=new LatestSearch<string[]>(async(q:string)=>{calls.push(q);return [q];});
-  await search.find("V",(v:string[])=>found.push(v),()=>{});
-  await search.find("   ",(v:string[])=>found.push(v),()=>{});
-  expect(calls).toEqual(["V"]);expect(found).toEqual([["V"]]);
+  for (const query of ["", "   ", "S", "Sl", " Slo ", " Slow ", "Slow Horses"]) {
+    await search.find(query,(v:string[])=>found.push(v),()=>{});
+  }
+  expect(calls).toEqual(["Slow", "Slow Horses"]);expect(found).toEqual([["Slow"], ["Slow Horses"]]);
 });

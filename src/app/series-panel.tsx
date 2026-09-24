@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Show } from "@/server/tvmaze";
 import type { Overview } from "@/server/overview";
 import type { SyncResult } from "@/server/sync";
-import { LatestSearch } from "@/lib/latest-search";
+import { LatestSearch, MIN_SEARCH_LENGTH } from "@/lib/latest-search";
 import { AuthButton } from "./auth-buttons";
 
 const timestamp=(value:string|null)=>value ? new Date(value).toLocaleString("nl-NL",{timeZone:"Europe/Amsterdam",dateStyle:"short",timeStyle:"short"}) : "Nog niet";
@@ -22,7 +22,7 @@ export function SeriesPanel({data}:{data:Overview}) {
   }),[]);
   useEffect(()=>{
     const timer=setTimeout(()=>{
-      if(!query.trim())return;
+      if(query.trim().length < MIN_SEARCH_LENGTH)return;
       void search.find(query,result=>{setMatches(result);setSearching(false);setSearched(true);},error=>{
         setSearchError(error instanceof Error?error.message:"Zoeken is niet gelukt. Probeer opnieuw.");setSearching(false);
       });
@@ -30,7 +30,7 @@ export function SeriesPanel({data}:{data:Overview}) {
     return()=>{clearTimeout(timer);search.cancel();};
   },[query,search]);
   function changeQuery(value:string) {
-    search.cancel();setQuery(value);setMatches([]);setMore(false);setSearched(false);setSearchError("");setSearching(!!value.trim());
+    search.cancel();setQuery(value);setMatches([]);setMore(false);setSearched(false);setSearchError("");setSearching(value.trim().length >= MIN_SEARCH_LENGTH);
   }
   async function action(showId?:number) {
     setBusy(true);setFailed(false);setMessage(showId?"Serie toevoegen en agenda bijwerken…":"Agenda synchroniseren…");
@@ -51,7 +51,7 @@ export function SeriesPanel({data}:{data:Overview}) {
     <section className="card search-card">
       <h2>Een serie volgen</h2><label htmlFor="series-query">Naam van de tv-serie</label>
       <input id="series-query" type="search" placeholder="Bijvoorbeeld Slow Horses" autoComplete="off" maxLength={200} value={query} onChange={e=>changeQuery(e.target.value)} aria-describedby="search-help"/>
-      <p id="search-help" className="muted small">Kies de juiste serie uit de beste matches. Ook met een typefout kun je zoeken.</p>
+      <p id="search-help" className="muted small">Typ minimaal {MIN_SEARCH_LENGTH} tekens. Kies de juiste serie uit de beste matches. Ook met een typefout kun je zoeken.</p>
       <div aria-live="polite">
         {searching&&<p>Zoeken…</p>}
         {searchError&&<p className="notice error">{searchError} <button onClick={()=>{const q=query;changeQuery("");setTimeout(()=>changeQuery(q),0);}}>Opnieuw zoeken</button></p>}

@@ -1,4 +1,5 @@
 import { AppError } from "./errors";
+import { MIN_SEARCH_LENGTH } from "@/lib/latest-search";
 
 export type Show = { id: number; name: string; url: string; year: string | null; poster: string | null; platform: string | null; country: string | null; status: string };
 export type SourceEpisode = { id: number; name: string | null; season: number | null; number: number | null; airdate: string | null; url: string };
@@ -75,7 +76,7 @@ export class TVmaze implements EpisodeSource {
     throw failed();
   }
   async search(query: string): Promise<Show[]> {
-    const q=query.trim(); if (!q) return [];
+    const q=query.trim(); if (q.length < MIN_SEARCH_LENGTH) return [];
     if(q.length>200) throw new AppError("INVALID_QUERY",400,"Gebruik een kortere serienaam.");
     return parseSearch(await this.request(`/search/shows?q=${encodeURIComponent(q)}`));
   }

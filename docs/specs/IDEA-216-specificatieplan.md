@@ -1,13 +1,15 @@
 ---
 title: "IDEA-216 — When2Watch: specificatieplan v1"
 status: active
-version: "0.2"
-last_updated: "2026-09-23"
+version: "0.3"
+last_updated: "2026-09-24"
 ---
 
 # IDEA-216 — When2Watch: specificatieplan v1
 
 Deze specificatie beschrijft het productgedrag, de technische grenzen, acceptatie en de volgorde van de eerste increments. JP heeft het specificatieplan goedgekeurd op 23 september 2026, met als aanvulling deployment op max2 en de bestaande DNS-entry `when2watch.jp-visser.nl`. Versie 0.2 verwerkt die aanvulling; het is nog geen gematerialiseerd uitvoeringsplan. De max2-afspraak vervangt de NAS-hosting uit de oorspronkelijke grill.
+
+Versie 0.3 verwerkt JP's wijziging van 24 september: zoeken begint bij vier tekens om TVmaze minder te belasten. Dit vervangt de eerdere afspraak om ook één- en tweeletterige zoektermen door te sturen.
 
 **Product:** [When2Watch](https://thuis.jp-visser.nl/products/cmud1npa000rykh7rlhlhojd3), product-ID `cmud1npa000rykh7rlhlhojd3`. **Idee:** IDEA-216, ID `cmud224u800s0kh7r0s9u7q4y`. **Bron:** grill revisie 1, revisie-ID `cmud2dj2g000bpoqawuavlhlk`, en JP's aansluitende besluiten van 23 september 2026. **Productrepository:** [janpeter/When2Watch](https://git.jp-visser.nl/janpeter/When2Watch).
 
@@ -50,7 +52,7 @@ Zolang er geen agenda is gekoppeld, kan JP series zoeken en volgen. Het overzich
 
 ### 3.2 Zoeken en een serie toevoegen
 
-Na een korte pauze tijdens het typen zoekt de app op de ingevoerde naam. Lege invoer verstuurt geen zoekopdracht. Ook korte titels moeten gezocht kunnen worden; een minimum van drie tekens mag bijvoorbeeld `V` of `ER` niet onvindbaar maken.
+Na een korte pauze tijdens het typen zoekt de app zodra de ingevoerde naam minimaal vier tekens bevat, na verwijderen van spaties aan het begin en einde. Het zoekveld vermeldt dit minimum. Onder vier tekens worden geen zoekverzoeken verstuurd; de server bewaakt dezelfde grens voordat TVmaze wordt aangeroepen. Inkorten onder de grens wist oude resultaten en annuleert lopend clientzoekwerk. Titels korter dan vier tekens, zoals `V` en `ER`, zijn met alleen die titel niet te zoeken; dit volgt uit JP's expliciete wijziging om minder bronverzoeken te doen.
 
 De eerste vijf resultaten verschijnen in de relevantievolgorde van TVmaze. “Meer resultaten” toont de overige ontvangen matches. Er komt geen eigen zoekindex en de bron-score wordt niet als zekerheidspercentage gepresenteerd.
 

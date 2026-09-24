@@ -33,16 +33,16 @@ describe("TVmaze real response contract", () => {
     expect(parseSearch([])).toEqual([]);
     expect(() => parseSearch({})).toThrowError(expect.objectContaining({code:"INVALID_SOURCE"}));
   });
-  it("does not fetch empty searches, permits one-character titles and bounds rate-limit retries", async () => {
+  it("only fetches searches from four trimmed characters and bounds rate-limit retries", async () => {
     const requests: string[] = []; let limited = 2;
     const api = new TVmaze(async input => { requests.push(String(input)); return limited-- > 0 ? new Response(null,{status:429}) : Response.json(matches); }, async () => {});
-    expect(await api.search("  ")).toEqual([]);
+    for (const query of ["", "  ", "S", "Sl", " Slo "]) expect(await api.search(query)).toEqual([]);
     expect(requests).toHaveLength(0);
-    expect((await api.search("V"))[0].id).toBe(45039);
-    expect(requests).toEqual(Array(3).fill("https://api.tvmaze.com/search/shows?q=V"));
+    expect((await api.search(" Slow "))[0].id).toBe(45039);
+    expect(requests).toEqual(Array(3).fill("https://api.tvmaze.com/search/shows?q=Slow"));
     let attempts=0;
     const failing = new TVmaze(async () => { attempts++; return new Response(null,{status:429}); },async()=>{});
-    await expect(failing.search("ER")).rejects.toMatchObject({code:"SOURCE_UNAVAILABLE"});
+    await expect(failing.search("Slow Horses")).rejects.toMatchObject({code:"SOURCE_UNAVAILABLE"});
     expect(attempts).toBe(3);
   });
 });

@@ -1,3 +1,5 @@
+export const MIN_SEARCH_LENGTH = 4;
+
 export class LatestSearch<T> {
   private version = 0;
   private controller?: AbortController;
@@ -5,7 +7,7 @@ export class LatestSearch<T> {
   cancel() { this.version++; this.controller?.abort(); }
   async find(query: string, success: (value: T) => void, failure: (error: unknown) => void): Promise<void> {
     this.cancel();
-    if (!query.trim()) return;
+    if (query.trim().length < MIN_SEARCH_LENGTH) return;
     const version = this.version, controller = this.controller = new AbortController();
     try { const value = await this.request(query.trim(), controller.signal); if (version === this.version) success(value); }
     catch (error) { if (version === this.version) failure(error); }

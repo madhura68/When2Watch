@@ -25,7 +25,7 @@ Voeg de regel samen met de actuele crontab; bewaar een herstelkopie en controlee
 
 ## Gebruik en storingen
 
-- Zoek een titel op de startpagina en kies expliciet een match. De eerste vijf resultaten zijn direct zichtbaar. `Volg je al` voorkomt dubbel toevoegen.
+- Typ minimaal vier tekens op de startpagina en kies expliciet een match. Spaties aan het begin en einde tellen niet mee. De eerste vijf resultaten zijn direct zichtbaar. `Volg je al` voorkomt dubbel toevoegen.
 - `Nu synchroniseren` gebruikt dezelfde syncfunctie als cron. Bij een fout blijft de serie staan; poging, laatste succes en fout staan bij de serie.
 - Bij verlopen/ingetrokken toestemming: via Instellingen Google opnieuw koppelen. Een tijdelijke bronfout wist geen agenda-items.
 - Alleen reguliere afleveringen met datum komen in de agenda. Nieuwe items beginnen zeven dagen terug; bestaande items kunnen nog over die grens gecorrigeerd worden. Er is geen Nederlandse beschikbaarheidsgarantie.
