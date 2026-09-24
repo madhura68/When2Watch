@@ -79,10 +79,66 @@ een toekomstige kolom wordt niet stilzwijgend in die oude migraties ingebouwd.
 
 ## Review en max2
 
-De onafhankelijke review en de afzonderlijke max2-uitrol worden na de lokale
-controle uitgevoerd. Dit document claimt op dit punt nog geen productie-uitrol.
-De uitrol behoudt de bestaande afbeeldingentermijnen: Lanterns kan meteen zijn
-opgeslagen poster tonen; de achtergrond volgt bij de reguliere verversing.
+Een onafhankelijke reviewer beoordeelde de gehele delta
+`e86439762d18698464402eaf94556df2ae9e8014` →
+`c04812c4b86fa7087d505d158012332f56a1c5dc`: geen concrete bevindingen, technisch
+GO. De reviewer herhaalde zelfstandig alle 141 tests. B2/C1 en de nog te verrichten
+uitrol vielen buiten zijn oordeel; de uitvoerder heeft de uitrol hieronder
+daadwerkelijk gecontroleerd.
 
-De Scrum4Me-statusaanroep geeft de bekende `PPE_INPUT_INCOMPLETE`-fout. Er is geen
-statusbypass toegepast; de uitvoering en concrete bewijzen staan in de taaklogs.
+Op max2 draait **`when2watch:c04812c`**, container healthy en publiek
+`https://when2watch.jp-visser.nl/api/health` HTTP 200, `status: ok`.
+`current` en de opgeslagen `RELEASE_TAG` wijzen beide naar deze release.
+Bij de voorcontrole bleek de oude opgeslagen tag nog `b31af05`, terwijl de
+container en `current` al `e864397` waren. Die vastgestelde afwijking is met deze
+uitrol hersteld; de eerste voorcontrole stopte vóór enige wijziging.
+
+Voor activatie is uitsluitend de app kort gestopt en met SQLite's backup-API een
+consistente kopie gemaakt:
+`/srv/apps/when2watch/db-backups/pre-c04812c-20260924T145143907245Z.db` (0600).
+`integrity_check` was vóór en na de migratie `ok`. Alle oorspronkelijke kolommen
+en rijen waren direct na activatie identiek, gecontroleerd met hashes per tabel.
+Dat omvatte 9 series, 170 afleveringen, 11 eventkoppelingen, 14 synchronisatieruns,
+de eigenaar, sessie en Google-configuratie. Alleen de nullable achtergrondkolom
+en de nieuwe migratieregistratie zijn toegevoegd.
+
+In de ingelogde productiepagina toont Lanterns nu zijn **volledige poster** en
+Slow Horses zijn bestaande banner. Beide echte CDN-beelden zijn geladen; de
+desktopframes zijn 790×158 px. Spoilers blijven gesloten en de bronvermelding
+blijft aanwezig. De 375px-proef is eerder op het echte lokale component gedaan;
+de viewportoverride veranderde deze productie-Chrome-tab niet, dus voor productie
+wordt alleen de daadwerkelijk geziene desktopweergave geclaimd.
+
+De oude cachetermijnen van Lanterns en Slow Horses zijn behouden. Lanterns heeft
+in productie nog geen achtergrond; die volgt bij de reguliere verversing. Er is
+geen synchronisatie of vervroegde bronverversing voor de uitrol gestart.
+Tijdens de nacontrole kwamen door afzonderlijke `add`-acties nieuwe series en
+afleveringen binnen. Een vergelijking op de oorspronkelijke rij-ID's bevestigde
+dat de oorspronkelijke 9 series, 170 afleveringen, 14 runs en alle 11
+eventkoppelingen nog identiek waren. Nieuwe gebruikershandelingen zijn behouden.
+
+## Integratie in de lopende sprint
+
+Dezelfde codewijziging is zonder conflict overgenomen op
+`codex/when2watch-agenda-configuratie` als **`4565be3`**, bovenop `824212b`.
+Op die gecombineerde code slagen **158 tests**, typecheck, productiebuild en
+**123 HTTP-controles**. B2 is hierdoor niet uitgerold of als praktijkproef
+goedgekeurd; C1 is niet gestart.
+
+De lokale proefserver op poort 3401 is voor de integratie kort gestopt. Ook de
+proefdatabase is consistent geback-upt en uitsluitend met de nullable kolom
+uitgebreid; alle bestaande kolommen en rijen bleven identiek. Daarna is de
+server met dezelfde privéconfiguratie herstart. Het bestaande Chrome-tabblad
+toont opnieuw de instellingen van de proefeigenaar en dezelfde proefagenda.
+Er zijn daarbij geen Google-acties uitgevoerd.
+
+De branches en werkmappen blijven bewaard. Er is in deze uitvoering niet gepusht,
+geen PR gemaakt en niet gemerged.
+
+Eerdere Scrum4Me-statusaanroepen gaven `PPE_INPUT_INCOMPLETE`. De afrondende
+aanroep slaagde wel: **T-12 staat op done**, met doorgeschoven storystatus.
+Er is geen statusbypass toegepast; de uitvoering en bewijzen staan in de taaklogs.
+De algemene planverifier meldde `divergent` wegens een ontbrekende job-baseline
+(`job_id: null`) en het meenemen van eerder werk vanaf `origin/main`. Daarom
+wordt geen geautomatiseerd ALIGNED-oordeel geclaimd. De juiste wijzigingsrange
+`e864397..c04812c` is tegen het gepinde plan en onafhankelijk gereviewd.
