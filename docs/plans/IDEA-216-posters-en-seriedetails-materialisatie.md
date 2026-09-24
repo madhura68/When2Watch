@@ -35,4 +35,3 @@ Beide taken staan op `todo`. Taak A levert de posterweergave en de eerste max2-p
 De hardstop komt uit JP's AGENTS-afspraak, plan §8 en het materialisatiedeel van [review-loop](/Users/janpetervisser/.agents/skills/review-loop/SKILL.md): “then **hardstop** — composing is not executing”.
 
 De volgende opdracht kan de uitvoering starten met T-4, gevolgd door T-5. Bestaande When2Watch-productietoestemming blijft gelden; er is geen autorisatie toegevoegd voor andere systemen.
-
