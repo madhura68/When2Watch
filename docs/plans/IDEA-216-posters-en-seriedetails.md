@@ -1,11 +1,13 @@
 ---
 title: "IDEA-216 — Posters en seriedetails"
-status: draft
-version: "0.1"
+status: active
+version: "0.2"
 last_updated: "2026-09-24"
 ---
 
 # IDEA-216 — Posters en seriedetails
+
+**Goedkeuring:** JP heeft versie 0.1 op 24 september 2026 goedgekeurd met “akkoord, voer uit”. Versie 0.2 legt alleen deze goedkeuring vast; inhoud, scope en de hardstop na materialisatie blijven gelijk. De goedgekeurde inhoud is ProductDoc-revisie 1 `cmuf9xpkc003mgo17veu84sgn`, hash `33e36220fc94c37ea1257a16d9806499503cab36658617cf71b5dfae7a365868`.
 
 > Voor uitvoerende agents: werk taak voor taak met `superpowers:executing-plans`, binnen de bestaande Scrum4Me-afspraken. Dit document is het gevraagde plan; materialisatie en uitvoering volgen hun eigen faseovergang.
 
