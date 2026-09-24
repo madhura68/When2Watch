@@ -2,30 +2,29 @@ import { redirect } from "next/navigation";
 import { signedInUser } from "@/server/auth";
 import { config } from "@/server/config";
 import { database } from "@/server/db";
+import { publicInstallation } from "@/server/installation";
 import { localDate, nextDate } from "@/lib/dates";
-import { AuthButton } from "../auth-buttons";
 import { TrialPanel } from "./trial-panel";
 import { Navigation } from "../navigation";
 import { PreferencesPanel } from "./preferences-panel";
-import { getPreferences } from "@/server/preferences";
+import { GooglePanel } from "./google-panel";
+import { CalendarPanel } from "./calendar-panel";
 
 export const dynamic = "force-dynamic";
-
-export default async function Settings() {
-  const user = await signedInUser();
-  if (!user) redirect("/");
-  const settings = config();
-  const [calendar, probes, account] = await Promise.all([
-    database().calendarSettings.findUnique({ where: { userId: user.id } }),
-    database().probe.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10 }),
-    database().account.findFirst({ where: { userId: user.id, provider: "google" }, select: { needsReauth: true, refresh_token: true } }),
+export default async function Settings({ searchParams }: { searchParams: Promise<{ error?: string; connection?: string }> }) {
+  const user = await signedInUser(); if (!user) redirect("/");
+  const db = database();
+  const [settings, calendar, probes, params] = await Promise.all([
+    publicInstallation(db, user.id), db.calendarSettings.findUnique({ where: { userId: user.id } }),
+    db.probe.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10 }), searchParams,
   ]);
   return <>
     <Navigation active="/settings" />
     <section className="hero compact"><p className="eyebrow">Instellingen</p><h1>Je agenda en voorkeuren.</h1><p className="intro">Pas je overzicht aan of controleer de Google-koppeling en je meldingen.</p></section>
-    <PreferencesPanel preferences={await getPreferences(user.id)} />
-    <section className="account-row"><div><strong>Google gekoppeld</strong><br /><span className="muted">{user.email}</span></div><span className="tag success">Ingelogd</span></section>
-    {(account?.needsReauth || !account?.refresh_token) && <section className="notice error"><p>De blijvende toegang ontbreekt of is verlopen. Koppel Google opnieuw en geef beide agendatoestemmingen.</p><AuthButton /></section>}
-    <TrialPanel calendarId={settings.calendarId} calendar={calendar ? { name: calendar.summary, timeZone: calendar.timeZone, confirmedAt: calendar.confirmedAt.toISOString(), reminders: calendar.defaultRemindersJson } : null} tomorrow={nextDate(localDate(new Date()))} probes={probes.map((probe) => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />
+    {(params.error || ["expired", "failed"].includes(params.connection ?? "")) && <p role="alert" className="notice error">De Google-koppeling is geannuleerd, geweigerd of verlopen. Je bestaande instellingen zijn behouden. Start de koppeling opnieuw als je wilt doorgaan.</p>}
+    <PreferencesPanel preferences={settings.preferences} />
+    <GooglePanel settings={settings} callbackUrl={`${config().origin}/api/auth/callback/google`} />
+    <CalendarPanel settings={settings} />
+    {calendar && <TrialPanel key={settings.preferences.timeZone} calendarId={calendar.calendarId} calendar={{ name: calendar.summary, timeZone: calendar.timeZone, confirmedAt: calendar.confirmedAt.toISOString(), reminders: calendar.defaultRemindersJson }} tomorrow={nextDate(localDate(new Date(), settings.preferences.timeZone))} probes={probes.map(probe => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />}
   </>;
 }

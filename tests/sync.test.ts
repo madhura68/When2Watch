@@ -7,6 +7,7 @@ import { AppError } from "@/server/errors";
 import { testDatabase } from "./database";
 import { simulatedCalendar } from "./simulated-calendar";
 import { overview } from "@/server/overview";
+import { serializeCalendarMutation } from "@/server/calendar-mutations";
 
 it("adds detail columns to a populated old database without changing existing records",async()=>{
  const migration="20260924100000_series_details", old=testDatabase(migration);
@@ -52,6 +53,24 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  afterEach(async()=>{await storage?.close();});
  const active=()=>[...google.events.values()].filter(e=>e.status!=="cancelled");
+ it("keeps following and local episodes usable before a calendar is selected", async () => {
+  await storage.db.calendarSettings.deleteMany();
+  const result = await service.add("owner", 45039);
+  expect(result).toMatchObject({ status: "success", calendarState: "unconfigured" });
+  expect(await storage.db.episode.count()).toBeGreaterThan(0);
+  expect(await storage.db.trackedShow.count()).toBe(1);
+  expect(google.writes).toEqual([]);
+ });
+ it("resolves current configuration after entering the owner lock", async () => {
+  let release!: () => void, entered!: () => void, reads = 0;
+  const ready = new Promise<void>(r => entered = r), gate = new Promise<void>(r => release = r);
+  const held = serializeCalendarMutation("owner", async () => { entered(); await gate; }); await ready;
+  let current = { ...config, calendarId: "outdated" };
+  const waiting = new SyncService(storage.db, new GoogleCalendar(async () => "synthetic-access", google.fetcher), source,
+   async () => { reads++; return current; }, () => now).add("owner", 45039);
+  expect(reads).toBe(0); current = config; release(); await held;
+  expect((await waiting).status).toBe("success"); expect(reads).toBe(1);
+ });
  it("stores metadata corrections without Calendar writes or changed payloads, IDs and hashes",async()=>{
   await service.add("owner",45039);
   const linksBefore=await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}});
@@ -159,7 +178,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  it("keeps series and fetched episodes when no calendar has been confirmed",async()=>{
   await storage.db.calendarSettings.deleteMany();const result=await service.add("owner",45039);
-  expect(result.status).not.toBe("success");expect(google.writes).toEqual([]);expect(await storage.db.trackedShow.count()).toBe(1);
+  expect(result).toMatchObject({status:"success",calendarState:"unconfigured"});expect(google.writes).toEqual([]);expect(await storage.db.trackedShow.count()).toBe(1);
   expect(await storage.db.episode.count()).toBe(36);
  });
  it("repairs a changed reminder after a confirmed sync instead of silently adopting it",async()=>{

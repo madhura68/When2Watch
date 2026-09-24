@@ -62,6 +62,36 @@ export class GoogleCalendar {
     };
   }
 
+  async calendars(): Promise<CalendarInfo[]> {
+    const result: CalendarInfo[] = [], seen = new Set<string>();
+    let pageToken: string | undefined;
+    do {
+      const query = new URLSearchParams({ maxResults: "250", minAccessRole: "writer" });
+      if (pageToken) query.set("pageToken", pageToken);
+      const page = await this.request<{ items?: CalendarInfo[]; nextPageToken?: string }>(`users/me/calendarList?${query}`);
+      if (page.items !== undefined && !Array.isArray(page.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      for (const item of page.items ?? []) {
+        if (!item || !["owner", "writer"].includes(item.accessRole)) continue;
+        if (typeof item.id !== "string" || !item.id || typeof item.summary !== "string" || typeof item.timeZone !== "string") {
+          throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google gaf onvolledige agendagegevens.");
+        }
+        result.push({ id: item.id, summary: item.summary, timeZone: item.timeZone, accessRole: item.accessRole,
+          defaultReminders: (item.defaultReminders ?? []).map(({ method, minutes }) => ({ method, minutes })) });
+      }
+      // B0 returned an empty first page with a continuation token.
+      pageToken = page.nextPageToken;
+      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      if (pageToken) seen.add(pageToken);
+    } while (pageToken);
+    return result;
+  }
+
+  async createCalendar(name: string, timeZone: string): Promise<{ id: string }> {
+    const calendar = await this.request<{ id?: string }>("calendars", { method: "POST", body: JSON.stringify({ summary: name, timeZone }) });
+    if (typeof calendar.id !== "string" || !calendar.id) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De nieuwe agenda is nog niet bevestigd. Vernieuw de agendalijst.");
+    return { id: calendar.id };
+  }
+
   event(calendarId: string, eventId: string): Promise<CalendarEvent> {
     return this.request(`calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
   }

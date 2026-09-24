@@ -8,7 +8,8 @@ import type { EpisodeSource, Snapshot } from "./tvmaze";
 import { refreshBanner } from "./banners";
 
 export type SeriesResult = { showId: number; title: string; created: number; updated: number; deleted: number; unchanged: number; failed: number; errors: string[] };
-export type SyncResult = { id: string; status: "success" | "partial" | "failed"; startedAt: string; finishedAt: string; series: SeriesResult[] };
+export type SyncResult = { id: string; status: "success" | "partial" | "failed"; calendarState?: "unconfigured"; startedAt: string; finishedAt: string; series: SeriesResult[] };
+export type SyncConfiguration = { calendarId: string; timeZone: string };
 type EpisodeWithLinks = Episode & { links: CalendarEventLink[] };
 const markers = (userId: string, showId: number, episodeId: number) => ({ app: "when2watch", kind: "episode", userId, showId: String(showId), episodeId: String(episodeId) });
 const failure = (error: unknown) => error instanceof AppError ? error.message : "Synchroniseren is onderbroken. Probeer opnieuw; bewaarde koppelingen blijven behouden.";
@@ -30,19 +31,29 @@ export function episodeEvent(userId: string, show: Pick<TrackedShow, "title" | "
 
 export class SyncService {
   constructor(private readonly db: PrismaClient, private readonly google: GoogleCalendar, private readonly source: EpisodeSource,
-    private readonly config: { calendarId: string; timeZone: string }, private readonly now = () => new Date()) {}
+    private readonly config: SyncConfiguration | (() => Promise<SyncConfiguration>), private readonly now = () => new Date()) {}
+
+  private async configured() {
+    return typeof this.config === "function" ? new SyncService(this.db, this.google, this.source, await this.config(), this.now) : this;
+  }
+  private get settings(): SyncConfiguration {
+    if (typeof this.config === "function") throw new Error("Configuration must be resolved inside the owner lock");
+    return this.config;
+  }
 
   add(userId: string, tvmazeId: number): Promise<SyncResult> {
-    return serializeCalendarMutation(userId, async () => {
+    return serializeCalendarMutation(userId, async () => (await this.configured()).addLocked(userId, tvmazeId));
+  }
+
+  private async addLocked(userId: string, tvmazeId: number) {
       const snapshot = await this.source.snapshot(tvmazeId);
       const show = await this.db.trackedShow.upsert({ where: { userId_tvmazeId: { userId, tvmazeId } },
         create: { userId, tvmazeId, ...this.showData(snapshot) }, update: this.showData(snapshot) });
       return this.run(userId, "add", [show], snapshot);
-    });
   }
 
   sync(userId: string, trigger: "manual" | "cron"): Promise<SyncResult> {
-    return serializeCalendarMutation(userId, async () => this.run(userId, trigger,
+    return serializeCalendarMutation(userId, async () => (await this.configured()).run(userId, trigger,
       await this.db.trackedShow.findMany({ where: { userId }, orderBy: { id: "asc" } })), trigger === "cron");
   }
 
@@ -52,11 +63,12 @@ export class SyncService {
   }
 
   private async run(userId: string, trigger: string, shows: TrackedShow[], initial?: Snapshot): Promise<SyncResult> {
-    const started = this.now(), cutoffDate = new Date(`${localDate(started, this.config.timeZone)}T00:00:00Z`);
+    const started = this.now(), cutoffDate = new Date(`${localDate(started, this.settings.timeZone)}T00:00:00Z`);
     cutoffDate.setUTCDate(cutoffDate.getUTCDate() - 7);
     const cutoff = cutoffDate.toISOString().slice(0, 10);
     const run = await this.db.syncRun.create({ data: { userId, trigger, startedAt: started } });
     const series: SeriesResult[] = [];
+    const choice = await this.db.calendarSettings.findUnique({ where: { userId } });
     for (const show of shows) {
       const result: SeriesResult = { showId: show.tvmazeId, title: show.title, created: 0, updated: 0, deleted: 0, unchanged: 0, failed: 0, errors: [] };
       series.push(result);
@@ -77,15 +89,15 @@ export class SyncService {
         });
         result.title = snapshot.show.name;
         if (this.source.banner) await refreshBanner(this.db, { banner: id => this.source.banner!(id) }, show, started);
-        const choice = await this.db.calendarSettings.findUnique({ where: { userId } });
-        if (!choice || choice.calendarId !== this.config.calendarId) throw new AppError("CONFIRM_CALENDAR", 409, "Controleer en bevestig eerst de When2Watch-agenda bij Instellingen.");
-        const calendar = await this.google.calendar(choice.calendarId);
-        if (calendar.timeZone !== this.config.timeZone) throw new AppError("CALENDAR_TIMEZONE", 409, "Zet de When2Watch-agenda op Europe/Amsterdam en controleer de agenda opnieuw.");
+        if (choice) {
+        if (choice.calendarId !== this.settings.calendarId) throw new AppError("CONFIRM_CALENDAR", 409, "Controleer en bevestig eerst de When2Watch-agenda bij Instellingen.");
+        await this.google.calendar(choice.calendarId);
         const remote = await this.google.ownedEpisodes(choice.calendarId, userId, show.tvmazeId);
         const episodes = await this.db.episode.findMany({ where: { trackedShowId: show.id }, include: { links: { where: { calendarId: choice.calendarId } } }, orderBy: { sourceId: "asc" } });
         for (const episode of episodes) {
           try { await this.syncEpisode(userId, { ...show, title: snapshot.show.name }, episode, oldDates.get(episode.sourceId) ?? null, cutoff, remote, result); }
           catch (error) { result.failed++; result.errors.push(`${episode.season ?? "?"}×${episode.number ?? "?"}: ${failure(error)}`); }
+        }
         }
       } catch (error) { result.failed++; result.errors.push(failure(error)); }
       await this.db.trackedShow.update({ where: { id: show.id }, data: result.failed
@@ -93,7 +105,7 @@ export class SyncService {
         : { lastError: null, lastSuccessAt: this.now() } });
     }
     const failed = series.reduce((n,s) => n+s.failed,0), succeeded = series.reduce((n,s) => n+s.created+s.updated+s.deleted+s.unchanged,0);
-    const result: SyncResult = { id: run.id, status: failed ? (succeeded ? "partial" : "failed") : "success", startedAt: started.toISOString(), finishedAt: this.now().toISOString(), series };
+    const result: SyncResult = { id: run.id, status: failed ? (succeeded ? "partial" : "failed") : "success", ...(!choice ? { calendarState: "unconfigured" as const } : {}), startedAt: started.toISOString(), finishedAt: this.now().toISOString(), series };
     await this.db.syncRun.update({ where: { id: run.id }, data: { status: result.status, finishedAt: new Date(result.finishedAt), resultJson: JSON.stringify(result) } });
     return result;
   }
@@ -106,7 +118,7 @@ export class SyncService {
   }
 
   private async read(eventId: string): Promise<CalendarEvent | null> {
-    try { const event = await this.google.event(this.config.calendarId, eventId); return event.status === "cancelled" ? null : event; }
+    try { const event = await this.google.event(this.settings.calendarId, eventId); return event.status === "cancelled" ? null : event; }
     catch (error) { if (error instanceof AppError && [404,410].includes(error.status)) return null; throw error; }
   }
 
@@ -134,14 +146,14 @@ export class SyncService {
     let event: CalendarEvent | null = candidates[0] ?? (link ? await this.read(link.eventId) : null);
     if (event) this.assertOwned(event,userId,show.tvmazeId,episode.sourceId);
     if (event && link && event.id !== link.eventId && link.status !== "deleted") throw new AppError("EVENT_CONFLICT", 409, "De opgeslagen koppeling wijkt af van het gevonden agenda-item.");
-    if (!link && event) link = await this.db.calendarEventLink.create({ data: { episodeId: episode.id, calendarId: this.config.calendarId,
+    if (!link && event) link = await this.db.calendarEventLink.create({ data: { episodeId: episode.id, calendarId: this.settings.calendarId,
       eventId: event.id, status: "synced", desiredJson: "{}", lastDate: event.start?.date ?? null } });
 
     const wanted = episode.present && episode.airdate !== null;
     if ((!wanted || link?.status === "deleting") && link && link.status !== "deleted") {
       await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleting" } });
       if (event) {
-        await this.google.remove(this.config.calendarId, event.id, event.etag!);
+        await this.google.remove(this.settings.calendarId, event.id, event.etag!);
         if (await this.read(event.id)) throw new AppError("DELETE_UNCONFIRMED", 502, "De verwijdering is nog niet bevestigd. Probeer opnieuw.");
       }
       link = await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleted" } });
@@ -156,14 +168,14 @@ export class SyncService {
       const data = { eventId, status: "prepared", desiredJson: JSON.stringify(episodeEvent(userId,show,episode,eventId)), lastDate: episode.airdate,
         confirmedDesiredHash: null, confirmedRemoteHash: null };
       link = link ? await this.db.calendarEventLink.update({ where: { id: link.id }, data })
-        : await this.db.calendarEventLink.create({ data: { ...data, episodeId: episode.id, calendarId: this.config.calendarId } });
+        : await this.db.calendarEventLink.create({ data: { ...data, episodeId: episode.id, calendarId: this.settings.calendarId } });
     }
     if (!link) throw new AppError("MAPPING_MISSING", 500, "De agendakoppeling ontbreekt.");
     const desired = episodeEvent(userId,show,episode,link.eventId);
     if (!event) {
       // Persist intent before POST. A lost response is recovered by GET of this ID.
       await this.db.calendarEventLink.update({ where: { id: link.id }, data: { desiredJson: JSON.stringify(desired), status: "prepared" } });
-      try { await this.google.insert(this.config.calendarId, desired); }
+      try { await this.google.insert(this.settings.calendarId, desired); }
       catch (error) { if (!(error instanceof AppError && error.status === 409)) throw error; }
       await this.confirm(link,desired,userId,show.tvmazeId,episode.sourceId); result.created++; return;
     }
@@ -172,7 +184,7 @@ export class SyncService {
       await this.confirm(link,desired,userId,show.tvmazeId,episode.sourceId); result.unchanged++; return;
     }
     await this.db.calendarEventLink.update({ where: { id: link.id }, data: { desiredJson: JSON.stringify(desired), status: "updating" } });
-    await this.google.patch(this.config.calendarId, event.id, desired, event.etag!);
+    await this.google.patch(this.settings.calendarId, event.id, desired, event.etag!);
     await this.confirm(link,desired,userId,show.tvmazeId,episode.sourceId); result.updated++;
   }
 }

@@ -94,3 +94,9 @@ a { color: var(--accent); }
 @media (max-width: 420px) { .match { flex-wrap: wrap; } .match button { margin-left: 58px; } .episode-heading { flex-wrap: wrap; gap: 4px; } .calendar-summary, .section-heading { flex-wrap: wrap; } }
 @media (max-width: 560px) { main { padding: 20px 18px; } .hero { padding: 35px 0 20px; } .card { padding: 22px 20px; } .steps-summary { grid-template-columns: 1fr; gap: 0; } .account-row { flex-wrap: wrap; } .form-row > * { width: 100%; } }
 @media (max-width: 560px) { .show-heading { grid-template-columns: 60px minmax(0, 1fr); gap: 12px 14px; } .show-heading > a { grid-column: 2; } .series-poster { width: 60px; height: 84px; } }
+
+.settings-form input, .settings-form select { max-width: 100%; width: 100%; min-width: 0; }
+.settings-form label { margin-top: 16px; }
+.settings-form form > button { margin-top: 16px; }
+.settings-form .form-row select { width: auto; flex: 1; }
+.settings-form code, .settings-form p { overflow-wrap: anywhere; }

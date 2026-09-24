@@ -19,8 +19,14 @@ it("reads defaults without writing and persists only the selected owner's valid 
   } finally { await reopened.$disconnect(); }
 });
 
-it.each([null, [], {}, { agendaMonths: 0 }, { agendaMonths: 4 }, { agendaMonths: 1.5 }, { agendaMonths: "2" }, { agendaMonths: true }, { agendaMonths: 2, userId: "other" }, { agendaMonths: 2, timeZone: "UTC" }])("rejects unsupported or ambiguous preference input: %j", async input => {
+it.each([null, [], {}, { agendaMonths: 0 }, { agendaMonths: 4 }, { agendaMonths: 1.5 }, { agendaMonths: "2" }, { agendaMonths: true }, { agendaMonths: 2, userId: "other" }, { agendaMonths: 2, timeZone: "Invalid/Zone" }])("rejects unsupported or ambiguous preference input: %j", async input => {
   await expect(savePreferences("owner", input)).rejects.toMatchObject({ code: "INVALID_INPUT", status: 400 });
+});
+
+it("persists a valid timezone independently without resetting the chosen horizon", async () => {
+  storage = testDatabase(); await storage.db.user.create({ data: { id: "owner" } });
+  await savePreferences("owner", { agendaMonths: 3 }, storage.db);
+  expect(await savePreferences("owner", { timeZone: "America/Los_Angeles" }, storage.db)).toEqual({ agendaMonths: 3, timeZone: "America/Los_Angeles" });
 });
 
 it("adds preferences to a populated old database while preserving owner, episodes and event mappings", async () => {

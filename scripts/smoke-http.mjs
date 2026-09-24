@@ -63,12 +63,12 @@ try {
   const sessionText = await sessionResponse.text();
   check(sessionResponse.status === 200 && sessionText.includes(env.ALLOWED_GOOGLE_EMAIL), "NextAuth session route must work with current Next version");
   check(!sessionText.includes("never-serialize-") && !sessionText.includes(sessions.owner), "session endpoint leaked credentials");
-  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"], ["/api/shows", "POST"], ["/api/sync", "POST"], ["/api/settings/preferences", "PATCH"]]) {
+  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"], ["/api/shows", "POST"], ["/api/sync", "POST"], ["/api/settings/preferences", "PATCH"], ["/api/settings/google", "POST"], ["/api/settings/calendars", "POST"], ["/api/settings/calendar", "POST"]]) {
     check((await request(path, { method, headers: { origin } })).status === 401, "anonymous calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("other"), origin } })).status === 401, "other user's calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("owner"), origin: "https://attacker.example.test" } })).status === 403, "foreign-origin write must be denied before Google");
   }
-  for (const path of ["/api/shows", "/api/shows/search?q=Slow", "/api/settings/preferences"]) {
+  for (const path of ["/api/shows", "/api/shows/search?q=Slow", "/api/settings/preferences", "/api/settings/google", "/api/settings/calendars"]) {
     check((await request(path)).status === 401, "anonymous show read must be denied");
     check((await request(path,{headers:cookie("other")})).status === 401, "other account's show read must be denied");
   }
@@ -80,12 +80,29 @@ try {
   check(defaults.ok && (await defaults.json()).agendaMonths === 1, "preferences must read a one-month default");
   check(await db.userPreferences.count() === 0,"reading preferences must not create a row");
   const preferenceRequest = body => request("/api/settings/preferences",{method:"PATCH",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body});
-  for(const invalid of ["null","{broken",JSON.stringify({agendaMonths:"2"}),JSON.stringify({agendaMonths:4}),JSON.stringify({agendaMonths:2,userId:"other"}),JSON.stringify({agendaMonths:2,timeZone:"UTC"})]) {
+  for(const invalid of ["null","{broken",JSON.stringify({agendaMonths:"2"}),JSON.stringify({agendaMonths:4}),JSON.stringify({agendaMonths:2,userId:"other"}),JSON.stringify({agendaMonths:2,timeZone:"Invalid/Zone"})]) {
     check((await preferenceRequest(invalid)).status === 400,"invalid or unsupported preference input must be rejected");
   }
   check((await preferenceRequest(JSON.stringify({agendaMonths:2}))).ok,"valid month preference must save");
   check((await (await request("/api/settings/preferences",{headers:cookie("owner")})).json()).agendaMonths === 2,"preference must persist across requests");
   check(await db.userPreferences.count({where:{userId:"other"}}) === 0,"preference save must not choose another owner");
+  check((await preferenceRequest(JSON.stringify({timeZone:"Pacific/Auckland"}))).ok,"valid timezone saves independently");
+  check((await (await request("/api/settings/preferences",{headers:cookie("owner")})).json()).agendaMonths === 2,"timezone edit preserves horizon");
+  const safeSettings = await request("/api/settings/google",{headers:cookie("owner")});
+  const safeText = await safeSettings.text();
+  check(safeSettings.ok && JSON.parse(safeText).calendarPermission === false,"identity-only session can open permission recovery");
+  check(!safeText.includes("never-serialize") && !safeText.includes(env.GOOGLE_CLIENT_SECRET) && !safeText.includes(sessions.owner),"settings API must not serialize tokens, secret or session");
+  check((await request("/api/settings/calendars",{headers:cookie("owner")})).status === 409,"missing calendar scopes must fail before contacting Google");
+  const googleRequest = body => request("/api/settings/google",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  check((await googleRequest({action:"begin",mode:"calendar",userId:"other"})).status === 400,"caller cannot choose another owner for Google connection");
+  const begun = await googleRequest({action:"begin",mode:"calendar"});
+  check(begun.ok && begun.headers.get("set-cookie")?.includes("HttpOnly"),"connection begin binds a private HTTP-only cookie");
+  const pending = await db.googleConnectionAttempt.findFirstOrThrow({where:{ownerId:"owner",status:"pending"}});
+  check(!pending.tokensJson && pending.sessionHash !== sessions.owner,"pending connection stores only session hash and no active token copy");
+  check((await googleRequest({action:"cancel",id:pending.id})).ok,"owner can cancel an incomplete connection");
+  check((await db.googleConnectionAttempt.findUniqueOrThrow({where:{id:pending.id}})).status === "cancelled","cancellation persists");
+  check((await db.installation.findUniqueOrThrow({where:{id:"singleton"}})).ownerId === "owner","legacy owner imported without changing identity");
+  check(await db.oAuthClientConfig.count() === 1,"legacy client import is idempotent across requests");
   const emptySearch = await request("/api/shows/search?q=",{headers:cookie("owner")});
   check(emptySearch.ok && (await emptySearch.json()).shows.length === 0, "empty search must return without a provider request");
   for(const credential of [undefined, "incorrect"]) {
@@ -140,6 +157,16 @@ try {
   check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"x"})})).status === 400,"invalid show ID must fail before the provider");
   const invalid = await request("/api/probe", { method: "POST", headers: { ...cookie("owner"), origin, "Content-Type": "application/json" }, body: JSON.stringify({ date: "not-a-date" }) });
   check(invalid.status === 400, "invalid date must fail locally");
+  await new Promise(resolve => { server.once("exit", resolve); server.kill("SIGTERM"); });
+  server = spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p",String(port)],{env:{...env,ALLOWED_GOOGLE_EMAIL:"wrong@example.test",GOOGLE_CLIENT_SECRET:"wrong-after-import",GOOGLE_CALENDAR_ID:"wrong-after-import"},stdio:["ignore","pipe","pipe"]});
+  server.stdout.on("data",data=>{serverOutput+=data;}); server.stderr.on("data",data=>{serverOutput+=data;});
+  let restarted=false;
+  for(let attempt=0;attempt<80;attempt++){try{if((await request("/api/health")).ok){restarted=true;break;}}catch{} await new Promise(resolve=>setTimeout(resolve,100));}
+  check(restarted,"Next must restart with the persisted installation");
+  const restartedSettings = await (await request("/api/settings/google",{headers:cookie("owner")})).json();
+  check(restartedSettings.account.email === env.ALLOWED_GOOGLE_EMAIL && restartedSettings.calendar.id === env.GOOGLE_CALENDAR_ID,"stored account/calendar win over changed environment after restart");
+  check(restartedSettings.preferences.timeZone === "Pacific/Auckland" && restartedSettings.preferences.agendaMonths === 2,"preferences survive an actual server restart");
+  check(!serverOutput.includes("never-serialize-") && !serverOutput.includes(env.GOOGLE_CLIENT_SECRET) && !serverOutput.includes(sessions.owner),"server logs must not expose secrets");
   const logout = await request("/api/auth/signout", { method: "POST", headers: { ...cookie("owner"), "Content-Type": "application/x-www-form-urlencoded" }, body: "json=true" });
   await logout.text();
   check(await db.session.count({ where: { sessionToken: sessions.owner } }) === 1, "logout without CSRF token must not remove the session");
