@@ -3,8 +3,8 @@ import { localDate } from "@/lib/dates";
 import type { PrismaClient } from "@prisma/client";
 import { calendarEventHash, episodeEvent } from "./sync";
 
-export async function overview(userId: string, db: PrismaClient = database(), now = new Date()) {
-  const today = localDate(now);
+export async function overview(userId: string, db: PrismaClient = database(), now = new Date(), timeZone = "Europe/Amsterdam") {
+  const today = localDate(now, timeZone);
   const [shows,calendar,lastRun,account] = await Promise.all([
     db.trackedShow.findMany({
       where:{userId},orderBy:{title:"asc"},
@@ -20,7 +20,7 @@ export async function overview(userId: string, db: PrismaClient = database(), no
       summaryText:s.summaryText,genres:JSON.parse(s.genresJson) as string[],runtimeMinutes:s.runtimeMinutes,
       lastAttempt:s.lastAttemptAt?.toISOString()??null,lastSuccess:s.lastSuccessAt?.toISOString()??null,error:s.lastError,
       upcoming:s.episodes.filter(e=>e.airdate && e.airdate>=today).map(e=>({id:e.sourceId,title:e.title,season:e.season,number:e.number,date:e.airdate!,
-        summaryText:e.summaryText,
+        summaryText:e.summaryText,sourceUrl:e.sourceUrl,
         linked:e.links.some(l=>l.status==="synced" && l.confirmedDesiredHash===calendarEventHash(episodeEvent(userId,s,e,l.eventId)))})),
       unknownDates:s.episodes.filter(e=>!e.airdate).length,
     }))};

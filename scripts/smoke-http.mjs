@@ -63,17 +63,29 @@ try {
   const sessionText = await sessionResponse.text();
   check(sessionResponse.status === 200 && sessionText.includes(env.ALLOWED_GOOGLE_EMAIL), "NextAuth session route must work with current Next version");
   check(!sessionText.includes("never-serialize-") && !sessionText.includes(sessions.owner), "session endpoint leaked credentials");
-  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"], ["/api/shows", "POST"], ["/api/sync", "POST"]]) {
+  for (const [path, method] of [["/api/calendar/verify", "POST"], ["/api/probe", "POST"], ["/api/probe", "DELETE"], ["/api/shows", "POST"], ["/api/sync", "POST"], ["/api/settings/preferences", "PATCH"]]) {
     check((await request(path, { method, headers: { origin } })).status === 401, "anonymous calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("other"), origin } })).status === 401, "other user's calendar write must be denied");
     check((await request(path, { method, headers: { ...cookie("owner"), origin: "https://attacker.example.test" } })).status === 403, "foreign-origin write must be denied before Google");
   }
-  for (const path of ["/api/shows", "/api/shows/search?q=Slow"]) {
+  for (const path of ["/api/shows", "/api/shows/search?q=Slow", "/api/settings/preferences"]) {
     check((await request(path)).status === 401, "anonymous show read must be denied");
     check((await request(path,{headers:cookie("other")})).status === 401, "other account's show read must be denied");
   }
   const home = await request("/",{headers:cookie("owner")});
-  check(home.ok && (await home.text()).includes("Jouw series"), "signed-in home must display the series dashboard");
+  check(home.status === 307 && new URL(home.headers.get("location"),origin).pathname === "/settings", "first incomplete connection must lead to settings");
+  check((await request("/volgen",{headers:cookie("owner")})).ok, "following must remain available before calendar confirmation");
+  check((await request("/volgen")).status === 307, "following must reject anonymous visitors");
+  const defaults = await request("/api/settings/preferences",{headers:cookie("owner")});
+  check(defaults.ok && (await defaults.json()).agendaMonths === 1, "preferences must read a one-month default");
+  check(await db.userPreferences.count() === 0,"reading preferences must not create a row");
+  const preferenceRequest = body => request("/api/settings/preferences",{method:"PATCH",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body});
+  for(const invalid of ["null","{broken",JSON.stringify({agendaMonths:"2"}),JSON.stringify({agendaMonths:4}),JSON.stringify({agendaMonths:2,userId:"other"}),JSON.stringify({agendaMonths:2,timeZone:"UTC"})]) {
+    check((await preferenceRequest(invalid)).status === 400,"invalid or unsupported preference input must be rejected");
+  }
+  check((await preferenceRequest(JSON.stringify({agendaMonths:2}))).ok,"valid month preference must save");
+  check((await (await request("/api/settings/preferences",{headers:cookie("owner")})).json()).agendaMonths === 2,"preference must persist across requests");
+  check(await db.userPreferences.count({where:{userId:"other"}}) === 0,"preference save must not choose another owner");
   const emptySearch = await request("/api/shows/search?q=",{headers:cookie("owner")});
   check(emptySearch.ok && (await emptySearch.json()).shows.length === 0, "empty search must return without a provider request");
   for(const credential of [undefined, "incorrect"]) {
@@ -84,6 +96,7 @@ try {
   const cron = await request("/api/cron/sync",{method:"POST",headers:{authorization:`Bearer ${env.CRON_SECRET}`}});
   check(cron.status === 200 && (await cron.json()).status === "success","authorized empty cron must use the shared service");
   check(await db.syncRun.count({where:{userId:"owner",trigger:"cron"}}) === 1,"cron must resolve the configured owner on the server");
+  await db.calendarSettings.create({data:{userId:"owner",calendarId:env.GOOGLE_CALENDAR_ID,summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultRemindersJson:"[]"}});
   const synopsis = "OWNER_DETAILS Een zorgvuldig opgeslagen omschrijving. ".repeat(15);
   const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:synopsis,genresJson:'["Drama","Thriller"]',runtimeMinutes:45}});
   await db.episode.create({data:{trackedShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});
@@ -93,17 +106,32 @@ try {
   check(ownerData.shows[0].upcoming[0].summaryText.startsWith("PRIVATE_EPISODE"), "owner must receive locally stored episode text");
   for(const identity of [null,"other"]){
     const headers=identity?cookie(identity):{};
-    for(const path of ["/","/api/shows"]){
+    for(const path of ["/","/volgen","/api/shows"]){
       const response=await request(path,{headers}); const body=await response.text();
       check(!body.includes("OWNER_DETAILS") && !body.includes("PRIVATE_EPISODE"), "anonymous or other account must not receive enriched data");
     }
   }
-  const detailsPage = await (await request("/",{headers:cookie("owner")})).text();
+  const detailsPage = await (await request("/volgen",{headers:cookie("owner")})).text();
   const excerpt=detailsPage.match(/<p class="series-synopsis">([\s\S]*?)<\/p>/)?.[1];
   check(excerpt && excerpt.length <= 400 && excerpt.endsWith("…") && synopsis.startsWith(excerpt.slice(0,-1)) && /\s/.test(synopsis[excerpt.length-1]), "long synopsis must end at a word boundary within 400 characters");
   check(detailsPage.includes("Lees verder op TVmaze"), "truncated synopsis must link to its source");
   check(detailsPage.includes('class="series-details"') && detailsPage.includes('class="episode-description"') && !/<details[^>]*\sopen(?:[=>\s])/.test(detailsPage), "series and episode disclosures must initially be closed");
   check(detailsPage.includes("&lt;img") && !detailsPage.includes('<img src="https://example.test/should-not-load"'), "stored text must render escaped instead of executable markup");
+  const soon = new Date(Date.now()+2*86400_000).toISOString().slice(0,10);
+  await db.episode.create({data:{trackedShowId:show.id,sourceId:999999,title:"SOON_EPISODE",season:6,number:99,airdate:soon,sourceUrl:"https://www.tvmaze.com/episodes/999999",summaryText:"HIDDEN_SPOILER"}});
+  for(const path of ["/","/volgen","/settings"]){
+    const page = await request(path,{headers:cookie("owner")});const html=await page.text();
+    check(page.ok && html.includes('aria-label="Hoofdnavigatie"'),"all private pages need the shared menu");
+    const active=html.match(/<a[^>]*aria-current="page"[^>]*>/)?.[0];
+    check(active?.includes(`href="${path}"`),"menu must identify the active route");
+    if(path==="/") {
+      check(html.includes("SOON_EPISODE") && !html.includes("PRIVATE_EPISODE"),"Agenda must show the in-window episode and exclude distant episodes");
+      check(html.includes("/images/when2watch-banner.svg"),"Agenda must show the generic banner");
+      check(!/<details[^>]*\sopen(?:[=>\s])/.test(html),"Agenda spoilers must start closed");
+    }
+  }
+  const banner = await request("/images/when2watch-banner.svg");
+  check(banner.ok && banner.headers.get("content-type")?.includes("image/svg+xml"),"generic banner must be served as an image");
   check(await db.syncRun.count() === 1,"reading enriched pages must not start a sync");
   check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"x"})})).status === 400,"invalid show ID must fail before the provider");
   const invalid = await request("/api/probe", { method: "POST", headers: { ...cookie("owner"), origin, "Content-Type": "application/json" }, body: JSON.stringify({ date: "not-a-date" }) });

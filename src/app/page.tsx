@@ -1,18 +1,24 @@
 import { signedInUser } from "@/server/auth";
 import { oauthReady } from "@/server/config";
 import { AuthButton } from "./auth-buttons";
-import { overview } from "@/server/overview";
-import { SeriesPanel } from "./series-panel";
+import { redirect } from "next/navigation";
+import { agendaOverview } from "@/server/agenda";
+import { AgendaPanel } from "./agenda-panel";
+import { Navigation } from "./navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user=await signedInUser();
-  if (user) return <>
-    <header><a className="brand" href="/">When2Watch<span className="brand-dot">.</span></a><AuthButton logout/></header>
-    <section className="hero compact"><p className="eyebrow">Je series, in je agenda</p><h1>Weet wanneer je<br/>verder kunt kijken.</h1><p className="intro">Volg je favoriete serie. Nieuwe afleveringen komen vanzelf in je When2Watch-agenda.</p></section>
-    <SeriesPanel data={await overview(user.id)}/>
-  </>;
+  if (user) {
+    const data = await agendaOverview(user.id);
+    if (!data.calendar && data.showCount === 0) redirect("/settings");
+    return <>
+      <Navigation active="/" />
+      <section className="hero compact"><p className="eyebrow">Dit komt eraan</p><h1>Je volgende aflevering.</h1><p className="intro">Alle bekende uitzenddatums van je gevolgde series, bij elkaar.</p></section>
+      <AgendaPanel data={data} />
+    </>;
+  }
   const { error } = await searchParams;
   return <>
     <header><a className="brand" href="/">When2Watch<span className="brand-dot">.</span></a><span className="tag">Eerste proef</span></header>

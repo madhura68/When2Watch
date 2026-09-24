@@ -5,6 +5,9 @@ import { database } from "@/server/db";
 import { localDate, nextDate } from "@/lib/dates";
 import { AuthButton } from "../auth-buttons";
 import { TrialPanel } from "./trial-panel";
+import { Navigation } from "../navigation";
+import { PreferencesPanel } from "./preferences-panel";
+import { getPreferences } from "@/server/preferences";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +21,9 @@ export default async function Settings() {
     database().account.findFirst({ where: { userId: user.id, provider: "google" }, select: { needsReauth: true, refresh_token: true } }),
   ]);
   return <>
-    <header><a className="brand" href="/">When2Watch<span className="brand-dot">.</span></a><AuthButton logout /></header>
-    <section className="hero compact"><p className="eyebrow"><a href="/">← Jouw series</a></p><h1>Je agenda en meldingen.</h1><p className="intro">Controleer de Google-koppeling of maak een apart proefitem om je meldingen te testen.</p></section>
+    <Navigation active="/settings" />
+    <section className="hero compact"><p className="eyebrow">Instellingen</p><h1>Je agenda en voorkeuren.</h1><p className="intro">Pas je overzicht aan of controleer de Google-koppeling en je meldingen.</p></section>
+    <PreferencesPanel preferences={await getPreferences(user.id)} />
     <section className="account-row"><div><strong>Google gekoppeld</strong><br /><span className="muted">{user.email}</span></div><span className="tag success">Ingelogd</span></section>
     {(account?.needsReauth || !account?.refresh_token) && <section className="notice error"><p>De blijvende toegang ontbreekt of is verlopen. Koppel Google opnieuw en geef beide agendatoestemmingen.</p><AuthButton /></section>}
     <TrialPanel calendarId={settings.calendarId} calendar={calendar ? { name: calendar.summary, timeZone: calendar.timeZone, confirmedAt: calendar.confirmedAt.toISOString(), reminders: calendar.defaultRemindersJson } : null} tomorrow={nextDate(localDate(new Date()))} probes={probes.map((probe) => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />

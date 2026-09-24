@@ -19,6 +19,14 @@ model User {
   probes        Probe[]
   shows         TrackedShow[]
   syncRuns      SyncRun[]
+  preferences   UserPreferences?
+}
+
+model UserPreferences {
+  userId       String @id
+  agendaMonths Int    @default(1)
+  timeZone     String @default("Europe/Amsterdam")
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Account {
