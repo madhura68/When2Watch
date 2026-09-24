@@ -1,0 +1,238 @@
+{
+  "at": "2026-09-24T07:48:42.772Z",
+  "calendar": {
+    "confirmed": true,
+    "timeZone": "Europe/Amsterdam"
+  },
+  "account": {
+    "refreshPresent": true,
+    "expires_at": 1790237300,
+    "needsReauth": false
+  },
+  "shows": [
+    {
+      "id": "cmuf8c5n90001ql01g7yoxoi8",
+      "tvmazeId": 45039,
+      "title": "Slow Horses",
+      "lastSuccessAt": "2026-09-24T07:48:22.360Z",
+      "lastError": null
+    }
+  ],
+  "links": [
+    {
+      "eventId": "ed0ffd8adf8664cb48d4f0fde5e024c1f",
+      "status": "synced",
+      "lastDate": "2026-09-23",
+      "episode": {
+        "sourceId": 3643506,
+        "airdate": "2026-09-23",
+        "title": "Daddy Issues"
+      }
+    },
+    {
+      "eventId": "ee22a757134d8471e963f43f62c0d1aa3",
+      "status": "synced",
+      "lastDate": "2026-09-30",
+      "episode": {
+        "sourceId": 3643507,
+        "airdate": "2026-09-30",
+        "title": "Resurrection"
+      }
+    },
+    {
+      "eventId": "e65b72aab582e42b0970ecb159d3fce64",
+      "status": "synced",
+      "lastDate": "2026-10-07",
+      "episode": {
+        "sourceId": 3643508,
+        "airdate": "2026-10-07",
+        "title": "Lost and Found"
+      }
+    },
+    {
+      "eventId": "e8d337ad18e0e46ad9ed30f426e3ea8d9",
+      "status": "synced",
+      "lastDate": "2026-10-14",
+      "episode": {
+        "sourceId": 3643509,
+        "airdate": "2026-10-14",
+        "title": "Sayonara"
+      }
+    },
+    {
+      "eventId": "e86fae3a3c3d94c1d9c4bcd9d8a789836",
+      "status": "synced",
+      "lastDate": "2026-10-21",
+      "episode": {
+        "sourceId": 3643510,
+        "airdate": "2026-10-21",
+        "title": "Judgment Day"
+      }
+    }
+  ],
+  "runs": [
+    {
+      "id": "cmuf8couj002fql0192qd149v",
+      "trigger": "manual",
+      "startedAt": "2026-09-24T07:48:21.835Z",
+      "finishedAt": "2026-09-24T07:48:22.376Z",
+      "status": "success",
+      "result": {
+        "id": "cmuf8couj002fql0192qd149v",
+        "status": "success",
+        "startedAt": "2026-09-24T07:48:21.835Z",
+        "finishedAt": "2026-09-24T07:48:22.376Z",
+        "series": [
+          {
+            "showId": 45039,
+            "title": "Slow Horses",
+            "created": 0,
+            "updated": 0,
+            "deleted": 0,
+            "unchanged": 5,
+            "failed": 0,
+            "errors": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmuf8c5ns0003ql01idpql5b2",
+      "trigger": "add",
+      "startedAt": "2026-09-24T07:47:56.966Z",
+      "finishedAt": "2026-09-24T07:48:00.698Z",
+      "status": "success",
+      "result": {
+        "id": "cmuf8c5ns0003ql01idpql5b2",
+        "status": "success",
+        "startedAt": "2026-09-24T07:47:56.966Z",
+        "finishedAt": "2026-09-24T07:48:00.698Z",
+        "series": [
+          {
+            "showId": 45039,
+            "title": "Slow Horses",
+            "created": 5,
+            "updated": 0,
+            "deleted": 0,
+            "unchanged": 0,
+            "failed": 0,
+            "errors": []
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "ed0ffd8adf8664cb48d4f0fde5e024c1f",
+      "etag": "\"3580472155246782\"",
+      "summary": "Slow Horses S06E02 — Daddy Issues",
+      "start": {
+        "date": "2026-09-23"
+      },
+      "end": {
+        "date": "2026-09-24"
+      },
+      "reminders": {
+        "useDefault": false
+      },
+      "transparency": "transparent",
+      "markers": {
+        "app": "when2watch",
+        "showId": "45039",
+        "kind": "episode",
+        "episodeId": "3643506",
+        "userId": "cmuefv1uz0000o3019ux9qy7h"
+      }
+    },
+    {
+      "id": "ee22a757134d8471e963f43f62c0d1aa3",
+      "etag": "\"3580472156163710\"",
+      "summary": "Slow Horses S06E03 — Resurrection",
+      "start": {
+        "date": "2026-09-30"
+      },
+      "end": {
+        "date": "2026-10-01"
+      },
+      "reminders": {
+        "useDefault": false
+      },
+      "transparency": "transparent",
+      "markers": {
+        "app": "when2watch",
+        "showId": "45039",
+        "kind": "episode",
+        "episodeId": "3643507",
+        "userId": "cmuefv1uz0000o3019ux9qy7h"
+      }
+    },
+    {
+      "id": "e65b72aab582e42b0970ecb159d3fce64",
+      "etag": "\"3580472157211038\"",
+      "summary": "Slow Horses S06E04 — Lost and Found",
+      "start": {
+        "date": "2026-10-07"
+      },
+      "end": {
+        "date": "2026-10-08"
+      },
+      "reminders": {
+        "useDefault": false
+      },
+      "transparency": "transparent",
+      "markers": {
+        "app": "when2watch",
+        "showId": "45039",
+        "kind": "episode",
+        "episodeId": "3643508",
+        "userId": "cmuefv1uz0000o3019ux9qy7h"
+      }
+    },
+    {
+      "id": "e8d337ad18e0e46ad9ed30f426e3ea8d9",
+      "etag": "\"3580472159472286\"",
+      "summary": "Slow Horses S06E05 — Sayonara",
+      "start": {
+        "date": "2026-10-14"
+      },
+      "end": {
+        "date": "2026-10-15"
+      },
+      "reminders": {
+        "useDefault": false
+      },
+      "transparency": "transparent",
+      "markers": {
+        "app": "when2watch",
+        "showId": "45039",
+        "kind": "episode",
+        "episodeId": "3643509",
+        "userId": "cmuefv1uz0000o3019ux9qy7h"
+      }
+    },
+    {
+      "id": "e86fae3a3c3d94c1d9c4bcd9d8a789836",
+      "etag": "\"3580472160940414\"",
+      "summary": "Slow Horses S06E06 — Judgment Day",
+      "start": {
+        "date": "2026-10-21"
+      },
+      "end": {
+        "date": "2026-10-22"
+      },
+      "reminders": {
+        "useDefault": false
+      },
+      "transparency": "transparent",
+      "markers": {
+        "app": "when2watch",
+        "showId": "45039",
+        "kind": "episode",
+        "episodeId": "3643510",
+        "userId": "cmuefv1uz0000o3019ux9qy7h"
+      }
+    }
+  ],
+  "duplicateEpisodeIds": []
+}

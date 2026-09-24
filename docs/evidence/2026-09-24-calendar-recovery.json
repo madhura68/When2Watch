@@ -1,0 +1,111 @@
+{
+  "at": "2026-09-24T07:48:43.284Z",
+  "kind": "simulated-source-and-lost-response-with-real-Google",
+  "syntheticEpisodeId": 2147483600,
+  "uncertainCreate": {
+    "status": "failed",
+    "eventId": "ee23b19691f4d45fcb29c0d48078f50b7",
+    "googleConfirmed": true
+  },
+  "reopenRecovery": {
+    "result": {
+      "id": "cmuf8d6lf0009qlbhxwnx7eoh",
+      "status": "success",
+      "startedAt": "2026-09-24T07:48:44.834Z",
+      "finishedAt": "2026-09-24T07:48:45.374Z",
+      "series": [
+        {
+          "showId": 45039,
+          "title": "[PROEF When2Watch] Slow Horses",
+          "created": 0,
+          "updated": 0,
+          "deleted": 0,
+          "unchanged": 1,
+          "failed": 0,
+          "errors": []
+        }
+      ]
+    },
+    "insertRequests": 1,
+    "eventId": "ee23b19691f4d45fcb29c0d48078f50b7"
+  },
+  "dateCorrection": {
+    "result": {
+      "id": "cmuf8d70j000dqlbhw2cb4c40",
+      "status": "success",
+      "startedAt": "2026-09-24T07:48:45.378Z",
+      "finishedAt": "2026-09-24T07:48:46.310Z",
+      "series": [
+        {
+          "showId": 45039,
+          "title": "[PROEF When2Watch] Slow Horses",
+          "created": 0,
+          "updated": 1,
+          "deleted": 0,
+          "unchanged": 0,
+          "failed": 0,
+          "errors": []
+        }
+      ]
+    },
+    "eventId": "ee23b19691f4d45fcb29c0d48078f50b7",
+    "date": "2026-09-26"
+  },
+  "repeat": {
+    "result": {
+      "id": "cmuf8d7u0000hqlbho0bqldgw",
+      "status": "success",
+      "startedAt": "2026-09-24T07:48:46.439Z",
+      "finishedAt": "2026-09-24T07:48:46.781Z",
+      "series": [
+        {
+          "showId": 45039,
+          "title": "[PROEF When2Watch] Slow Horses",
+          "created": 0,
+          "updated": 0,
+          "deleted": 0,
+          "unchanged": 1,
+          "failed": 0,
+          "errors": []
+        }
+      ]
+    },
+    "calendarWrites": 0
+  },
+  "cleanup": {
+    "id": "cmuf8d83l000lqlbhfuxgye90",
+    "status": "success",
+    "startedAt": "2026-09-24T07:48:46.784Z",
+    "finishedAt": "2026-09-24T07:48:47.598Z",
+    "series": [
+      {
+        "showId": 45039,
+        "title": "[PROEF When2Watch] Slow Horses",
+        "created": 0,
+        "updated": 0,
+        "deleted": 1,
+        "unchanged": 0,
+        "failed": 0,
+        "errors": []
+      }
+    ]
+  },
+  "remainingSyntheticEvents": 0,
+  "writes": [
+    {
+      "method": "POST",
+      "id": "ee23b19691f4d45fcb29c0d48078f50b7",
+      "httpStatus": 200
+    },
+    {
+      "method": "PATCH",
+      "id": "ee23b19691f4d45fcb29c0d48078f50b7",
+      "httpStatus": 200
+    },
+    {
+      "method": "DELETE",
+      "id": "ee23b19691f4d45fcb29c0d48078f50b7",
+      "httpStatus": 204
+    }
+  ]
+}

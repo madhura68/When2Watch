@@ -1,0 +1,17 @@
+{
+  "at": "2026-09-24T07:47:37.729Z",
+  "calendar": {
+    "confirmed": true,
+    "timeZone": "Europe/Amsterdam"
+  },
+  "account": {
+    "refreshPresent": true,
+    "expires_at": 1790237300,
+    "needsReauth": false
+  },
+  "shows": [],
+  "links": [],
+  "runs": [],
+  "events": [],
+  "duplicateEpisodeIds": []
+}

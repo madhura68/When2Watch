@@ -1,0 +1,42 @@
+{
+  "installed": {
+    "installedAt": "2026-09-24T09:52:58.986364+02:00",
+    "trialAt": "2026-09-24T09:54:00+02:00",
+    "previousLines": 0,
+    "backup": "/srv/apps/when2watch/config-backups/crontab.20260924T075258Z.before-when2watch",
+    "daily": "5 6 * * * /bin/sh /srv/apps/when2watch/current/deploy/when2watch-sync.sh >> /srv/apps/when2watch/cron.log 2>&1 # When2Watch daily",
+    "trial": "54 9 24 9 * [ \"$(date +\\%F)\" = \"2026-09-24\" ] && /bin/sh /srv/apps/when2watch/current/deploy/when2watch-sync.sh >> /srv/apps/when2watch/cron-proof.log 2>&1 # When2Watch acceptance 20260924T0954",
+    "marker": "When2Watch acceptance 20260924T0954"
+  },
+  "schedulerLog": [
+    "2026-09-24T09:54:01+02:00 max2 CRON[3759255]: (janpeter) CMD ([ \"$(date +%F)\" = \"2026-09-24\" ] && /bin/sh /srv/apps/when2watch/current/deploy/when2watch-sync.sh >> /srv/apps/when2watch/cron-proof.log 2>&1 # When2Watch acceptance 20260924T0954)"
+  ],
+  "scriptLog": [
+    "When2Watch cron start 2026-09-24T09:54:01+02:00",
+    "{\"at\":\"2026-09-24T07:54:02.272Z\",\"httpStatus\":200,\"id\":\"cmuf8jz260001ql01zrbilkr2\",\"status\":\"success\",\"startedAt\":\"2026-09-24T07:54:01.662Z\",\"finishedAt\":\"2026-09-24T07:54:02.248Z\",\"series\":[{\"showId\":45039,\"title\":\"Slow Horses\",\"created\":0,\"updated\":0,\"deleted\":0,\"unchanged\":5,\"failed\":0,\"errors\":[]}]}"
+  ],
+  "result": {
+    "at": "2026-09-24T07:54:02.272Z",
+    "httpStatus": 200,
+    "id": "cmuf8jz260001ql01zrbilkr2",
+    "status": "success",
+    "startedAt": "2026-09-24T07:54:01.662Z",
+    "finishedAt": "2026-09-24T07:54:02.248Z",
+    "series": [
+      {
+        "showId": 45039,
+        "title": "Slow Horses",
+        "created": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 5,
+        "failed": 0,
+        "errors": []
+      }
+    ]
+  },
+  "trialRemoved": true,
+  "retainedCrontab": "5 6 * * * /bin/sh /srv/apps/when2watch/current/deploy/when2watch-sync.sh >> /srv/apps/when2watch/cron.log 2>&1 # When2Watch daily\n",
+  "cleanupBackup": "/srv/apps/when2watch/config-backups/crontab.20260924T075445Z.before-trial-cleanup",
+  "container": "when2watch:4379141 healthy 2026-09-24T07:50:14.853022319Z"
+}

@@ -1,6 +1,53 @@
-# When2Watch — praktijkproef ST-001.1
+# When2Watch — praktijkproef ST-001
 
-Status op 24 september 2026: JP bevestigt ontvangst in zowel Apple Agenda als Google Agenda in Chrome. Het eigen proefitem is via When2Watch opgeruimd; Google bevestigt status cancelled. De meldingproef is geslaagd en de all-day aanpak blijft behouden. Exacte ontvangsttijden zijn niet afzonderlijk opgegeven. De normale appactie vernieuwde ook het verlopen Google-token zonder nieuwe login. De uitvoering gaat verder met de echte afleveringen van Slow Horses.
+**Status op 24 september 2026: het eerste praktijkincrement is inhoudelijk geslaagd.** JP ontving de proefmelding in Apple Agenda én Chrome. Slow Horses is via zoekmatches toegevoegd; vijf echte afleveringen staan in de gekozen Google-agenda. Herhaling, gecontroleerde datumcorrectie/herstel, containerherstart, echte tokenvernieuwing en een daadwerkelijk door max2-cron gestarte run zijn bewezen. De app draait op release `4379141`. De taakstatussen in Scrum4Me konden door ISS-7 niet worden bijgewerkt; de geslaagde bewijzen zijn wel gelogd. Gebruik na dag zeven en de overige v1-criteria blijven apart open.
+
+## Resultaat increment 1 — 24 september
+
+| Acceptatie | Werkelijk bewijs |
+|---|---|
+| Beide meldingsclients | JP: “melding is binnen gekomen. dit werkt” en “Chrome heb ik ook binnen, we kunnen verder”; ingestelde tijd 09:00 Europe/Amsterdam, exacte ontvangstminuut niet apart opgegeven |
+| Proefitem opruimen | Alleen eigen meldingsproef verwijderd; Google `cancelled` op 07:09 UTC |
+| Zoeken en kiezen | Chrome: `Slow Hores` vindt Slow Horses; `Slow Horses` toont eerste vijf en twee extra op aanvraag; TVmaze 45039 expliciet geselecteerd; daarna knop “Volg je al” |
+| Echte serie | Run `cmuf8c5ns0003ql01idpql5b2`, 07:47:56–07:48:00 UTC: 5 created, 0 failed. Alle vijf teruggelezen via Google API en zichtbaar als hele-dagafspraak in Google Agenda in Chrome |
+| Herhaling | Run `cmuf8couj002fql0192qd149v`: 0 created/updated/deleted, 5 unchanged. Google-event-ID's én etags bleven gelijk |
+| Gecontroleerd herstel | Echte Google-create van één gemarkeerd synthetisch item; antwoord bewust verloren. Na DB-heropening geen tweede POST, hetzelfde ID teruggevonden |
+| Datumcorrectie | Hetzelfde synthetische item van 25 naar 26 september verplaatst, titel gecorrigeerd; één PATCH, hetzelfde ID; volgende run nul writes. Dit zijn géén TVmaze-uitzenddata |
+| Opruiming herstelproef | Alleen synthetisch item verwijderd (HTTP 204); nul resterende synthetische items. Vijf echte afspraken onaangetast |
+| Herstart | Alleen `when2watch-web-1` opnieuw gestart op 07:50:14 UTC; healthy. Serie, agendakeuze en alle vijf mappings gelijk; bestaande browsersessie bleef werken |
+| Tokenvernieuwing | Normale tokenclient expliciet vernieuwd op 07:51:32 UTC: expiry 1790237300 → 1790239891; `needsReauth=false`; gekozen agenda leesbaar zonder interactieve login |
+| Echte cronrun | Hostjournal: CRON startte de opdracht om 09:54:01 Amsterdam. Run `cmuf8jz260001ql01zrbilkr2`: HTTP 200/success, 5 unchanged, 0 writes/failed. De opgeslagen trigger is `cron` |
+| Dagelijkse taak | Alleen `5 6 * * * … # When2Watch daily` blijft in de crontab van janpeter. Tijdzone Europe/Amsterdam; eigen tijdelijke acceptatieregel verwijderd; eerdere regels behouden (er waren er nul) |
+| Toegang | Publiek HTTPS health 200; shows/search/sync zonder sessie 401; cron zonder of met verkeerde secret 401; vóór toevoeging nog nul SyncRun-rijen |
+| Lokale controles | 43 tests, typecheck, productiebuild en 39 echte Next.js-HTTP-controles geslaagd; echte SQLite, gesimuleerde providers |
+| Review | Onafhankelijke hele-boomreview: één P2 over een onjuist bevestigingslabel; gereproduceerd voor datum, afleveringstitel en serietitel en hersteld met RED→GREEN. Geen open reviewbevindingen; zie `review-2026-09-24.md` |
+
+Het datumvenster begint op 17 september (vandaag min zeven kalenderdagen). S06E01 van 16 september is daarom niet nieuw toegevoegd. Aanwezig: S06E02 **23 september**, S06E03 **30 september**, S06E04 **7 oktober**, S06E05 **14 oktober**, S06E06 **21 oktober**. De eerstvolgende aflevering in het overzicht is **Resurrection, 30 september 2026**. Dit zijn TVmaze's oorspronkelijke uitzenddatums; geen garantie voor Nederlandse beschikbaarheid.
+
+De operatorherstelproef gebruikte een tijdelijke SQLite-database en synthetisch episode-ID `2147483600`, dezelfde SyncService en dezelfde gekozen agenda/account. Google-event `ee23b19691f4d45fcb29c0d48078f50b7` begon met `[PROEF When2Watch]`; alle schrijfacties waren extra begrensd tot die markering. Alleen het providerantwoord en de bronwijziging waren gesimuleerd; POST/PATCH/DELETE en hun bevestiging kwamen van de echte Google API. Het proefitem is opgeruimd. De productiegegevens van de echte serie zijn niet voor deze foutinjectie aangepast.
+
+Geschoonde bewijsbestanden in `docs/evidence/`:
+
+- `2026-09-23-google-proef.json`: OAuth/meldingsproef, beide cliëntbevestigingen en opruiming.
+- `2026-09-24-before-series.json`, `2026-09-24-series-first.json`, `2026-09-24-series-repeat.json`: eerste echte serie en idempotentie.
+- `2026-09-24-calendar-recovery.json`: gecontroleerde herstel- en datumproef met echt Google.
+- `2026-09-24-token-refresh.json`, `2026-09-24-after-restart.json`: vernieuwing en behouden gegevens.
+- `2026-09-24-cron.json`, `2026-09-24-after-cron.json`: installatie, hostjournal, run-ID/resultaat, opschoning en ongewijzigde vijf echte events.
+
+Actieve runtimecommit: `437914176da8ef79cd1b4a1a6199ab5683e18388`, image `when2watch:4379141`; image manifest `sha256:9209b831184e1320b0e1c38e90048ad198b91166ab32d974b750ad10cf558113`. `current` en `.env`-release-tag verwijzen naar dezelfde release. De metadata-/bewijsvastlegging kan latere documentcommits bevatten; er is daarvoor geen nieuwe runtime nodig.
+
+De additieve episode-migratie is toegepast. Vooraf maakte SQLite's backup-API een consistente kopie: `/srv/apps/when2watch/db-backups/when2watch.20260924T074017Z.before-episode-sync.db`, `integrity_check=ok`, modus 0600. Configuratiebackup: `/srv/apps/when2watch/config-backups/.env.20260924T074621Z.before-series-cron`. Cronbackups en exacte regel staan in het cronbewijs. Deze beperkte backupcontrole bewijst nog geen volledige v1-herstelacceptatie. Oude appreleases, bronbranch en werkmap blijven bewaard.
+
+## Gebruik en grenzen
+
+Open [When2Watch](https://when2watch.jp-visser.nl/), zoek een serie en kies expliciet de juiste match. `Nu synchroniseren` voert dezelfde synchronisatie uit als de dagelijkse taak om **06:05**. De Google-koppeling en meldingsproef staan bij **Instellingen**. Bij een fout blijft de serie staan en toont het overzicht de laatste poging, laatste succes en fout. Een gewijzigde datum/titel wordt pas “In je agenda” genoemd als precies die inhoud bevestigd is.
+
+All-day en de bewezen clientinstellingen blijven behouden. De Google OAuth-app stond bij de inrichting op External/Testing. Blijvend gebruik/publicatiestatus en tokengebruik na dag zeven zijn nog niet bewezen. Ook agendawisseling, serie verwijderen, volledige v1-interface en volledige backup/restoreacceptatie zijn buiten dit increment. De product-DoD wordt niet als volledige v1-aftekening gepresenteerd.
+
+Het MCP-procesblok is afzonderlijk geregistreerd als **ISS-7** bij scrum4me-mcp: `update_task_status` faalt vóór schrijven doordat `tasks.dispatch_request_id` ontbreekt. Daardoor blijven T-1/T-2/T-3 administratief op hun eerdere standen. Er is geen SQL-bypass, serverherstart of migratie van dat andere product uitgevoerd. `verify_task_against_plan` verwacht daarnaast `origin/main`, die in deze nieuwe, oorspronkelijk lege repository niet bestaat. Acceptatie is daarom handmatig tegen plan en bewijs gecontroleerd, zonder fictieve branch. De logs bevatten de actuele uitkomsten.
+
+De resterende tekst hieronder is het historische bewijs van taak 1 op 23–24 september.
+
 
 ## Vastgelegde proef
 
@@ -11,7 +58,7 @@ Status op 24 september 2026: JP bevestigt ontvangst in zowel Apple Agenda als Go
 - Afzonderlijke ontvangstbevestiging nodig voor Apple Agenda op Mac en Google Agenda in Chrome.
 - Het proefitem is herkenbaar als proef, gebruikt `reminders.useDefault: true` en bevat geen negatieve reminderwaarde. Deze instelling bewijst op zichzelf geen 09:00-melding.
 
-## Uitgevoerd lokaal
+## Lokale controles bij taak 1 (historisch)
 
 `npm test`: 17 tests geslaagd met echte tijdelijke SQLite-databases en de productiemigraties. Google-HTTP en tokenvernieuwing zijn in deze tests gesimuleerd. Getest: account-allowlist, geverifieerde e-mail, beide scopes, privésessie, refresh-tokenbehoud, DB-heropening, tokenvernieuwing/intrekking, gekozen agenda/writerrol, all-day datums, onderbroken insert/herhaling, eigendom bij opruimen en CSRF-origincontrole. De toegevoegde regressietest gebruikt de echte PrismaAdapter om Google's optionele `refresh_token_expires_in` op te slaan; deze test faalde vóór de schemafix.
 
@@ -25,9 +72,9 @@ Afhankelijkheden: Next 16.3.6, React 19.3.0, NextAuth 4.24.15, Prisma/client 6.1
 
 Op de Mac exporteert de omgeving `RUST_LOG=warn`. Prisma's SQLite-bestaancontrole gaf daardoor een lege schema-enginefout. Een geïsoleerde vergelijking bewees dat `RUST_LOG=info` de initialisatie laat slagen. Alleen het testharnas en het migratiecommando stellen deze waarde in; er is geen globale omgeving gewijzigd.
 
-## Uitgevoerde deployment
+## Deployment van taak 1 op 23 september (historisch)
 
-De container is daadwerkelijk op max2 gebouwd en gestart met Node 24.21.0. Actieve appcommit: `961fc09330236e86c20d449f2d42ee9b836c1436`; image `when2watch:961fc09`, container `when2watch-web-1`, health `healthy`. De eigen migraties zijn toegepast; runtime is UID/GID 1000, rootfs read-only, env/database modus 0600, datamap 0700. De app is na de Google-koppeling opnieuw gestart om 18:36:02 UTC. Daarna bleef dezelfde browsersessie ingelogd, waren agenda en proefitem bewaard en slaagde een nieuwe echte Google-agendacontrole. Dit bewijst opgeslagen toegang na herstart; het is nog geen bewijs van echte refresh-tokenvernieuwing.
+De container is daadwerkelijk op max2 gebouwd en gestart met Node 24.21.0. Destijds actieve appcommit: `961fc09330236e86c20d449f2d42ee9b836c1436`; image `when2watch:961fc09`, container `when2watch-web-1`, health `healthy`. De eigen migraties zijn toegepast; runtime is UID/GID 1000, rootfs read-only, env/database modus 0600, datamap 0700. De app is na de Google-koppeling opnieuw gestart om 18:36:02 UTC. Daarna bleef dezelfde browsersessie ingelogd, waren agenda en proefitem bewaard en slaagde een nieuwe echte Google-agendacontrole. Dit bewijst opgeslagen toegang na herstart; het is nog geen bewijs van echte refresh-tokenvernieuwing.
 
 Doel: `/srv/apps/when2watch`; `current` verwijst naar `releases/961fc09`. De gedeelde `.env` bevat dezelfde release-tag. Eén Next.js-proces, containerproject `when2watch`, geen gepubliceerde apppoort. Extern netwerk `scrum4me_default`, alias `when2watch-web`.
 
@@ -120,8 +167,8 @@ De MCP-planverificatie kon niet draaien omdat deze nieuwe repo geen origin/main 
 | Apple Agenda: ontvangen datum/tijd | Ontvangst bevestigd door JP op 24 september; exacte tijd niet opgegeven |
 | Google Agenda in Chrome: ontvangen datum/tijd | Ontvangst bevestigd door JP op 24 september; exacte tijd niet opgegeven |
 | Blijvende Google-koppeling na containerherstart | Bewezen met dezelfde sessie en nieuwe Google-agendacontrole |
-| Echte refresh-tokenvernieuwing | Normale appactie vernieuwde verlopen token op 24 september zonder nieuwe login; taak 3 herhaalt dit na serie-opslag |
+| Echte refresh-tokenvernieuwing | Normale appactie vernieuwde verlopen token op 24 september zonder nieuwe login; taak 3 heeft dit na serie-opslag en herstart opnieuw bewezen |
 | Eigen proefitem opgeruimd | App meldt verwijderd; Google bevestigt cancelled op 24 september |
 | Gebruik na dag zeven | Later te observeren |
 
-Alleen API-succes sluit de meldingsproef niet af. Als all-day om 09:00 niet werkt: noteer de echte beperking en laat JP het alternatief kiezen. Taken ST-001.2 (echte afleveringen) en ST-001.3 (dagelijkse synchronisatie) beginnen pas na het vereiste bewijs van taak 1.
+De vereiste cliëntontvangst is door JP bevestigd. Daarna zijn taak 2 (echte afleveringen) en taak 3 (herstart en dagelijkse synchronisatie) uitgevoerd en bewezen zoals bovenaan vastgelegd. De all-day afspraakvorm blijft behouden.
