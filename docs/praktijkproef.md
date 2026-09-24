@@ -1,6 +1,6 @@
 # When2Watch — praktijkproef ST-001.1
 
-Status op 23 september 2026: de app draait op max2 via https://when2watch.jp-visser.nl. Echte Google-login, schrijfrecht op When2Watch, één all-day proefitem voor 24 september en behoud van de koppeling na containerherstart zijn bewezen. Apple Agenda toont voor het item een standaardmelding om 09:00. Google Agenda toont op hetzelfde item geen melding, ondanks de ingestelde all-day standaard om 09:00. Werkelijke ontvangst is nog niet gemeten; ST-001.1 blijft in uitvoering.
+Status op 24 september 2026: JP bevestigt dat de proefmelding is ontvangen en werkt. Dit is de bevestiging van de Apple Agenda-proef waar de voorgaande vraag over ging; het exacte ontvangsttijdstip is niet afzonderlijk opgegeven. De eerdere proef bewees Google-login, schrijfrecht op When2Watch, het all-day proefitem en behoud van de koppeling na containerherstart op max2 via https://when2watch.jp-visser.nl. Ontvangst in Google Agenda/Chrome is nog niet bevestigd. ST-001.1 blijft in uitvoering zolang die afgesproken scope of de keuze om Apple Agenda te laten volstaan en het opruimen openstaan.
 
 ## Vastgelegde proef
 
@@ -98,9 +98,11 @@ Op 23 september is via When2Watch één all-day item aangemaakt voor **24 septem
 
 **Google Agenda in Chrome:** vóór de insert is de all-day standaard voor When2Watch op dezelfde dag om 09:00 gezet; Google bevestigde dat de meldingsinstellingen waren opgeslagen. Desondanks is de CalendarList-readback `defaultReminders: []`. Het eventrequest bevat `reminders.useDefault: true`, maar de echte event-readback bevat `useDefault: false` zonder overrides. Het item is zichtbaar in Chrome; de bewerkingspagina heeft een lege lijst Meldingen. Die pagina is zonder wijzigingen verlaten. Dit bewijst een beperking van deze geteste route, niet dat elke mogelijke all-day oplossing onmogelijk is. Er is geen Google-melding voor dit item bewezen of ingesteld.
 
-**Apple Agenda op Mac:** When2Watch is aangevinkt en het echte proefitem is zichtbaar. JP heeft uitdrukkelijk gekozen voor de accountbrede Google-standaard op de Mac: dezelfde dag om 09:00, ook voor andere hele-dagafspraken van dat Google-account. Bij de actuele controle stond deze voorkeur al ingesteld; het bestaande proefitem toont `Alert on day of event at 09:00 (default)`. Er is geen afzonderlijke handmatige eventmelding toegevoegd. De instelling is bewijs van configuratie, nog niet van ontvangst.
+**Apple Agenda op Mac:** When2Watch is aangevinkt en het echte proefitem is zichtbaar. JP heeft uitdrukkelijk gekozen voor de accountbrede Google-standaard op de Mac: dezelfde dag om 09:00, ook voor andere hele-dagafspraken van dat Google-account. Bij de controle op 23 september stond deze voorkeur al ingesteld; het bestaande proefitem toonde `Alert on day of event at 09:00 (default)`. Er is geen afzonderlijke handmatige eventmelding toegevoegd.
 
-Het bestaande proefitem blijft voor de meting staan. JP is gevraagd of daarnaast het vooraf besproken korte proefitem om 09:00 met expliciete melding bij aanvang gewenst is. Die andere eventvorm is nog niet toegepast. Controleer vóór de meting dat de Mac wakker is, Agenda/Chrome meldingen mogen tonen en Focus de melding niet onderdrukt. Laat Google Agenda in Chrome openstaan voor een eventuele Chrome-proef.
+**Ontvangst op 24 september:** JP meldt in reactie op de vraag naar de Apple Agenda-melding: “melding is binnen gekomen. dit werkt”. Dit is werkelijk gebruikersbewijs van ontvangst, geen simulatie of afleiding uit een API-response. De ingestelde tijd was 09:00 Europe/Amsterdam; een exact waargenomen tijdstip is niet gegeven en wordt niet ingevuld. Er is geen afzonderlijke ontvangstbevestiging voor Google Agenda/Chrome.
+
+Het bestaande proefitem is nog niet opgeruimd. JP is gevraagd of Apple Agenda voor zijn gebruik volstaat en we verdergaan met echte afleveringen, of eerst ook Google Agenda/Chrome moet worden bewezen, zoals het huidige plan noemt. Het eerder voorgestelde korte proefitem om 09:00 is niet aangemaakt. De eventvorm en acceptatie zijn niet stilzwijgend gewijzigd.
 
 | Bewijs | Status |
 |---|---|
@@ -111,7 +113,7 @@ Het bestaande proefitem blijft voor de meting staan. JP is gevraagd of daarnaast
 | Echte API-readback proefitem | Vastgelegd; `useDefault: false`, geen overrides |
 | Apple Agenda: instelling op het proefitem | Dezelfde dag om 09:00 (standaard) |
 | Google Agenda in Chrome: instelling op het proefitem | Geen melding, ondanks all-day agendastandaard 09:00 |
-| Apple Agenda: ontvangen datum/tijd | Open |
+| Apple Agenda: ontvangen datum/tijd | Ontvangst bevestigd door JP op 24 september; exacte tijd niet opgegeven |
 | Google Agenda in Chrome: ontvangen datum/tijd | Open |
 | Blijvende Google-koppeling na containerherstart | Bewezen met dezelfde sessie en nieuwe Google-agendacontrole |
 | Echte refresh-tokenvernieuwing | Nog niet uitgevoerd; taak 3 |

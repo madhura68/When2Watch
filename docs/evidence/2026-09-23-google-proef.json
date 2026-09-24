@@ -73,7 +73,7 @@
     }
   ],
   "notification_receipt": {
-    "apple_calendar": "Nog niet waargenomen",
+    "apple_calendar": "Ontvangst door JP bevestigd op 2026-09-24; exacte ontvangsttijd niet opgegeven",
     "google_calendar_chrome": "Nog niet waargenomen"
   },
   "runtime": {
@@ -107,5 +107,16 @@
     "timed_probe_proposed": true,
     "user_choice": "pending",
     "created": false
+  },
+  "receipt_report": {
+    "reported_on": "2026-09-24",
+    "source": "JP in deze taak",
+    "verbatim": "melding is binnen gekomen. dit werkt",
+    "client": "apple_calendar",
+    "client_basis": "Antwoord op de voorafgaande vraag naar de Apple Agenda-proefmelding",
+    "received_time_local": null,
+    "scheduled_time_local": "09:00",
+    "time_zone": "Europe/Amsterdam",
+    "google_calendar_chrome_confirmed": false
   }
 }
