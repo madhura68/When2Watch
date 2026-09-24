@@ -76,9 +76,12 @@ export function SeriesPanel({data}:{data:Overview}) {
     <div aria-live="polite" aria-atomic="true">{message&&<p className={`notice ${failed?"error":"success"}`}>{message}</p>}</div>
     <div className="section-heading"><h2>Jouw series <span className="muted">{data.shows.length}</span></h2><button disabled={busy||!data.shows.length} onClick={()=>void action()}>{busy?"Bezig…":"Nu synchroniseren"}</button></div>
     {!data.shows.length&&<p className="muted">Je volgt nog geen serie. Zoek hierboven je eerste serie.</p>}
-    {data.shows.map(show=><section className="card" key={show.id}>
+    {data.shows.map(show=><section className="card followed-show" key={show.id}>
+      <div className="show-identity">
       <div className="show-heading"><SeriesPoster src={show.poster}/><div className="show-info"><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
       {show.error&&<p className="notice error">{show.error}</p>}
+      </div>
+      <div className="show-content">
       <details className="series-details"><summary>Over deze serie</summary>
         {show.genres.length>0&&<p className="muted small">{show.genres.join(" · ")}</p>}
         {show.runtimeMinutes!==null&&<p className="muted small">Speelduur: circa {show.runtimeMinutes} min.</p>}
@@ -90,6 +93,7 @@ export function SeriesPanel({data}:{data:Overview}) {
       </li>)}</ul>:<p className="muted">{show.status==="Ended"?"Deze serie is beëindigd; er zijn geen komende uitzenddatums bekend.":"Nog geen volgende uitzenddatum bekend. Je blijft deze serie volgen."}</p>}
       {show.unknownDates>0&&<p className="muted small">{show.unknownDates} aflevering(en) zonder bekende uitzenddatum; daarvoor staat er geen agenda-item.</p>}
       <p className="muted small">Laatste poging: {timestamp(show.lastAttempt,data.timeZone)}<br/>Laatste succes: {timestamp(show.lastSuccess,data.timeZone)}</p>
+      </div>
     </section>)}
     <p className="muted small">De agenda bevat afleveringen vanaf zeven dagen geleden en alle bekende komende datums. Beschikbaarheid in Nederland kan afwijken.</p>
     <p className="muted small">Gegevens: <a href="https://www.tvmaze.com/" target="_blank" rel="noreferrer">TVmaze</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA</a>. Omschrijvingen worden als gewone tekst en waar nodig verkort getoond. Laatste synchronisatie: {timestamp(data.lastRun?.finishedAt??null,data.timeZone)}.</p>
