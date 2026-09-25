@@ -4,40 +4,32 @@ import { parseSnapshot } from "@/server/tvmaze";
 import { SyncService } from "@/server/sync";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { AppError } from "@/server/errors";
-import { testDatabase } from "./database";
+import { legacySqliteDatabase, testDatabase } from "./database";
 import { simulatedCalendar } from "./simulated-calendar";
 import { overview } from "@/server/overview";
 import { serializeCalendarMutation } from "@/server/calendar-mutations";
 
-it("adds detail columns to a populated old database without changing existing records",async()=>{
- const migration="20260924100000_series_details", old=testDatabase(migration);
+it("adds detail columns to a populated old SQLite database without changing existing records",()=>{
+ const migration="20260924100000_series_details", old=legacySqliteDatabase(migration);
  try {
-  await old.db.$executeRawUnsafe(`INSERT INTO User(id,email) VALUES ('old-owner','old@example.test')`);
-  await old.db.$executeRawUnsafe(`INSERT INTO Session(id,sessionToken,userId,expires) VALUES ('old-session','synthetic-session','old-owner',1799999999999)`);
-  await old.db.$executeRawUnsafe(`INSERT INTO Account(id,userId,type,provider,providerAccountId,refresh_token) VALUES ('old-account','old-owner','oauth','google','old-google','synthetic-token')`);
-  await old.db.$executeRawUnsafe(`INSERT INTO CalendarSettings(userId,calendarId,summary,timeZone,accessRole,defaultRemindersJson) VALUES ('old-owner','chosen@example.test','When2Watch','Europe/Amsterdam','owner','[]')`);
-  await old.db.$executeRawUnsafe(`INSERT INTO TrackedShow(id,userId,tvmazeId,title,sourceUrl,status) VALUES ('old-show','old-owner',45039,'Slow Horses','https://www.tvmaze.com/shows/45039','Running')`);
-  await old.db.$executeRawUnsafe(`INSERT INTO Episode(id,trackedShowId,sourceId,title,airdate,sourceUrl) VALUES ('old-episode','old-show',3643507,'Resurrection','2026-09-30','https://www.tvmaze.com/episodes/3643507')`);
-  await old.db.$executeRawUnsafe(`INSERT INTO CalendarEventLink(id,episodeId,calendarId,eventId,status,desiredJson,confirmedDesiredHash) VALUES ('old-link','old-episode','chosen@example.test','existing-google-event','synced','{}','existing-hash')`);
+  old.sqlite.exec(`INSERT INTO User(id,email) VALUES ('old-owner','old@example.test')`);
+  old.sqlite.exec(`INSERT INTO Session(id,sessionToken,userId,expires) VALUES ('old-session','synthetic-session','old-owner',1799999999999)`);
+  old.sqlite.exec(`INSERT INTO Account(id,userId,type,provider,providerAccountId,refresh_token) VALUES ('old-account','old-owner','oauth','google','old-google','synthetic-token')`);
+  old.sqlite.exec(`INSERT INTO CalendarSettings(userId,calendarId,summary,timeZone,accessRole,defaultRemindersJson) VALUES ('old-owner','chosen@example.test','When2Watch','Europe/Amsterdam','owner','[]')`);
+  old.sqlite.exec(`INSERT INTO TrackedShow(id,userId,tvmazeId,title,sourceUrl,status) VALUES ('old-show','old-owner',45039,'Slow Horses','https://www.tvmaze.com/shows/45039','Running')`);
+  old.sqlite.exec(`INSERT INTO Episode(id,trackedShowId,sourceId,title,airdate,sourceUrl) VALUES ('old-episode','old-show',3643507,'Resurrection','2026-09-30','https://www.tvmaze.com/episodes/3643507')`);
+  old.sqlite.exec(`INSERT INTO CalendarEventLink(id,episodeId,calendarId,eventId,status,desiredJson,confirmedDesiredHash) VALUES ('old-link','old-episode','chosen@example.test','existing-google-event','synced','{}','existing-hash')`);
   const tables=["User","Session","Account","CalendarSettings","TrackedShow","Episode","CalendarEventLink"];
   const before:Record<string,Record<string,unknown>[]>={};
-  for(const table of tables)before[table]=await old.db.$queryRawUnsafe(`SELECT * FROM "${table}"`);
+  for(const table of tables)before[table]=old.all(`SELECT * FROM "${table}"`);
   old.applyMigration(migration);
   for(const table of tables){
    const columns=Object.keys(before[table][0]).map(c=>`"${c}"`).join(",");
-   expect(await old.db.$queryRawUnsafe(`SELECT ${columns} FROM "${table}"`)).toEqual(before[table]);
+   expect(old.all(`SELECT ${columns} FROM "${table}"`)).toEqual(before[table]);
   }
-  const detailColumns={summaryText:true,genresJson:true,runtimeMinutes:true} as const;
-  expect(await old.db.trackedShow.findUnique({where:{id:"old-show"},select:detailColumns})).toEqual({summaryText:null,genresJson:"[]",runtimeMinutes:null});
-  expect(await old.db.episode.findUnique({where:{id:"old-episode"}})).toMatchObject({summaryText:null});
-  await old.db.trackedShow.update({where:{id:"old-show"},data:{summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45},select:detailColumns});
-  await old.db.episode.update({where:{id:"old-episode"},data:{summaryText:"Persisted episode"}});
-  await old.db.$disconnect();const reopened=old.reopen();
-  try {
-   expect(await reopened.trackedShow.findUnique({where:{id:"old-show"},select:detailColumns})).toEqual({summaryText:"Persisted synopsis",genresJson:'["Drama"]',runtimeMinutes:45});
-   expect(await reopened.episode.findUnique({where:{id:"old-episode"}})).toMatchObject({summaryText:"Persisted episode"});
-  }finally{await reopened.$disconnect();}
- }finally{await old.close();}
+  expect(old.all(`SELECT summaryText,genresJson,runtimeMinutes FROM TrackedShow`)).toEqual([{summaryText:null,genresJson:"[]",runtimeMinutes:null}]);
+  expect(old.all(`SELECT summaryText FROM Episode`)).toEqual([{summaryText:null}]);
+ }finally{old.close();}
 });
 
 describe("Episode synchronization with real SQLite and simulated providers",()=>{

@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {probeAttemptReady, probeAuthFailure} from "../scripts/google-probe-guards";
+import {isolatedProbeDatabase, probeAttemptReady, probeAuthFailure} from "../scripts/google-probe-guards";
 
 const initial={id:"attempt",sessionHash:null,expires:2000};
 it("requires a live cookie-bound initial attempt before OAuth can start",()=>{
@@ -23,4 +23,13 @@ it("classifies OAuth failures without copying provider error data or secrets",()
   expect(probeAuthFailure({error:new Error("invalid_grant (a secret could follow)")})).toBe("invalid_grant");
   expect(probeAuthFailure({error:new Error("something with access_token=private")})).toBe("unknown");
   expect(probeAuthFailure(null)).toBe("unknown");
+});
+it("accepts only a separate, explicitly named PostgreSQL probe database",()=>{
+  const production="postgresql://when2watch_app:x@db:5432/when2watch";
+  expect(isolatedProbeDatabase("postgresql://probe:x@db:5432/when2watch_trial",production)).toBe("postgresql://probe:x@db:5432/when2watch_trial");
+  expect(isolatedProbeDatabase("postgresql://postgres:x@127.0.0.1:55432/w2w_probe_b0",undefined)).toContain("w2w_probe_b0");
+  expect(()=>isolatedProbeDatabase(undefined,production)).toThrow(/probe database/);
+  expect(()=>isolatedProbeDatabase("file:/tmp/probe.db",production)).toThrow(/PostgreSQL/);
+  expect(()=>isolatedProbeDatabase("postgresql://other:y@db:5432/when2watch",production)).toThrow(/production/);
+  expect(()=>isolatedProbeDatabase("postgresql://probe:x@db:5432/scratch",production)).toThrow(/probe or trial/);
 });

@@ -1,6 +1,6 @@
 # IDEA-219 P1 — preflight (T-17)
 
-Status 25 september 2026: **bron en host vastgesteld; SQLite-backup/typeninspectie en echte Google-proef nog open** (zie §5).
+Status 25 september 2026: **bron, host en SQLite-opslagtypen vastgesteld; echte Google-proef nog open** (zie §5).
 
 ## 1. Bron
 
@@ -37,17 +37,33 @@ Manifest v1, privé (map 0700, bestanden 0600), nooit in Git/CI:
 
 ```json
 { "version": 1, "runId": "<uuid>", "exportedAt": "<ISO UTC>",
-  "schemaSha256": "<sha van prisma/schema.prisma van de bronrelease>",
-  "migrations": ["<9 namen>"], "sourceSha256": "<sha van backupbestand>",
-  "tables": { "<Model>": { "count": 0, "primaryKey": ["id"], "rows": [ { "<kolom>": { "t": "text|int|real|null|bool|datetime", "v": "..." } } ] } } }
+  "schemaSignature": "<sha256 van de tabel-DDL, gelijk aan de gearchiveerde migraties>",
+  "migrations": ["<9 namen; checksums gecontroleerd tegen prisma/legacy-sqlite>"], "sourceSha256": "<sha256 van het backupbestand>",
+  "tables": { "<Model>": { "count": 0, "key": ["id"], "rows": [ { "<veld>": "tekst | getal | true/false | null | {\"$date\": \"<ISO ms Z>\"}" } ] } } }
 ```
 
-Conversieregels (definitief na de typeninspectie van §5): DateTime-kolommen accepteren alleen SQLite-INTEGER als Unix-milliseconden of TEXT in het vaste formaat `YYYY-MM-DD HH:MM:SS[.fff]` (UTC, uit `DEFAULT CURRENT_TIMESTAMP`) of ISO-8601 met `Z`; ieder ander opslagtype is een exportfout. Booleans alleen 0/1. Datumstrings (`airdate`, `date`, `lastDate`) en JSON-tekst ongewijzigd als tekst. Null en lege string blijven verschillend. `_prisma_migrations` wordt nooit geëxporteerd.
+Implementatie: `scripts/migration/manifest.ts`, `sqlite-export.ts`. Conversieregels (bevestigd door de typeninspectie van §5): DateTime alleen uit SQLite-INTEGER (Unix-milliseconden), TEXT `YYYY-MM-DD HH:MM:SS[.fff]` (UTC, uit `DEFAULT CURRENT_TIMESTAMP`) of ISO-8601 met `Z`; ieder ander opslagtype is een exportfout. Booleans alleen 0/1 of `true`/`false`. Int alleen veilige gehele getallen. Datumstrings (`airdate`, `date`, `lastDate`) en JSON-tekst ongewijzigd als tekst. Null en lege string blijven verschillend. `_prisma_migrations` wordt nooit geëxporteerd. Een bron met afwijkend schema, onvoltooide migratie, integriteits- of FK-fout wordt geweigerd; er wordt niets gerepareerd.
 
-## 5. Open punten
+## 5. SQLite-backup en opslagtypen (15:31 UTC)
 
-1. **Consistente SQLite-backup + typeninspectie** (backup-API, `integrity_check`, `foreign_key_check`, `typeof`-verdeling per kolom zonder waarden). Het commando staat klaar in [het runbook](../runbooks/idea-219-google-proef.md#sqlite-preflightbackup); de uitvoering vanuit de agentsessie werd door de permissielaag geweigerd (productie-read) en wacht op JP.
-2. **Echte Google-proef** met `scripts/prove-limited-calendar.ts`: vereist een apart proef-OAuth-client, een proefaccount en JP's toestemmingsklik. Uitkomst nu: **BLOCKED — not executed: authorize**. Een fixture-run geldt niet als proef.
+Consistente kopie via de SQLite backup-API: `/srv/apps/when2watch/db-backups/idea219-preflight-20260925T153129Z.db`, mode 0600, sha256 `c02bc1f8182f5ba0b6d34a21308e0a099582e09d9110195ce8299f54143adb31`. `journal_mode=delete`, `integrity_check=ok`, 0 foreign-key-overtredingen. `_prisma_migrations`: alle 9 archiefmigraties voltooid, geen rolled back.
+
+| Tabel | Rijen | Tabel | Rijen |
+|---|---|---|---|
+| User | 1 | Episode | 469 |
+| Account | 1 | CalendarEventLink | 23 |
+| Session | 2 | SyncRun | 28 |
+| VerificationToken | 0 | OAuthClientConfig | 1 |
+| UserPreferences | 1 | Installation | 1 |
+| CalendarSettings | 1 | GoogleConnectionAttempt | 0 |
+| Probe | 1 | CalendarCreationAttempt | 0 |
+| TrackedShow | 22 | | |
+
+Opslagtypen: **alle gevulde DateTime-kolommen zijn INTEGER (Unix-milliseconden)**, ook kolommen met `DEFAULT CURRENT_TIMESTAMP` (Prisma schrijft de waarde zelf). Alle booleans INTEGER 0/1. Nullable tekstkolommen bevatten alleen `text` of `null`. Er is dus geen tekst-datum in de productiebron; de importer ondersteunt die vorm wel (getest) maar hoeft hem hier niet te gebruiken.
+
+## 5b. Open punt
+
+**Echte Google-proef** met `scripts/prove-limited-calendar.ts`: vereist een apart proef-OAuth-client, een proefaccount en JP's toestemmingsklik ([runbook](../runbooks/idea-219-google-proef.md)). Uitkomst nu: **BLOCKED — not executed: authorize**. Een fixture-run geldt niet als proef. Dit blokkeert P9/R2, niet de providerwissel van R1.
 
 ## 6. Meetplan downtime (uitvoering in P3-repetitie)
 

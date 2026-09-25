@@ -1,9 +1,8 @@
-generator client {
-  provider = "prisma-client-js"
-}
+// Archived SQLite schema of release 53a8a2f (schema sha256 e158fd1d…a1ba).
+// Only for the legacy export/rollback basis; the active client is PostgreSQL.
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -221,14 +220,4 @@ model CalendarCreationAttempt {
   createdAt    DateTime @default(now())
   owner        User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   @@index([ownerId, createdAt])
-}
-
-// Technical record of the one-time SQLite→PostgreSQL import (IDEA-219 R1); not an application model.
-model LegacyImportRun {
-  id              String   @id @default("legacy-sqlite")
-  runId           String
-  manifestSha256  String
-  sourceSha256    String
-  schemaSignature String
-  importedAt      DateTime @default(now())
 }

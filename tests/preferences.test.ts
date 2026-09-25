@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { getPreferences, savePreferences } from "@/server/preferences";
-import { testDatabase } from "./database";
+import { legacySqliteDatabase, testDatabase } from "./database";
 
 let storage: ReturnType<typeof testDatabase> | undefined;
 afterEach(async () => { await storage?.close(); });
@@ -29,16 +29,17 @@ it("persists a valid timezone independently without resetting the chosen horizon
   expect(await savePreferences("owner", { timeZone: "America/Los_Angeles" }, storage.db)).toEqual({ agendaMonths: 3, timeZone: "America/Los_Angeles" });
 });
 
-it("adds preferences to a populated old database while preserving owner, episodes and event mappings", async () => {
-  const migration = "20260924120000_user_preferences"; storage = testDatabase(migration); const db = storage.db;
-  await db.user.create({ data: { id: "existing-owner", email: "owner@example.test" } });
-  await db.$executeRaw`INSERT INTO TrackedShow(id,userId,tvmazeId,title,status,sourceUrl) VALUES ('old-show','existing-owner',45039,'Slow Horses','Running','https://www.tvmaze.com/shows/45039')`;
-  const show = {id:"old-show"};
-  const episode = await db.episode.create({ data: { trackedShowId: show.id, sourceId: 123, title: "Existing", airdate: "2026-09-30", sourceUrl: "https://www.tvmaze.com/episodes/123" } });
-  await db.calendarEventLink.create({ data: { episodeId: episode.id, calendarId: "test", eventId: "unchanged", status: "synced", desiredJson: "{}", confirmedDesiredHash: "unchanged-hash" } });
-  const before = { users: await db.user.findMany(), shows: await db.$queryRaw`SELECT * FROM TrackedShow`, episodes: await db.episode.findMany(), links: await db.calendarEventLink.findMany() };
-  storage.applyMigration(migration);
-  expect({ users: await db.user.findMany(), shows: await db.$queryRaw`SELECT * FROM TrackedShow`, episodes: await db.episode.findMany(), links: await db.calendarEventLink.findMany() }).toEqual(before);
-  expect(await getPreferences("existing-owner", db)).toEqual({ agendaMonths: 1, timeZone: "Europe/Amsterdam" });
-  expect(await db.userPreferences.count()).toBe(0);
+it("adds preferences to a populated old SQLite database while preserving owner, episodes and event mappings", () => {
+  const migration = "20260924120000_user_preferences", legacy = legacySqliteDatabase(migration);
+  try {
+    legacy.sqlite.exec(`INSERT INTO User(id,email) VALUES ('existing-owner','owner@example.test')`);
+    legacy.sqlite.exec(`INSERT INTO TrackedShow(id,userId,tvmazeId,title,status,sourceUrl) VALUES ('old-show','existing-owner',45039,'Slow Horses','Running','https://www.tvmaze.com/shows/45039')`);
+    legacy.sqlite.exec(`INSERT INTO Episode(id,trackedShowId,sourceId,title,airdate,sourceUrl) VALUES ('old-episode','old-show',123,'Existing','2026-09-30','https://www.tvmaze.com/episodes/123')`);
+    legacy.sqlite.exec(`INSERT INTO CalendarEventLink(id,episodeId,calendarId,eventId,status,desiredJson,confirmedDesiredHash) VALUES ('old-link','old-episode','test','unchanged','synced','{}','unchanged-hash')`);
+    const tables = ["User", "TrackedShow", "Episode", "CalendarEventLink"], read = () => tables.map(table => legacy.all(`SELECT * FROM "${table}"`));
+    const before = read();
+    legacy.applyMigration(migration);
+    expect(read()).toEqual(before);
+    expect(legacy.all(`SELECT count(*) AS n FROM UserPreferences`)).toEqual([{ n: 0 }]);
+  } finally { legacy.close(); }
 });

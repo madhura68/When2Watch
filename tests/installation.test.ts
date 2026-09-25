@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { importLegacyInstallation, ownerInstallation, publicInstallation } from "@/server/installation";
-import { testDatabase } from "./database";
+import { legacySqliteDatabase, testDatabase } from "./database";
 
 const legacy = { allowedEmail: "owner@example.test", clientId: "old-client", clientSecret: "never-expose-secret", calendarId: "chosen@example.test" };
 let storage: ReturnType<typeof testDatabase>;
@@ -55,17 +55,20 @@ it("authorizes by internal owner and returns settings without secrets or tokens"
 
 it("adds installation tables without changing legacy owners, sessions, credentials or event mappings", async () => {
   const migration = "20260924122000_owner_configuration";
-  storage = testDatabase(migration); const db = storage.db;
-  await db.user.create({data:{id:"owner",email:legacy.allowedEmail}});
-  await db.$executeRaw`INSERT INTO Account (id,userId,type,provider,providerAccountId,refresh_token) VALUES ('account','owner','oauth','google','subject','preserved-token')`;
-  await db.session.create({data:{userId:"owner",sessionToken:"preserved-session",expires:new Date(Date.now()+3600000)}});
-  await db.$executeRaw`INSERT INTO TrackedShow(id,userId,tvmazeId,title,status,sourceUrl) VALUES ('old-show','owner',45039,'Preserved','Running','https://example.test')`;
-  const show = {id:"old-show"};
-  const episode = await db.episode.create({data:{trackedShowId:show.id,sourceId:1,sourceUrl:"https://example.test/1",airdate:"2026-09-30"}});
-  await db.calendarEventLink.create({data:{episodeId:episode.id,calendarId:"old",eventId:"preserved",desiredJson:"{}",status:"synced"}});
-  const before = {users:await db.user.findMany(),sessions:await db.session.findMany(),shows:await db.$queryRaw`SELECT * FROM TrackedShow ORDER BY id`,episodes:await db.episode.findMany(),links:await db.calendarEventLink.findMany()};
-  storage.applyMigration(migration);
-  expect({users:await db.user.findMany(),sessions:await db.session.findMany(),shows:await db.$queryRaw`SELECT * FROM TrackedShow ORDER BY id`,episodes:await db.episode.findMany(),links:await db.calendarEventLink.findMany()}).toEqual(before);
-  expect((await db.account.findUniqueOrThrow({where:{id:"account"}})).refresh_token).toBe("preserved-token");
-  expect(await db.installation.count()).toBe(0);
+  const old = legacySqliteDatabase(migration);
+  try {
+    old.sqlite.exec(`INSERT INTO User(id,email) VALUES ('owner','${legacy.allowedEmail}')`);
+    old.sqlite.exec(`INSERT INTO Account (id,userId,type,provider,providerAccountId,refresh_token) VALUES ('account','owner','oauth','google','subject','preserved-token')`);
+    old.sqlite.exec(`INSERT INTO Session(id,sessionToken,userId,expires) VALUES ('session','preserved-session','owner',${Date.now()+3600000})`);
+    old.sqlite.exec(`INSERT INTO TrackedShow(id,userId,tvmazeId,title,status,sourceUrl) VALUES ('old-show','owner',45039,'Preserved','Running','https://example.test')`);
+    old.sqlite.exec(`INSERT INTO Episode(id,trackedShowId,sourceId,sourceUrl,airdate) VALUES ('old-episode','old-show',1,'https://example.test/1','2026-09-30')`);
+    old.sqlite.exec(`INSERT INTO CalendarEventLink(id,episodeId,calendarId,eventId,desiredJson,status) VALUES ('old-link','old-episode','old','preserved','{}','synced')`);
+    const tables = ["User","Session","TrackedShow","Episode","CalendarEventLink"], read = () => tables.map(table => old.all(`SELECT * FROM "${table}" ORDER BY id`));
+    const before = read(), columns = Object.keys(old.all(`SELECT * FROM Account`)[0]).map(c => `"${c}"`).join(",");
+    const account = old.all(`SELECT ${columns} FROM Account`);
+    old.applyMigration(migration);
+    expect(read()).toEqual(before);
+    expect(old.all(`SELECT ${columns} FROM Account`)).toEqual(account);
+    expect(old.all(`SELECT count(*) AS n FROM Installation`)).toEqual([{n:0}]);
+  } finally { old.close(); }
 });
