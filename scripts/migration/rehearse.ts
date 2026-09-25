@@ -22,7 +22,8 @@ async function main() {
   const phase = process.argv.find(arg => arg.startsWith("--phase="))?.slice(8);
   if (phase !== "migrate" && phase !== "verify") throw Error("Use --phase=migrate or --phase=verify.");
   const config = readConfig(), phasesMs: Record<string, number> = {};
-  const db = new PrismaClient({ datasourceUrl: process.env.W2W_VERIFY_DATABASE_URL ?? config.targetDatabaseUrl });
+  // W2W_VERIFY_DATABASE_URL (e.g. a restored dump) is honoured only when verifying, never for an import.
+  const db = new PrismaClient({ datasourceUrl: phase === "verify" ? process.env.W2W_VERIFY_DATABASE_URL ?? config.targetDatabaseUrl : config.targetDatabaseUrl });
   try {
     let manifest: Manifest, imported: unknown;
     if (phase === "migrate") {

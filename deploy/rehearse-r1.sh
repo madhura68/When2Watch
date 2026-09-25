@@ -47,9 +47,9 @@ echo "backup_ms $(( $(ms) - t ))"
 
 t=$(ms); docker run --rm --network "$NET" --read-only --env-file "$R/private/.env.migrate" when2watch:r1-rehearsal-$SHA sh scripts/migrate.sh >/dev/null; echo "migrate_ms $(( $(ms) - t ))"
 
-python3 - "$R/private" "$MIG" <<'PY'
+MIG="$MIG" python3 - "$R/private" <<'PY'
 import json, sys, uuid, os
-d, url = sys.argv[1], sys.argv[2]
+d, url = sys.argv[1], os.environ["MIG"]
 json.dump({"sourceSqlite":"/private/source.db","manifest":"/private/out/manifest.json","runId":str(uuid.uuid4()),"targetDatabaseUrl":url}, open(f"{d}/config.json","w"))
 os.chmod(f"{d}/config.json",0o600)
 PY

@@ -56,3 +56,5 @@ jobs:
         run: npm run test:http
       - name: Production Docker image
         run: docker build -t when2watch:ci .
+      - name: Operator tools image (migration and readback)
+        run: docker build --target tools -t when2watch-tools:ci .

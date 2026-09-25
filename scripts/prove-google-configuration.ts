@@ -46,13 +46,13 @@ type State = {
   event?: { source: string; target: string; date: string; targetConfirmed?: boolean; sourceDeleted?: boolean; targetDeleted?: boolean };
   observations: Record<string, unknown>[];
 };
-const state: State = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : {
+const freshState = !existsSync(statePath);
+const state: State = !freshState ? JSON.parse(readFileSync(statePath, "utf8")) : {
   secret: randomBytes(32).toString("hex"), csrf: randomBytes(32).toString("hex"), connections: {}, calendars: {}, observations: [],
 };
 function save() { writeFileSync(`${statePath}.tmp`, JSON.stringify(state), { mode: 0o600 }); renameSync(`${statePath}.tmp`, statePath); }
 function observe(kind: string, detail: Record<string, unknown> = {}) { state.observations.push({ at: new Date().toISOString(), kind, ...detail }); save(); }
 save();
-const freshState = !existsSync(statePath);
 execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], { env: { ...process.env, DATABASE_URL: probeUrl, RUST_LOG: "info" }, stdio: "pipe" });
 const db = new PrismaClient({ datasourceUrl: probeUrl });
 if (freshState && await db.user.count() > 0) throw Error("Refusing an existing probe database without probe state.");

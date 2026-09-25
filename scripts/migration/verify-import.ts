@@ -6,12 +6,17 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { applicationModels, fromDatabase, keyOf, modelInfo, readConfig, safeError, type Manifest, type ModelName, type Row } from "./manifest";
+import { applicationModels, fromDatabase, keyOf, manifestSha256, modelInfo, readConfig, safeError, validateSource, type Manifest, type ModelName, type Row } from "./manifest";
 
 export type VerifyReport = { passed: boolean; tableCounts: Record<string, number>; differenceCounts: Record<string, number>; durationMs: number };
 
 export async function verifyEquivalent(db: PrismaClient, manifest: Manifest): Promise<VerifyReport> {
   const started = Date.now(), tableCounts: Record<string, number> = {}, differenceCounts: Record<string, number> = {};
+  validateSource(manifest);
+  // Compare only against the manifest that was actually imported into this target.
+  const run = await db.legacyImportRun.findUnique({ where: { id: "legacy-sqlite" } });
+  if (!run) throw Error("Target was not imported by the migrator.");
+  if (run.runId !== manifest.runId || run.manifestSha256 !== manifestSha256(manifest)) throw Error("Target was imported from a different run or manifest.");
   const target = {} as Record<ModelName, Row[]>;
   for (const name of applicationModels) {
     const rows = await (db as unknown as Record<string, { findMany(): Promise<Record<string, unknown>[]> }>)[modelInfo(name).delegate].findMany();

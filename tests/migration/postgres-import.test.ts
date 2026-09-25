@@ -115,4 +115,14 @@ describe("PostgreSQL import", () => {
     await expect(importEmptyTarget(other, manifest)).rejects.toThrow(/not empty/i);
     expect(await other.legacyImportRun.count()).toBe(0);
   });
+
+  it("verifies only against the manifest that was actually imported, after validating it", async () => {
+    const manifest = exportSqlite(source(), { runId }), db = target();
+    await importEmptyTarget(db, manifest);
+    const other = clone(manifest); other.runId = "0e4b9c2a-1111-4c8e-9d52-0b1f3a2e4c11";
+    await expect(verifyEquivalent(db, other)).rejects.toThrow(/different run|not imported/i);
+    const duplicated = clone(manifest); duplicated.tables.Episode.rows.push({ ...duplicated.tables.Episode.rows[0] }); duplicated.tables.Episode.count++;
+    await expect(verifyEquivalent(db, duplicated)).rejects.toThrow(/duplicate/i);
+    await expect(verifyEquivalent(target(), manifest)).rejects.toThrow(/not imported/i);
+  });
 });

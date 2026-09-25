@@ -38,7 +38,7 @@ export function grantStatus(granted: string | undefined) {
   return { narrow: missing.length === 0 && broader.length === 0, missing, broader };
 }
 
-type ProbeCalendar = { id?: string; name: string; phase: "sending" | "ready" | "uncertain"; nonce?: string };
+type ProbeCalendar = { id?: string; name: string; phase: "sending" | "ready" | "uncertain"; nonce?: string; step?: string; beforeIds?: string[] };
 export function assertProbeCalendar(state: { calendars: ProbeCalendar[] }, calendarId: string, prefix: string) {
   const calendar = state.calendars.find(item => item.id === calendarId && item.phase === "ready");
   if (!calendar) throw Error("Refusing mutation: calendar was not created by this probe.");
@@ -68,11 +68,19 @@ export function sanitizeShape(value: unknown, key = ""): unknown {
   return keepValues.has(key) ? value : "<string>";
 }
 
+/** A create whose POST was sent is never sent again: prove it from the list snapshot or stay uncertain. */
+export function resumeSentCreate(entry: { name: string; nonce?: string; beforeIds?: string[] }, after: ListedCalendar[]) {
+  if (!entry.beforeIds || !entry.nonce) throw Error("No pre-POST list snapshot recorded; resolve this sent create manually.");
+  return reconcileLostCalendarCreate({ name: entry.name, nonce: entry.nonce }, entry.beforeIds, after);
+}
+
 export const requiredSteps = ["authorize", "grant-narrow", "list-paginated", "calendar-created", "event-crud", "calendar-renamed", "token-refresh", "lost-create-reconciled", "legacy-readonly-checked"];
 export function probeOutcome(results: { step: string; ok: boolean; cause?: string }[]) {
-  const failed = results.find(result => !result.ok);
+  // A retried step is judged on its latest attempt; earlier failures stay in the history.
+  const latest = [...new Map(results.map(result => [result.step, result])).values()];
+  const failed = latest.find(result => !result.ok);
   if (failed) return { status: "FAILED" as const, cause: `${failed.step}: ${failed.cause ?? "unknown"}` };
-  const missing = requiredSteps.find(step => !results.some(result => result.step === step));
+  const missing = requiredSteps.find(step => !latest.some(result => result.step === step));
   return missing ? { status: "BLOCKED" as const, cause: `not executed: ${missing}` } : { status: "PASSED" as const };
 }
 
@@ -128,6 +136,24 @@ async function main() {
     } while (pageToken && pages < 500);
     return { items, pages };
   }
+  /** POST /calendars exactly once per step; on resume a sent create is reconciled, never repeated. */
+  async function createOnce(step: string, name: string, discardResponse: boolean) {
+    const sent = state.calendars.find(item => item.step === step);
+    if (sent?.phase === "ready") return sent;
+    if (sent) {
+      const outcome = resumeSentCreate(sent, (await listAll(`${step}-resume`, "250")).items);
+      if (outcome.status !== "adopted") { sent.phase = "uncertain"; save(); throw Error(`sent create not provable: ${outcome.status}; not re-sending`); }
+      sent.id = outcome.id; sent.phase = "ready"; save(); return sent;
+    }
+    const beforeIds = (await listAll(`${step}-before`, "250")).items.map(item => item.id), nonce = randomUUID();
+    const entry: ProbeCalendar = { name, phase: "sending", nonce, step, beforeIds }; state.calendars.push(entry); save();
+    const response = await api("calendars", { method: "POST", body: JSON.stringify({ summary: name, description: `When2Watch P1-proef nonce ${nonce}`, timeZone: "Europe/Amsterdam" }) }, discardResponse ? undefined : "calendar-create").catch(() => null);
+    if (!discardResponse && response?.status === 200 && typeof response.body?.id === "string") { entry.id = response.body.id; entry.phase = "ready"; save(); return entry; }
+    // Lost or discarded response: Google may have written. Prove it from the list; never POST again.
+    const outcome = resumeSentCreate(entry, (await listAll(`${step}-after`, "250")).items);
+    if (outcome.status !== "adopted") { entry.phase = "uncertain"; save(); throw Error(`create not provable: ${outcome.status}`); }
+    entry.id = outcome.id; entry.phase = "ready"; save(); return entry;
+  }
   const step = async (name: string, run: () => Promise<unknown>) => {
     if (state.results.some(result => result.step === name && result.ok)) return;
     try { record(name, true, undefined, await run()); } catch (error) { record(name, false, (error as Error).message); throw error; }
@@ -142,16 +168,12 @@ async function main() {
     });
     await step("list-paginated", async () => { const { items, pages } = await listAll("calendar-list"); if (pages < 2 && items.length > 1) throw Error("pagination not exercised"); return { pages, count: items.length }; });
     await step("calendar-created", async () => {
-      const name = `${config.calendarPrefix} ${new Date().toISOString().slice(0, 10)} vrije naam`, nonce = randomUUID();
-      const entry: ProbeCalendar = { name, phase: "sending", nonce }; state.calendars.push(entry); save();
-      const { status, body } = await api("calendars", { method: "POST", body: JSON.stringify({ summary: name, description: `When2Watch P1-proef nonce ${nonce}`, timeZone: "Europe/Amsterdam" }) }, "calendar-create");
-      if (status !== 200 || typeof body?.id !== "string") throw Error(`create ${status}`);
-      entry.id = body.id; entry.phase = "ready"; save();
+      const entry = await createOnce("calendar-created", `${config.calendarPrefix} ${new Date().toISOString().slice(0, 10)} vrije naam`, false);
       const listed = (await listAll("after-create", "250")).items.some(item => item.id === entry.id);
       if (!listed) throw Error("created calendar missing from calendarList");
       return { listed };
     });
-    const calendarId = state.calendars.find(item => item.phase === "ready")!.id!;
+    const calendarId = state.calendars.find(item => item.step === "calendar-created" && item.phase === "ready")!.id!;
     await step("event-crud", async () => {
       assertProbeCalendar(state, calendarId, config.calendarPrefix);
       const id = createHash("sha256").update(`${calendarId}:p1`).digest("hex").slice(0, 32).replace(/[^a-v0-9]/g, "a");
@@ -185,21 +207,15 @@ async function main() {
       return { readAfterRefresh: status, refreshedGrant: grantStatus(refreshed.scope) };
     });
     await step("lost-create-reconciled", async () => {
-      const before = (await listAll("before-lost", "250")).items.map(item => item.id);
-      const name = `${config.calendarPrefix} onzeker`, nonce = randomUUID();
-      const entry: ProbeCalendar = { name, phase: "sending", nonce }; state.calendars.push(entry); save();
-      await api("calendars", { method: "POST", body: JSON.stringify({ summary: name, description: `When2Watch P1-proef nonce ${nonce}`, timeZone: "Europe/Amsterdam" }) });
-      // Response deliberately discarded: simulate a timeout after Google may have written. No second POST.
-      const outcome = reconcileLostCalendarCreate({ name, nonce }, before, (await listAll("after-lost", "250")).items);
-      if (outcome.status !== "adopted") throw Error(`lost create not provable: ${outcome.status}`);
-      entry.id = outcome.id; entry.phase = "ready"; save();
-      return { outcome: outcome.status, postsSent: 1 };
+      // Response deliberately discarded: simulates a timeout after Google may have written.
+      await createOnce("lost-create-reconciled", `${config.calendarPrefix} onzeker`, true);
+      return { outcome: "adopted", postsSent: 1 };
     });
     await step("legacy-readonly-checked", async () => {
       if (!config.existingCalendarId) throw Error("configure existingCalendarId (read-only check of a non-app calendar)");
       const entry = await api(`users/me/calendarList/${encodeURIComponent(config.existingCalendarId)}`, {}, "legacy-calendarlist");
       const events = await api(`calendars/${encodeURIComponent(config.existingCalendarId)}/events?maxResults=1`, {}, "legacy-events-read");
-      return { calendarListStatus: entry.status, eventsReadStatus: events.status, writableWithLimitedScopes: events.status === 200 };
+      return { calendarListStatus: entry.status, eventsReadStatus: events.status, eventsReadableWithLimitedScopes: events.status === 200 };
     });
     console.log(JSON.stringify(probeOutcome(state.results)));
   }

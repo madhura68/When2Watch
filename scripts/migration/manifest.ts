@@ -88,3 +88,21 @@ export function safeError(error: unknown) {
   const value = error as { code?: string; clientVersion?: string; message?: string };
   return value?.clientVersion ? `Database error ${value.code ?? "without code"}` : value?.message ?? "Unknown error";
 }
+
+export function validateSource(manifest: Manifest) {
+  if (manifest?.version !== 1 || !/^[0-9a-f-]{36}$/.test(manifest.runId ?? "")) throw Error("Unsupported manifest version or run ID.");
+  if (manifest.schemaSignature !== archivedSchemaSignature()) throw Error("Manifest schema signature is unknown.");
+  if (JSON.stringify(manifest.migrations) !== JSON.stringify(archivedMigrations().map(item => item.name))) throw Error("Manifest schema migrations are unknown.");
+  if (JSON.stringify(Object.keys(manifest.tables ?? {}).sort()) !== JSON.stringify([...applicationModels].sort())) throw Error("Manifest must contain exactly the 15 application tables.");
+  for (const name of applicationModels) {
+    const table = manifest.tables[name], info = modelInfo(name);
+    if (!Array.isArray(table.rows) || table.count !== table.rows.length) throw Error(`${name}: row count does not match the manifest count.`);
+    const keys = new Set<string>();
+    for (const row of table.rows) {
+      if (JSON.stringify(Object.keys(row).sort()) !== JSON.stringify(info.fields.map(field => field.name).sort())) throw Error(`${name}: row fields differ from the model.`);
+      const key = keyOf(info, row);
+      if (keys.has(key)) throw Error(`${name}: duplicate key in manifest.`);
+      keys.add(key);
+    }
+  }
+}

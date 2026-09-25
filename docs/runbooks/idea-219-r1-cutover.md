@@ -33,9 +33,9 @@ Bewezen vooraf: repetitie op een privékopie zonder egress ([bewijs](../evidence
 ## 3. Starten achter onderhoud en dry-run
 
 1. Start de nieuwe web-container eerst zonder proxy: `docker run -d --name w2w-r1-check --network when2watch_database --read-only --tmpfs /tmp --user 1000:1000 --env-file .env when2watch:<sha>` → `/api/health` 200 (start weigert een niet-PostgreSQL-DSN of ongemigreerd schema). Daarna `--phase=verify` opnieuw: nog steeds 0 verschillen.
-2. Readback-dry-run (alleen GET naar Google, token alleen in geheugen, geen DB-writes): tools-container met egress én databasenetwerk, `DATABASE_URL` = app-DSN via `--env-file`:
-   `npx tsx scripts/migration/readback.ts --authorized-readback`
-   Verwacht `missing=0`, `foreign=0`, `remoteChanged=0`; `sourceChanged` zijn TVmaze-wijzigingen sinds de laatste sync en worden bij de eerste sync verwerkt (apart verklaren, geen migratie-effect). Exitcode 2 = eerst onderzoeken.
+2. Readback-dry-run (alleen GET naar Google, token alleen in geheugen, geen DB-writes): tools-container met egress én databasenetwerk, `DATABASE_URL` = app-DSN via `--env-file`. `docker run` koppelt één netwerk bij aanmaak, dus:
+   `docker create --name w2w-readback --env-file .env when2watch-tools:<sha> npx tsx scripts/migration/readback.ts --authorized-readback && docker network connect when2watch_database w2w-readback && docker start -a w2w-readback; docker rm w2w-readback`
+   Verwacht `missing=0`, `foreign=0`, `remoteChanged=0`, `pending=0`, `otherCalendar=0`; `sourceChanged` zijn TVmaze-wijzigingen sinds de laatste sync en worden bij de eerste sync verwerkt (apart verklaren, geen migratie-effect). Exitcode 2 = eerst onderzoeken.
 3. `docker rm -f w2w-r1-check`.
 
 ## 4. Openen
@@ -44,6 +44,7 @@ Bewezen vooraf: repetitie op een privékopie zonder egress ([bewijs](../evidence
 2. HTTPS-health 200; JP logt in en ziet dezelfde series, Agenda, voorkeuren en Google-koppeling.
 3. Cron terugzetten (zelfde regel). Eerste sync (handmatig door JP of 06:05-cron): `SyncRun` succesvol; bestaande `CalendarEventLink`-ID's en event-ID's ongewijzigd, `created` alleen voor echte nieuwe afleveringen.
 4. Leg bewijs vast in `docs/evidence/idea-219-r1.md` (release, image, run-ID, tijden, verify-rapport; geen waarden).
+5. Het manifest bevat tokens en clientsecret in platte tekst: verwijder `migration/manifest.json` zodra de eerste sync is geaccepteerd; de SQLite-backup blijft de herstelbron (maximaal 30 dagen bewaren).
 
 ## 5. Afbreken en herstel
 

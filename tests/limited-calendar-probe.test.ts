@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertProbeCalendar, grantStatus, limitedScopes, parseProbeConfig, probeOutcome, reconcileLostCalendarCreate, sanitizeShape,
+  assertProbeCalendar, grantStatus, limitedScopes, parseProbeConfig, probeOutcome, reconcileLostCalendarCreate, resumeSentCreate, sanitizeShape,
 } from "../scripts/prove-limited-calendar";
 
 const config = {
@@ -84,5 +84,20 @@ describe("evidence", () => {
     expect(probeOutcome([...all.map(step => ({ step, ok: true })), { step: "event-crud", ok: false, cause: "403 CALENDAR_FORBIDDEN" }]))
       .toEqual({ status: "FAILED", cause: "event-crud: 403 CALENDAR_FORBIDDEN" });
     expect(probeOutcome(all.slice(0, 3).map(step => ({ step, ok: true })))).toEqual({ status: "BLOCKED", cause: "not executed: calendar-created" });
+  });
+
+  it("judges each step on its latest attempt, so a retried step can still pass", () => {
+    const all = ["authorize", "grant-narrow", "list-paginated", "calendar-created", "event-crud", "calendar-renamed", "token-refresh", "lost-create-reconciled", "legacy-readonly-checked"];
+    expect(probeOutcome([{ step: "authorize", ok: false, cause: "state mismatch" }, ...all.map(step => ({ step, ok: true }))])).toEqual({ status: "PASSED" });
+    expect(probeOutcome([...all.map(step => ({ step, ok: true })), { step: "token-refresh", ok: false, cause: "invalid_grant" }])).toEqual({ status: "FAILED", cause: "token-refresh: invalid_grant" });
+  });
+});
+
+describe("resume after a sent create", () => {
+  const entry = { name: "When2Watch proef onzeker", nonce: "n-1", phase: "sending" as const, beforeIds: ["a"] };
+  it("never re-sends: adopts the provable calendar or stays uncertain", () => {
+    expect(resumeSentCreate(entry, [{ id: "a" }, { id: "b", summary: entry.name, description: "nonce n-1" }])).toEqual({ status: "adopted", id: "b" });
+    expect(resumeSentCreate(entry, [{ id: "a" }])).toEqual({ status: "uncertain" });
+    expect(() => resumeSentCreate({ ...entry, beforeIds: undefined }, [])).toThrow(/snapshot/);
   });
 });

@@ -5,28 +5,12 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { applicationModels, archivedMigrations, archivedSchemaSignature, keyOf, manifestSha256, modelInfo, readConfig, safeError, toDatabase, type Manifest } from "./manifest";
+import { applicationModels, manifestSha256, modelInfo, readConfig, safeError, toDatabase, validateSource, type Manifest } from "./manifest";
 import { verifyEquivalent } from "./verify-import";
 
 type Delegate = { count(): Promise<number>; createMany(args: { data: Record<string, unknown>[] }): Promise<{ count: number }> };
 
-export function validateSource(manifest: Manifest) {
-  if (manifest?.version !== 1 || !/^[0-9a-f-]{36}$/.test(manifest.runId ?? "")) throw Error("Unsupported manifest version or run ID.");
-  if (manifest.schemaSignature !== archivedSchemaSignature()) throw Error("Manifest schema signature is unknown.");
-  if (JSON.stringify(manifest.migrations) !== JSON.stringify(archivedMigrations().map(item => item.name))) throw Error("Manifest schema migrations are unknown.");
-  if (JSON.stringify(Object.keys(manifest.tables ?? {}).sort()) !== JSON.stringify([...applicationModels].sort())) throw Error("Manifest must contain exactly the 15 application tables.");
-  for (const name of applicationModels) {
-    const table = manifest.tables[name], info = modelInfo(name);
-    if (!Array.isArray(table.rows) || table.count !== table.rows.length) throw Error(`${name}: row count does not match the manifest count.`);
-    const keys = new Set<string>();
-    for (const row of table.rows) {
-      if (JSON.stringify(Object.keys(row).sort()) !== JSON.stringify(info.fields.map(field => field.name).sort())) throw Error(`${name}: row fields differ from the model.`);
-      const key = keyOf(info, row);
-      if (keys.has(key)) throw Error(`${name}: duplicate key in manifest.`);
-      keys.add(key);
-    }
-  }
-}
+export { validateSource } from "./manifest";
 
 export async function importEmptyTarget(db: PrismaClient, manifest: Manifest) {
   validateSource(manifest);

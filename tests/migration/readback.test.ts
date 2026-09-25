@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { SyncService } from "@/server/sync";
 import { parseSnapshot } from "@/server/tvmaze";
-import { readbackOwnEvents, readOnlyFetch } from "../../scripts/migration/readback";
+import { readbackNeedsAttention, readbackOwnEvents, readOnlyFetch } from "../../scripts/migration/readback";
 import { testDatabase } from "../database";
 import { simulatedCalendar } from "../simulated-calendar";
 import raw from "../fixtures/tvmaze/slow-horses.json";
@@ -25,8 +25,10 @@ it("confirms every existing own event by GET only, without Calendar or database 
   const { db, google, readOnly } = await migratedOwner();
   const links = await db.calendarEventLink.findMany({ orderBy: { id: "asc" } }), accounts = await db.account.findMany();
   const report = await readbackOwnEvents(db, readOnly, "owner", config.calendarId);
-  expect(report).toEqual({ links: links.length, unchanged: links.length, remoteChanged: 0, sourceChanged: 0, missing: 0, foreign: 0, pending: 0, deleted: 0 });
+  expect(report).toEqual({ links: links.length, unchanged: links.length, remoteChanged: 0, sourceChanged: 0, missing: 0, foreign: 0, pending: 0, deleted: 0, otherCalendar: 0 });
   expect(links.length).toBeGreaterThan(0);
+  expect(readbackNeedsAttention(report)).toBe(false);
+  expect(readbackNeedsAttention({ ...report, pending: 1 })).toBe(true);
   expect(google.writes).toEqual([]);
   expect(await db.calendarEventLink.findMany({ orderBy: { id: "asc" } })).toEqual(links);
   expect(await db.account.findMany()).toEqual(accounts);
@@ -41,8 +43,10 @@ it("separates remote edits, source changes, missing events, foreign markers and 
   const other = google.events.get(d.eventId);
   google.events.set(d.eventId, { ...other, extendedProperties: { private: { ...other.extendedProperties.private, userId: "someone-else" } } });
   await db.calendarEventLink.update({ where: { id: e.id }, data: { status: "prepared" } });
+  await db.calendarEventLink.create({ data: { episodeId: a.episodeId, calendarId: "older@example.test", eventId: "older-event", status: "synced", desiredJson: "{}" } });
   const report = await readbackOwnEvents(db, readOnly, "owner", config.calendarId);
-  expect(report).toMatchObject({ remoteChanged: 1, sourceChanged: 1, missing: 1, foreign: 1, pending: 1 });
+  expect(report).toMatchObject({ remoteChanged: 1, sourceChanged: 1, missing: 1, foreign: 1, pending: 1, otherCalendar: 1 });
+  expect(readbackNeedsAttention(report)).toBe(true);
   expect(google.writes).toEqual([]);
 });
 

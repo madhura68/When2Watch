@@ -12,7 +12,11 @@ import { googleTokenRefresher } from "../../src/server/google-tokens";
 import { calendarEventHash, episodeEvent } from "../../src/server/sync";
 import { safeError } from "./manifest";
 
-export type ReadbackReport = { links: number; unchanged: number; remoteChanged: number; sourceChanged: number; missing: number; foreign: number; pending: number; deleted: number };
+export type ReadbackReport = { links: number; unchanged: number; remoteChanged: number; sourceChanged: number; missing: number; foreign: number; pending: number; deleted: number; otherCalendar: number };
+
+/** Anything but unchanged or explained source changes must be investigated before opening. */
+export const readbackNeedsAttention = (report: ReadbackReport) =>
+  report.missing + report.foreign + report.remoteChanged + report.pending + report.otherCalendar > 0;
 
 /** Wraps a fetcher so that only GET requests can leave the process. */
 export function readOnlyFetch(fetcher: typeof fetch = fetch): typeof fetch {
@@ -24,7 +28,8 @@ export function readOnlyFetch(fetcher: typeof fetch = fetch): typeof fetch {
 }
 
 export async function readbackOwnEvents(db: PrismaClient, google: GoogleCalendar, userId: string, calendarId: string): Promise<ReadbackReport> {
-  const report: ReadbackReport = { links: 0, unchanged: 0, remoteChanged: 0, sourceChanged: 0, missing: 0, foreign: 0, pending: 0, deleted: 0 };
+  const report: ReadbackReport = { links: 0, unchanged: 0, remoteChanged: 0, sourceChanged: 0, missing: 0, foreign: 0, pending: 0, deleted: 0, otherCalendar: 0 };
+  report.otherCalendar = await db.calendarEventLink.count({ where: { calendarId: { not: calendarId }, episode: { show: { userId } } } });
   const links = await db.calendarEventLink.findMany({ where: { calendarId, episode: { show: { userId } } }, include: { episode: { include: { show: true } } }, orderBy: { id: "asc" } });
   for (const link of links) {
     report.links++;
@@ -64,7 +69,7 @@ async function main() {
     };
     const report = await readbackOwnEvents(db, new GoogleCalendar(accessToken, readOnlyFetch()), installation.ownerId, settings.calendarId);
     console.log(JSON.stringify(report));
-    if (report.missing || report.foreign || report.remoteChanged) process.exitCode = 2;
+    if (readbackNeedsAttention(report)) process.exitCode = 2;
   } finally { await db.$disconnect(); }
 }
 
