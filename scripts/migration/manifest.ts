@@ -22,16 +22,31 @@ export type Manifest = {
 type Field = { name: string; type: "String" | "Int" | "Boolean" | "DateTime"; required: boolean };
 export type ModelInfo = { name: ModelName; delegate: string; fields: Field[]; key: string[]; relations: { from: string[]; model: ModelName; to: string[] }[] };
 
+/** Columns of the archived release-53a8a2f SQLite schema: the manifest contract, whatever the live schema adds later. */
+let legacy: Map<string, Set<string>> | undefined;
+function legacyColumns(name: ModelName) {
+  if (!legacy) {
+    const sqlite = new DatabaseSync(":memory:");
+    try {
+      for (const { name: migration } of archivedMigrations()) sqlite.exec(readFileSync(join(archivedRoot, migration, "migration.sql"), "utf8"));
+      legacy = new Map(applicationModels.map(model => [model, new Set((sqlite.prepare(`PRAGMA table_info("${model}")`).all() as { name: string }[]).map(c => c.name))]));
+    } finally { sqlite.close(); }
+  }
+  return legacy.get(name)!;
+}
+
 export function modelInfo(name: ModelName): ModelInfo {
   const model = Prisma.dmmf.datamodel.models.find(item => item.name === name);
   if (!model) throw Error(`Unknown model ${name}.`);
-  const fields = model.fields.filter(field => field.kind === "scalar").map(field => {
+  const columns = legacyColumns(name);
+  const fields = model.fields.filter(field => field.kind === "scalar" && columns.has(field.name)).map(field => {
     if (!["String", "Int", "Boolean", "DateTime"].includes(field.type)) throw Error(`Unsupported field type ${name}.${field.name}.`);
     return { name: field.name, type: field.type as Field["type"], required: field.isRequired };
   });
   const key = model.fields.filter(field => field.isId).map(field => field.name);
   const fallback = model.primaryKey?.fields ?? model.fields.filter(field => field.isUnique).map(field => field.name).slice(0, 1);
-  const relations = model.fields.filter(field => field.kind === "object" && field.relationFromFields?.length).map(field => ({
+  const relations = model.fields.filter(field => field.kind === "object" && field.relationFromFields?.length
+    && (applicationModels as readonly string[]).includes(field.type) && field.relationFromFields.every(from => columns.has(from))).map(field => ({
     from: [...field.relationFromFields!], model: field.type as ModelName, to: [...field.relationToFields!],
   }));
   return { name, delegate: name[0].toLowerCase() + name.slice(1), fields, key: key.length ? key : [...fallback], relations };
