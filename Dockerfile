@@ -9,6 +9,14 @@ RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
+# Operator tools for migration/readback (tsx, dev dependencies). Never the served image.
+FROM base AS tools
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run db:generate
+USER node
+
 FROM base AS runtime
 ENV NODE_ENV=production
 COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
@@ -18,6 +26,7 @@ COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/next.config.ts ./next.config.ts
 COPY --from=build --chown=node:node /app/scripts/start.sh ./scripts/start.sh
+COPY --from=build --chown=node:node /app/scripts/migrate.sh ./scripts/migrate.sh
 COPY --from=build --chown=node:node /app/scripts/cron-client.mjs ./scripts/cron-client.mjs
 USER node
 EXPOSE 3000

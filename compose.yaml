@@ -5,16 +5,19 @@ services:
     image: when2watch:${RELEASE_TAG:-local}
     restart: unless-stopped
     user: "1000:1000"
+    # DATABASE_URL (runtime DML role) comes only from the private .env.
     env_file: .env
     environment:
       NODE_ENV: production
       TZ: Europe/Amsterdam
       NEXT_TELEMETRY_DISABLED: "1"
-    volumes:
-      - /srv/apps/when2watch/data:/data
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       proxy:
         aliases: [when2watch-web]
+      database: {}
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -31,7 +34,45 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+
+  # Separate release action with the DDL role: `docker compose --profile migrate run --rm migrate`.
+  migrate:
+    image: when2watch:${RELEASE_TAG:-local}
+    profiles: [migrate]
+    user: "1000:1000"
+    env_file: .env.migrate
+    command: [sh, scripts/migrate.sh]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  # Own PostgreSQL 17 for When2Watch only; no host port, internal network only.
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    env_file: .env.db
+    volumes:
+      - /srv/apps/when2watch/postgres:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sh:/docker-entrypoint-initdb.d/10-when2watch.sh:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d when2watch"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 networks:
   proxy:
     external: true
     name: scrum4me_default
+  database:
+    internal: true
