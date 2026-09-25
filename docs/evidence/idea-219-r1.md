@@ -1,12 +1,16 @@
 # IDEA-219 R1 — bewijs providerwissel (T-18/T-19)
 
-Status 25 september 2026: **code, lokale gates en repetitie op een privékopie geslaagd. Forgejo-CI en de geautoriseerde productie-omschakeling nog open.**
+Status 25 september 2026: **code, CI, onafhankelijke review en repetitie op een privékopie geslaagd. De geautoriseerde productie-omschakeling is nog open.**
 
-## Lokale gates (PostgreSQL 17.11, macOS)
+## Gates
+
+Forgejo-CI op PR #5, commit `32c0b85`: **success** (postgres:17-service, tests, build, typecheck, HTTP-smoke, Dockerbuild, tools-image). Onafhankelijke review van de hele branch: 0 Critical; 3 Important opgelost met eerst falende tests.
+
+### Lokaal (PostgreSQL 17.11, macOS)
 
 | Gate | Resultaat |
 |---|---|
-| `npm test -- --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000` | 178/178 (22 bestanden) |
+| `npm test -- --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000` | 181/181 |
 | `npm run build`, `npm run typecheck` | geslaagd |
 | `npm run test:http` | 154 asserties, echte Next + tijdelijke PostgreSQL-database |
 | `docker build .` | geslaagd |
@@ -46,7 +50,6 @@ Tijdens de repetitie gevonden en hersteld: `pg_isready` via de socket slaagt al 
 
 ## Niet bewezen / open
 
-- **Forgejo-CI** met de `postgres:17`-service is nog niet gedraaid.
 - **Afbreken vóór nieuwe writes** is niet live uitgevoerd (zou de productiecontainer stoppen). Wel aangetoond: de bron wordt alleen read-only geopend en bleef bytegelijk; de terugweg staat in het [cutover-runbook](../runbooks/idea-219-r1-cutover.md#5-afbreken-en-herstel).
 - **Readback-dry-run tegen echte Google** hoort bij de cutover (vereist egress); in CI getest met gesimuleerde Google (alleen GET, geen DB-writes).
 - **Productie-omschakeling**, eigenaar-acceptatie en eerste sync zonder migratieduplicaten: wachten op JP's uitrolopdracht. R2 (T-20 e.v.) begint pas daarna.
