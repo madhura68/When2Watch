@@ -11,4 +11,6 @@ if ! RUST_LOG=info node node_modules/prisma/build/index.js migrate status >/dev/
   echo "Refusing to start: database schema is not ready. Run the migration step first." >&2
   exit 65
 fi
+# IDEA-219 R2: backfill, sealed secrets and the deletion journal must be in place before serving.
+node scripts/ready-r2.mjs || exit 66
 exec node node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000

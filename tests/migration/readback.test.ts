@@ -4,6 +4,7 @@ import { SyncService } from "@/server/sync";
 import { parseSnapshot } from "@/server/tvmaze";
 import { readbackNeedsAttention, readbackOwnEvents, readOnlyFetch } from "../../scripts/migration/readback";
 import { testDatabase } from "../database";
+import { bindCalendar } from "../fixtures/users";
 import { simulatedCalendar } from "../simulated-calendar";
 import raw from "../fixtures/tvmaze/slow-horses.json";
 
@@ -14,7 +15,7 @@ const config = { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam"
 async function migratedOwner() {
   storage = testDatabase(); const db = storage.db, google = simulatedCalendar();
   await db.user.create({ data: { id: "owner", email: "owner@example.test" } });
-  await db.calendarSettings.create({ data: { userId: "owner", ...config, summary: "When2Watch", accessRole: "owner", defaultRemindersJson: "[]" } });
+  await bindCalendar(db, "owner", config.calendarId);
   const calendar = new GoogleCalendar(async () => "synthetic-access", google.fetcher);
   expect((await new SyncService(db, calendar, { snapshot: async () => parseSnapshot(raw, 45039) }, config, () => now).add("owner", 45039)).status).toBe("success");
   google.writes.length = 0;
@@ -36,14 +37,15 @@ it("confirms every existing own event by GET only, without Calendar or database 
 
 it("separates remote edits, source changes, missing events, foreign markers and pending intentions", async () => {
   const { db, google, readOnly } = await migratedOwner();
-  const [a, b, c, d, e] = await db.calendarEventLink.findMany({ orderBy: { id: "asc" }, include: { episode: true } });
+  const [a, b, c, d, e] = await db.calendarEventLink.findMany({ orderBy: { id: "asc" } });
   google.events.set(a.eventId, { ...google.events.get(a.eventId), summary: "edited in Google" });
-  await db.episode.update({ where: { id: b.episodeId }, data: { title: "Renamed by TVmaze" } });
+  await db.catalogEpisode.update({ where: { id: b.catalogEpisodeId! }, data: { title: "Renamed by TVmaze" } });
   google.events.set(c.eventId, { id: c.eventId, status: "cancelled" });
   const other = google.events.get(d.eventId);
   google.events.set(d.eventId, { ...other, extendedProperties: { private: { ...other.extendedProperties.private, userId: "someone-else" } } });
   await db.calendarEventLink.update({ where: { id: e.id }, data: { status: "prepared" } });
-  await db.calendarEventLink.create({ data: { episodeId: a.episodeId, calendarId: "older@example.test", eventId: "older-event", status: "synced", desiredJson: "{}" } });
+  const older = await db.calendarBinding.create({ data: { userId: "owner", calendarId: "older@example.test", status: "LEGACY_UNRESOLVED", provenance: "LEGACY_UNVERIFIED" } });
+  await db.calendarEventLink.create({ data: { userId: "owner", bindingId: older.id, catalogEpisodeId: a.catalogEpisodeId, calendarId: "older@example.test", eventId: "older-event", status: "synced", desiredJson: "{}" } });
   const report = await readbackOwnEvents(db, readOnly, "owner", config.calendarId);
   expect(report).toMatchObject({ remoteChanged: 1, sourceChanged: 1, missing: 1, foreign: 1, pending: 1, otherCalendar: 1 });
   expect(readbackNeedsAttention(report)).toBe(true);

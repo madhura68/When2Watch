@@ -1,4 +1,6 @@
 export const MIN_SEARCH_LENGTH = 4;
+/** Each keystroke restarts this timer before a search is sent. */
+export const SEARCH_DEBOUNCE_MS = 500;
 
 export class LatestSearch<T> {
   private version = 0;

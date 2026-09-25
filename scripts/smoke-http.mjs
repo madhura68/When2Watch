@@ -28,6 +28,7 @@ const env = {
   GOOGLE_CLIENT_ID: "http-test.apps.googleusercontent.com", GOOGLE_CLIENT_SECRET: "synthetic-client-secret",
   GOOGLE_CALENDAR_ID: "chosen@example.test", ALLOWED_GOOGLE_EMAIL: "owner@example.test",
   CRON_SECRET: randomBytes(32).toString("hex"),
+  W2W_CREDENTIAL_KEYS: `smoke:${randomBytes(32).toString("base64")}`,
 };
 const db = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
 let server;
@@ -124,6 +125,54 @@ try {
   check((await db.googleConnectionAttempt.findUniqueOrThrow({where:{id:pending.id}})).status === "cancelled","cancellation persists");
   check((await db.installation.findUniqueOrThrow({where:{id:"singleton"}})).ownerId === "owner","legacy owner imported without changing identity");
   check(await db.oAuthClientConfig.count() === 1,"legacy client import is idempotent across requests");
+  const storedClient = await db.oAuthClientConfig.findFirstOrThrow();
+  check(storedClient.clientSecret.startsWith("w2w:v1:") && !storedClient.clientSecret.includes(env.GOOGLE_CLIENT_SECRET),"imported client secret is stored sealed");
+  check((await request("/privacy")).status === 200,"privacy statement is public");
+  check((await request("/api/account/export")).status === 401,"export requires a session");
+  const exported = await request("/api/account/export",{headers:cookie("owner")}), exportText = await exported.text();
+  check(exported.ok && exported.headers.get("cache-control")?.includes("no-store") && exported.headers.get("content-disposition")?.includes("attachment"),"own export downloads privately");
+  check(JSON.parse(exportText).user.id === "owner" && !exportText.includes("never-serialize") && !exportText.includes("w2w:v1") && !exportText.includes(sessions.owner),"export holds own data without tokens or session");
+  const deleteRequest = (headers, body) => request("/api/account/delete",{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  check((await deleteRequest({...cookie("owner"),origin:"https://evil.example"},{confirmation:"VERWIJDEREN"})).status === 403,"cross-origin delete refused");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"ja"})).status === 400,"delete requires typed confirmation");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"VERWIJDEREN",userId:"other"})).status === 400,"delete cannot target another user");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"VERWIJDEREN"})).status === 409,"the last admin cannot delete the account");
+  for (const path of ["/api/shows","/api/settings/google","/api/settings/preferences"]) {
+    check((await request(path,{headers:cookie("owner")})).headers.get("cache-control")?.includes("no-store"),"private API responses must not be cached between users");
+  }
+  // An ACTIVE non-admin cannot replace the central OAuth client.
+  await db.user.update({where:{id:"other"},data:{accessStatus:"ACTIVE"}});
+  const replace = await request("/api/settings/google",{method:"POST",headers:{...cookie("other"),origin,"Content-Type":"application/json"},body:JSON.stringify({action:"begin",mode:"replace-client",clientId:"x.apps.googleusercontent.com",clientSecret:"y"})});
+  check(replace.status === 403,"only an admin may replace the OAuth client");
+  await db.user.update({where:{id:"other"},data:{accessStatus:"UNCLAIMED"}});
+  // P6: invitations and user administration.
+  for (const path of ["/api/admin/users","/api/admin/invitations","/api/admin/stats"]) {
+    check((await request(path)).status === 401 && (await request(path,{headers:cookie("other")})).status === 401,"admin endpoints reject anonymous and unclaimed sessions");
+    check((await request(path,{headers:cookie("owner")})).ok,"admin can read user administration");
+  }
+  await db.user.update({where:{id:"other"},data:{accessStatus:"ACTIVE"}});
+  check((await request("/api/admin/users",{headers:cookie("other")})).status === 403,"ordinary user gets no admin endpoint");
+  check((await request("/beheer/gebruikers",{headers:cookie("other")})).status === 307,"ordinary user is redirected away from the admin page");
+  check((await request("/api/admin/stats",{headers:cookie("other")})).status === 403,"ordinary user gets no follower counts");
+  check((await request("/beheer/series",{headers:cookie("other")})).status === 307,"ordinary user is redirected away from the statistics page");
+  const stats = await request("/api/admin/stats",{headers:cookie("owner")}), statsText = await stats.text();
+  check(stats.headers.get("cache-control")?.includes("no-store") && !/"userId"|@example\.test/.test(statsText) && typeof JSON.parse(statsText).tvmazeRequests.total === "number","admin statistics carry counts only");
+  await db.user.update({where:{id:"other"},data:{accessStatus:"UNCLAIMED"}});
+  const invitationPage = await request("/uitnodiging");
+  const invitationHtml = await invitationPage.text();
+  check(invitationPage.ok && invitationPage.headers.get("referrer-policy") === "no-referrer","invitation page is public and sends no referrer");
+  check(![...invitationHtml.matchAll(/(?:src|href)="(https?:)?\/\/[^"]*"/g)].length,"invitation page loads no external assets");
+  const invited = await request("/api/admin/invitations",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({email:"invited@example.test"})});
+  const { link } = await invited.json();
+  const sentinel = new URL(link).hash.replace("#token=","");
+  check(invited.ok && new URL(link).pathname === "/uitnodiging" && !new URL(link).search && sentinel.length === 43,"invitation link carries the token only in the fragment");
+  check(!(await (await request("/api/admin/invitations",{headers:cookie("owner")})).text()).includes(sentinel),"invitation list never repeats the token");
+  const exchange = token => request("/api/invitations/exchange",{method:"POST",headers:{origin,"Content-Type":"application/json"},body:JSON.stringify({token})});
+  check((await exchange("x".repeat(43))).status === 400,"unknown invitation token is refused neutrally");
+  const exchanged = await exchange(sentinel);
+  check(exchanged.ok && exchanged.headers.get("set-cookie")?.includes("HttpOnly") && exchanged.headers.get("set-cookie")?.includes("SameSite=Lax"),"exchange sets an HTTP-only browser-flow cookie");
+  check(!exchanged.headers.get("set-cookie")?.includes(sentinel) && (await db.invitation.findFirstOrThrow({where:{email:"invited@example.test"}})).acceptedAt === null,"exchange stores no token and claims nothing");
+  check((await request("/api/invitations/exchange",{method:"POST",headers:{origin:"https://attacker.example.test","Content-Type":"application/json"},body:JSON.stringify({token:sentinel})})).status === 403,"exchange requires same origin");
   const emptySearch = await request("/api/shows/search?q=",{headers:cookie("owner")});
   check(emptySearch.ok && (await emptySearch.json()).shows.length === 0, "empty search must return without a provider request");
   for(const credential of [undefined, "incorrect"]) {
@@ -133,11 +182,13 @@ try {
   check(await db.syncRun.count() === 0,"denied cron must perform no sync work");
   const cron = await request("/api/cron/sync",{method:"POST",headers:{authorization:`Bearer ${env.CRON_SECRET}`}});
   check(cron.status === 200 && (await cron.json()).status === "success","authorized empty cron must use the shared service");
-  check(await db.syncRun.count({where:{userId:"owner",trigger:"cron"}}) === 1,"cron must resolve the configured owner on the server");
-  await db.calendarSettings.create({data:{userId:"owner",calendarId:env.GOOGLE_CALENDAR_ID,summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultRemindersJson:"[]"}});
+  check(await db.syncRun.count({where:{trigger:"cron"}}) === 0,"cron without followers performs no per-user work or source request");
+  const ownerAccount = await db.account.findFirstOrThrow({where:{userId:"owner"}});
+  await db.calendarBinding.create({data:{userId:"owner",accountId:ownerAccount.id,calendarId:env.GOOGLE_CALENDAR_ID,status:"ACTIVE",provenance:"LEGACY_UNVERIFIED",summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultRemindersJson:"[]",confirmedAt:new Date()}});
   const synopsis = "OWNER_DETAILS Een zorgvuldig opgeslagen omschrijving. ".repeat(15);
-  const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:synopsis,genresJson:'["Drama","Thriller"]',runtimeMinutes:45}});
-  await db.episode.create({data:{trackedShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});
+  const show = await db.catalogShow.create({data:{tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:synopsis,genresJson:'["Drama","Thriller"]',runtimeMinutes:45,lastSuccessAt:new Date()}});
+  await db.userFollow.create({data:{userId:"owner",catalogShowId:show.id}});
+  await db.catalogEpisode.create({data:{catalogShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});
   const ownerShows = await request("/api/shows",{headers:cookie("owner")});
   const ownerData = await ownerShows.json();
   const changeTrying = body => request("/api/shows",{method:"PATCH",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body});
@@ -149,13 +200,14 @@ try {
     check((await changeTrying(invalid)).status === 400,"invalid trying input must be rejected");
   }
   check((await changeTrying(JSON.stringify({showId:"99998",trying:true}))).status === 404,"changing an untracked show must not add it");
-  const foreignShow = await db.trackedShow.create({data:{userId:"other",tvmazeId:99997,title:"Foreign",sourceUrl:"https://www.tvmaze.com/shows/99997",status:"Ended"}});
+  const foreignCatalog = await db.catalogShow.create({data:{tvmazeId:99997,title:"Foreign",sourceUrl:"https://www.tvmaze.com/shows/99997",status:"Ended"}});
+  const foreignShow = await db.userFollow.create({data:{userId:"other",catalogShowId:foreignCatalog.id}});
   check((await changeTrying(JSON.stringify({showId:"99997",trying:true}))).status === 404,"owner cannot change a show belonging to another user");
-  check((await db.trackedShow.findUniqueOrThrow({where:{id:foreignShow.id}})).trying === false,"foreign preference stays unchanged");
+  check((await db.userFollow.findUniqueOrThrow({where:{id:foreignShow.id}})).trying === false,"foreign preference stays unchanged");
   for (const trying of ["true",1,null,{}]) {
     check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"45039",trying})})).status === 400,"POST rejects invalid trying before any provider request");
   }
-  check(await db.syncRun.count() === 1,"preference changes do not start provider synchronization");
+  check(await db.syncRun.count() === 0,"preference changes do not start provider synchronization");
 
   check(ownerShows.ok && ownerData.shows[0].summaryText === synopsis && ownerData.shows[0].runtimeMinutes === 45 && ownerData.shows[0].genres.join(",") === "Drama,Thriller", "owner must receive locally stored series metadata");
   check(ownerData.shows[0].upcoming[0].summaryText.startsWith("PRIVATE_EPISODE"), "owner must receive locally stored episode text");
@@ -173,7 +225,7 @@ try {
   check(detailsPage.includes('class="series-details"') && detailsPage.includes('class="episode-description"') && !/<details[^>]*\sopen(?:[=>\s])/.test(detailsPage), "series and episode disclosures must initially be closed");
   check(detailsPage.includes("&lt;img") && !detailsPage.includes('<img src="https://example.test/should-not-load"'), "stored text must render escaped instead of executable markup");
   const soon = new Date(Date.now()+2*86400_000).toISOString().slice(0,10);
-  await db.episode.create({data:{trackedShowId:show.id,sourceId:999999,title:"SOON_EPISODE",season:6,number:99,airdate:soon,sourceUrl:"https://www.tvmaze.com/episodes/999999",summaryText:"HIDDEN_SPOILER"}});
+  await db.catalogEpisode.create({data:{catalogShowId:show.id,sourceId:999999,title:"SOON_EPISODE",season:6,number:99,airdate:soon,sourceUrl:"https://www.tvmaze.com/episodes/999999",summaryText:"HIDDEN_SPOILER"}});
   for(const path of ["/","/volgen","/settings"]){
     const page = await request(path,{headers:cookie("owner")});const html=await page.text();
     check(page.ok && html.includes('aria-label="Hoofdnavigatie"'),"all private pages need the shared menu");
@@ -191,16 +243,16 @@ try {
   const selectedBackground="https://static.tvmaze.com/uploads/images/original_untouched/631/1577977.jpg";
   const selectedPoster="https://static.tvmaze.com/uploads/images/medium_portrait/637/1592971.jpg";
   const nextArtworkCheck=new Date(Date.now()+7*86400_000);
-  await db.trackedShow.update({where:{id:show.id},data:{bannerUrl:selectedBanner,backgroundUrl:selectedBackground,poster:selectedPoster,bannerNextCheckAt:nextArtworkCheck}});
+  await db.catalogShow.update({where:{id:show.id},data:{bannerUrl:selectedBanner,backgroundUrl:selectedBackground,poster:selectedPoster,artworkNextCheckAt:nextArtworkCheck}});
   const artwork=(await (await request("/api/shows",{headers:cookie("owner")})).json()).shows[0];
   check(artwork.bannerUrl === selectedBanner && artwork.backgroundUrl === selectedBackground && artwork.poster === selectedPoster,"overview must serve all stored artwork choices");
   for(let visit=0;visit<2;visit++) check((await (await request("/",{headers:cookie("owner")})).text()).includes(`src="${selectedBanner}"`),"repeated Agenda reads must render the stored banner");
-  await db.trackedShow.update({where:{id:show.id},data:{bannerUrl:null}});
+  await db.catalogShow.update({where:{id:show.id},data:{bannerUrl:null}});
   check((await (await request("/",{headers:cookie("owner")})).text()).includes(`src="${selectedBackground}"`),"Agenda must render the stored background without a banner");
-  await db.trackedShow.update({where:{id:show.id},data:{backgroundUrl:null}});
+  await db.catalogShow.update({where:{id:show.id},data:{backgroundUrl:null}});
   check((await (await request("/",{headers:cookie("owner")})).text()).includes(`src="${selectedPoster}"`),"Agenda must render the existing poster without landscape artwork");
-  check((await db.trackedShow.findUniqueOrThrow({where:{id:show.id}})).bannerNextCheckAt.getTime() === nextArtworkCheck.getTime(),"page reads must preserve the image cache deadline");
-  check(await db.syncRun.count() === 1,"reading enriched pages must not start a sync");
+  check((await db.catalogShow.findUniqueOrThrow({where:{id:show.id}})).artworkNextCheckAt.getTime() === nextArtworkCheck.getTime(),"page reads must preserve the image cache deadline");
+  check(await db.syncRun.count() === 0,"reading enriched pages must not start a sync");
   check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"x"})})).status === 400,"invalid show ID must fail before the provider");
   const invalid = await request("/api/probe", { method: "POST", headers: { ...cookie("owner"), origin, "Content-Type": "application/json" }, body: JSON.stringify({ date: "not-a-date" }) });
   check(invalid.status === 400, "invalid date must fail locally");
@@ -214,6 +266,7 @@ try {
   check(restartedSettings.account.email === env.ALLOWED_GOOGLE_EMAIL && restartedSettings.calendar.id === env.GOOGLE_CALENDAR_ID,"stored account/calendar win over changed environment after restart");
   check(restartedSettings.preferences.timeZone === "Pacific/Auckland" && restartedSettings.preferences.agendaMonths === 2,"preferences survive an actual server restart");
   check(!serverOutput.includes("never-serialize-") && !serverOutput.includes(env.GOOGLE_CLIENT_SECRET) && !serverOutput.includes(sessions.owner),"server logs must not expose secrets");
+  check(!serverOutput.includes(sentinel),"sentinel invitation token never appears in server logs, on success or failure");
   const logout = await request("/api/auth/signout", { method: "POST", headers: { ...cookie("owner"), "Content-Type": "application/x-www-form-urlencoded" }, body: "json=true" });
   await logout.text();
   check(await db.session.count({ where: { sessionToken: sessions.owner } }) === 1, "logout without CSRF token must not remove the session");

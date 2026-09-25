@@ -8,21 +8,51 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  calendar      CalendarSettings?
-  probes        Probe[]
-  shows         TrackedShow[]
-  syncRuns      SyncRun[]
-  preferences   UserPreferences?
-  installation Installation?
+  id                 String                    @id @default(cuid())
+  name               String?
+  email              String?                   @unique
+  emailVerified      DateTime?
+  image              String?
+  accounts           Account[]
+  sessions           Session[]
+  calendar           CalendarSettings?
+  probes             Probe[]
+  shows              TrackedShow[]
+  syncRuns           SyncRun[]
+  preferences        UserPreferences?
+  installation       Installation?
   connectionAttempts GoogleConnectionAttempt[]
-  calendarCreations CalendarCreationAttempt[]
+  calendarCreations  CalendarCreationAttempt[]
+  // IDEA-219 R2: access is decided by role/accessStatus, never by the first visitor.
+  role               Role                      @default(USER)
+  accessStatus       AccessStatus              @default(UNCLAIMED)
+  follows            UserFollow[]
+  connection         UserConnection?
+  bindings           CalendarBinding[]
+  eventLinks         CalendarEventLink[]
+  invitationsSent    Invitation[]              @relation("InvitedBy")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum AccessStatus {
+  ACTIVE
+  BLOCKED
+  UNCLAIMED
+}
+
+enum BindingStatus {
+  ACTIVE
+  INACTIVE
+  LEGACY_UNRESOLVED
+}
+
+enum BindingProvenance {
+  APP_CREATED
+  LEGACY_UNVERIFIED
 }
 
 model UserPreferences {
@@ -33,28 +63,32 @@ model UserPreferences {
 }
 
 model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
+  id                       String             @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String?
   refresh_token_expires_in Int?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-  needsReauth       Boolean @default(false)
-  oauthClientConfigId String?
-  profileEmail      String?
-  profileName       String?
-  oauthClient       OAuthClientConfig? @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
-  activeInstallation Installation?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  access_token             String?
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String?
+  session_state            String?
+  needsReauth              Boolean            @default(false)
+  oauthClientConfigId      String?
+  profileEmail             String?
+  profileName              String?
+  oauthClient              OAuthClientConfig? @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
+  activeInstallation       Installation?
+  user                     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connections              UserConnection[]
+  bindings                 CalendarBinding[]
 
   @@unique([provider, providerAccountId])
+  // Target of composite foreign keys: an account can only be bound by its own user.
+  @@unique([id, userId])
   @@index([userId])
 }
 
@@ -63,6 +97,8 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+  /// Sign-in moment; NextAuth never updates it, so it proves a fresh login for account deletion (P10).
+  createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -86,49 +122,53 @@ model CalendarSettings {
 }
 
 model Probe {
-  id           String   @id @default(cuid())
+  id           String           @id @default(cuid())
   userId       String
   calendarId   String
-  eventId      String   @unique
+  eventId      String
+  bindingId    String?
   date         String
-  status       String   @default("prepared")
+  status       String           @default("prepared")
   requestJson  String
   readbackJson String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  binding      CalendarBinding? @relation(fields: [bindingId, userId], references: [id, userId], onDelete: Restrict)
 
   @@unique([userId, date])
+  @@unique([calendarId, eventId])
 }
 
 model TrackedShow {
-  id            String @id @default(cuid())
-  trying        Boolean @default(false)
-  userId        String
-  tvmazeId      Int
-  title         String
-  sourceUrl     String
-  year          String?
-  poster        String?
-  bannerUrl     String?
-  backgroundUrl String?
+  id                String    @id @default(cuid())
+  trying            Boolean   @default(false)
+  userId            String
+  tvmazeId          Int
+  title             String
+  sourceUrl         String
+  year              String?
+  poster            String?
+  bannerUrl         String?
+  backgroundUrl     String?
   bannerNextCheckAt DateTime?
-  platform      String?
-  country       String?
-  status        String
-  summaryText   String?
-  genresJson    String @default("[]")
-  runtimeMinutes Int?
-  lastAttemptAt DateTime?
-  lastSuccessAt DateTime?
-  lastError     String?
-  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  episodes      Episode[]
+  platform          String?
+  country           String?
+  status            String
+  summaryText       String?
+  genresJson        String    @default("[]")
+  runtimeMinutes    Int?
+  lastAttemptAt     DateTime?
+  lastSuccessAt     DateTime?
+  lastError         String?
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodes          Episode[]
+
   @@unique([userId, tvmazeId])
 }
 
 model Episode {
-  id            String @id @default(cuid())
+  id            String              @id @default(cuid())
   trackedShowId String
   sourceId      Int
   title         String?
@@ -136,90 +176,110 @@ model Episode {
   number        Int?
   airdate       String?
   sourceUrl     String
-  present       Boolean @default(true)
+  present       Boolean             @default(true)
   summaryText   String?
-  show          TrackedShow @relation(fields: [trackedShowId], references: [id], onDelete: Cascade)
+  show          TrackedShow         @relation(fields: [trackedShowId], references: [id], onDelete: Cascade)
   links         CalendarEventLink[]
+
   @@unique([trackedShowId, sourceId])
 }
 
 model CalendarEventLink {
-  id                   String @id @default(cuid())
-  episodeId            String
+  id                   String           @id @default(cuid())
+  // Legacy per-user episode; catalog-based links (R2) have none.
+  episodeId            String?
   calendarId           String
-  eventId              String @unique
-  status               String @default("prepared")
+  eventId              String
+  // Explicit ownership (R2). Nullable during expand; the backfill fills every row.
+  userId               String?
+  bindingId            String?
+  catalogEpisodeId     String?
+  status               String           @default("prepared")
   desiredJson          String
   confirmedDesiredHash String?
   confirmedRemoteHash  String?
   lastDate             String?
-  episode              Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episode              Episode?         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  user                 User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  binding              CalendarBinding? @relation(fields: [bindingId, userId], references: [id, userId], onDelete: Restrict)
+  catalogEpisode       CatalogEpisode?  @relation(fields: [catalogEpisodeId], references: [id], onDelete: Restrict)
+
   @@unique([episodeId, calendarId])
+  @@unique([calendarId, eventId])
+  @@unique([bindingId, catalogEpisodeId])
+  @@index([userId])
 }
 
 model SyncRun {
-  id         String @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
   trigger    String
-  startedAt  DateTime @default(now())
+  startedAt  DateTime  @default(now())
   finishedAt DateTime?
-  status     String @default("running")
+  status     String    @default("running")
   resultJson String?
-  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, startedAt])
 }
 
 model OAuthClientConfig {
-  id           String @id @default(cuid())
-  clientId     String
-  clientSecret String
-  createdAt    DateTime @default(now())
-  accounts     Account[]
+  id            String                    @id @default(cuid())
+  clientId      String
+  clientSecret  String
+  createdAt     DateTime                  @default(now())
+  accounts      Account[]
   installations Installation[]
-  attempts     GoogleConnectionAttempt[]
+  attempts      GoogleConnectionAttempt[]
 }
 
 model Installation {
-  id                  String @id @default("singleton")
-  ownerId             String? @unique
-  activeAccountId     String? @unique
-  oauthClientConfigId String?
-  initialCalendarId   String?
-  owner               User? @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  activeAccount       Account? @relation(fields: [activeAccountId], references: [id], onDelete: Restrict)
-  oauthClient         OAuthClientConfig? @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
+  id                    String             @id @default("singleton")
+  ownerId               String?            @unique
+  activeAccountId       String?            @unique
+  oauthClientConfigId   String?
+  initialCalendarId     String?
+  owner                 User?              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  activeAccount         Account?           @relation(fields: [activeAccountId], references: [id], onDelete: Restrict)
+  oauthClient           OAuthClientConfig? @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
+  /// Last successful TVmaze update-index check (daily refresh checkpoint).
+  catalogIndexCheckedAt DateTime?
+  /// Identity of the external deletion journal (P10); a restored database only accepts its own journal.
+  deletionJournalId     String?
 }
 
 model GoogleConnectionAttempt {
-  id                  String @id
+  id                  String            @id
   ownerId             String?
   sessionHash         String
   mode                String
-  requiredScopesJson  String @default("[]")
+  requiredScopesJson  String            @default("[]")
   oauthClientConfigId String
-  status              String @default("pending")
+  status              String            @default("pending")
   expiresAt           DateTime
   accountId           String?
   providerAccountId   String?
   profileEmail        String?
   profileName         String?
   tokensJson          String?
-  createdAt           DateTime @default(now())
-  owner               User? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt           DateTime          @default(now())
+  owner               User?             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   oauthClient         OAuthClientConfig @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
+
   @@index([ownerId, createdAt])
 }
 
 model CalendarCreationAttempt {
-  id           String @id
-  ownerId      String
-  accountId    String
-  name         String
-  timeZone     String
-  status       String @default("sending")
-  calendarId   String?
-  createdAt    DateTime @default(now())
-  owner        User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id         String   @id
+  ownerId    String
+  accountId  String
+  name       String
+  timeZone   String
+  status     String   @default("sending")
+  calendarId String?
+  createdAt  DateTime @default(now())
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
   @@index([ownerId, createdAt])
 }
 
@@ -231,4 +291,173 @@ model LegacyImportRun {
   sourceSha256    String
   schemaSignature String
   importedAt      DateTime @default(now())
+}
+
+// ---------------------------------------------------------------- IDEA-219 R2
+
+/// Shared, public TVmaze data. Never deleted through a user or follow relation.
+model CatalogShow {
+  id                      String           @id @default(cuid())
+  tvmazeId                Int              @unique
+  title                   String
+  sourceUrl               String
+  year                    String?
+  poster                  String?
+  bannerUrl               String?
+  backgroundUrl           String?
+  artworkNextCheckAt      DateTime?
+  platform                String?
+  country                 String?
+  status                  String
+  summaryText             String?
+  genresJson              String           @default("[]")
+  runtimeMinutes          Int?
+  observedSourceUpdatedAt Int?
+  appliedSourceUpdatedAt  Int?
+  lastFullCheckAt         DateTime?
+  lastAttemptAt           DateTime?
+  lastSuccessAt           DateTime?
+  lastError               String?
+  /// Conflicting legacy snapshots: remote mutations blocked until a full source check and reviewed dry-run.
+  needsReconcile          Boolean          @default(false)
+  episodes                CatalogEpisode[]
+  follows                 UserFollow[]
+}
+
+model CatalogEpisode {
+  id            String              @id @default(cuid())
+  catalogShowId String
+  sourceId      Int
+  title         String?
+  season        Int?
+  number        Int?
+  airdate       String?
+  sourceUrl     String
+  present       Boolean             @default(true)
+  summaryText   String?
+  show          CatalogShow         @relation(fields: [catalogShowId], references: [id], onDelete: Restrict)
+  links         CalendarEventLink[]
+
+  @@unique([catalogShowId, sourceId])
+}
+
+/// Personal relation to a shared show; keeps the id of the legacy TrackedShow it came from.
+model UserFollow {
+  id            String      @id @default(cuid())
+  userId        String
+  catalogShowId String
+  trying        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  lastAttemptAt DateTime?
+  lastSuccessAt DateTime?
+  lastError     String?
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  show          CatalogShow @relation(fields: [catalogShowId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, catalogShowId])
+}
+
+/// The one Google account a user has chosen for Calendar; composite FK keeps it the user's own.
+model UserConnection {
+  userId    String   @id
+  accountId String
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account   Account  @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
+}
+
+/// A user's calendar. At most one ACTIVE per user (partial unique index in SQL);
+/// only LEGACY_UNRESOLVED may lack an account (CHECK in SQL).
+model CalendarBinding {
+  id                   String              @id @default(cuid())
+  userId               String
+  accountId            String?
+  calendarId           String
+  status               BindingStatus
+  provenance           BindingProvenance
+  createdAt            DateTime            @default(now())
+  // Last confirmed Google metadata; the calendar ID, never the name, is the identity.
+  summary              String?
+  timeZone             String?
+  accessRole           String?
+  defaultRemindersJson String?
+  confirmedAt          DateTime?
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account              Account?            @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
+  links                CalendarEventLink[]
+  probes               Probe[]
+
+  @@unique([id, userId])
+  @@unique([userId, calendarId])
+}
+
+model Invitation {
+  id          String           @id @default(cuid())
+  email       String
+  tokenHash   String           @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  invitedById String
+  createdAt   DateTime         @default(now())
+  invitedBy   User             @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Restrict)
+  flows       InvitationFlow[]
+
+  @@index([email])
+}
+
+/// Browser-bound exchange of an invitation link; holds no raw token.
+model InvitationFlow {
+  id                String     @id
+  invitationId      String
+  browserSecretHash String
+  expiresAt         DateTime
+  createdAt         DateTime   @default(now())
+  invitation        Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+}
+
+/// Normalised search term → TVmaze match list. No user identity.
+model SearchCache {
+  key        String   @id
+  resultJson String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model MigrationRun {
+  id             String         @id
+  phase          String
+  sourceChecksum String
+  schemaVersion  String
+  startedAt      DateTime       @default(now())
+  completedAt    DateTime?
+  reportJson     String?
+  maps           MigrationMap[]
+}
+
+model MigrationMap {
+  runId String
+  kind  String
+  oldId String
+  newId String
+  run   MigrationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@id([runId, kind, oldId])
+}
+
+/// Admin audit: action, time and internal ids only (no names, addresses or tokens).
+model AuditEvent {
+  id       String   @id @default(cuid())
+  action   String
+  actorId  String?
+  targetId String?
+  at       DateTime @default(now())
+
+  @@index([at])
+}
+
+/// Index of deleted users; the durable restore source is the external journal (P10).
+model DeletionTombstone {
+  userId    String   @id
+  deletedAt DateTime @default(now())
 }

@@ -1,4 +1,4 @@
-import { requireUser } from "@/server/auth";
+import { requireUser } from "@/server/user-access";
 import { config } from "@/server/config";
 import { AppError, errorResponse } from "@/server/errors";
 import { requireSameOrigin } from "@/server/http-guards";

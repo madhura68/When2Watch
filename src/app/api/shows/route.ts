@@ -1,4 +1,4 @@
-import { requireUser } from "@/server/auth";
+import { requireUser } from "@/server/user-access";
 import { config } from "@/server/config";
 import { AppError, errorResponse } from "@/server/errors";
 import { requireSameOrigin } from "@/server/http-guards";
@@ -21,22 +21,30 @@ async function showInput(request: Request, requireTrying: boolean) {
   return { id, trying: value.trying === true };
 }
 export async function GET() {
-  try {const user=await requireUser();return Response.json(await overview(user.id));}catch(error){return errorResponse(error);}
+  try {const user=await requireUser();return Response.json(await overview(user.id),{headers:{"Cache-Control":"private, no-store"}});}catch(error){return errorResponse(error);}
 }
 export async function POST(request: Request) {
   try {
     const user=await requireUser();requireSameOrigin(request,config().origin);
     const {id,trying}=await showInput(request,false);
     const result=await syncService(user.id).add(user.id,id,trying);
-    return Response.json(result,{status:result.status==="success"?200:502});
+    return Response.json(result,{status:result.status==="success"?200:502,headers:{"Cache-Control":"private, no-store"}});
   }catch(error){return errorResponse(error);}
 }
 export async function PATCH(request: Request) {
   try {
     const user=await requireUser();requireSameOrigin(request,config().origin);
     const {id,trying}=await showInput(request,true);
-    const result=await database().trackedShow.updateMany({where:{userId:user.id,tvmazeId:id},data:{trying}});
+    // Proberen is personal: only this user's own follow changes.
+    const result=await database().userFollow.updateMany({where:{userId:user.id,show:{tvmazeId:id}},data:{trying}});
     if(result.count===0) throw new AppError("NOT_FOUND",404,"Deze serie staat niet in jouw overzicht.");
-    return Response.json({showId:String(id),trying});
+    return Response.json({showId:String(id),trying},{headers:{"Cache-Control":"private, no-store"}});
+  }catch(error){return errorResponse(error);}
+}
+export async function DELETE(request: Request) {
+  try {
+    const user=await requireUser();requireSameOrigin(request,config().origin);
+    const {id}=await showInput(request,false);
+    return Response.json(await syncService(user.id).unfollow(user.id,id),{headers:{"Cache-Control":"private, no-store"}});
   }catch(error){return errorResponse(error);}
 }

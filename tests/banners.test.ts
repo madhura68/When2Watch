@@ -1,11 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { refreshArtwork } from "@/server/banners";
+import { refreshCatalogArtwork as refreshArtwork } from "@/server/catalog";
 import { parseSnapshot, type ShowArtwork } from "@/server/tvmaze";
 import { SyncService } from "@/server/sync";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { overview } from "@/server/overview";
 import { agendaOverview } from "@/server/agenda";
 import { legacySqliteDatabase, testDatabase } from "./database";
+import { bindCalendar } from "./fixtures/users";
 import { simulatedCalendar } from "./simulated-calendar";
 import raw from "./fixtures/tvmaze/slow-horses.json";
 
@@ -28,8 +29,8 @@ it("adds only nullable banner columns while preserving populated series",async()
 });
 async function setup() {
   storage=testDatabase(); const db=storage.db;
-  await db.user.create({data:{id:"owner"}});
-  const show=await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running"}});
+  await db.user.create({data:{id:"owner",accessStatus:"ACTIVE"}});
+  const show=await db.catalogShow.create({data:{tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running"}});
   return {db,show};
 }
 it("stores background artwork during sync and serves it with the existing poster in Agenda",async()=>{
@@ -37,7 +38,7 @@ it("stores background artwork during sync and serves it with the existing poster
   const backgroundUrl="https://static.tvmaze.com/uploads/images/original_untouched/631/1577977.jpg";
   const source={snapshot:async()=>parseSnapshot(raw,45039),artwork:async()=>({bannerUrl:null,backgroundUrl})};
   const service=new SyncService(db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,{calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam"},()=>start);
-  expect((await service.sync("owner","manual")).status).toBe("success");
+  expect((await service.add("owner",45039)).status).toBe("success");
   vi.stubGlobal("fetch",()=>{throw Error("page reads must not fetch metadata");});
   expect((await agendaOverview("owner",start,db)).groups[0].episodes[0].show).toMatchObject({bannerUrl:null,backgroundUrl,poster:"https://static.tvmaze.com/uploads/images/medium_portrait/641/1604425.jpg"});
   expect(google.writes).toEqual([]);
@@ -46,37 +47,37 @@ it("caches success and absence for seven days across database reopen",async()=>{
   const {db,show}=await setup();let selected:ShowArtwork={bannerUrl:url,backgroundUrl};
   const artwork=vi.fn(async()=>selected);
   await refreshArtwork(db,{artwork},show,start);
-  expect(await db.trackedShow.findUnique({where:{id:show.id}})).toMatchObject({bannerUrl:url,backgroundUrl,bannerNextCheckAt:new Date(+start+7*day)});
+  expect(await db.catalogShow.findUnique({where:{id:show.id}})).toMatchObject({bannerUrl:url,backgroundUrl,artworkNextCheckAt:new Date(+start+7*day)});
   await db.$disconnect();const reopened=storage.reopen();
   try {
-    await refreshArtwork(reopened,{artwork},(await reopened.trackedShow.findUniqueOrThrow({where:{id:show.id}})),new Date(+start+7*day-1));
+    await refreshArtwork(reopened,{artwork},(await reopened.catalogShow.findUniqueOrThrow({where:{id:show.id}})),new Date(+start+7*day-1));
     expect(artwork).toHaveBeenCalledTimes(1);
     selected={bannerUrl:null,backgroundUrl:null};
-    await refreshArtwork(reopened,{artwork},(await reopened.trackedShow.findUniqueOrThrow({where:{id:show.id}})),new Date(+start+7*day));
-    expect(await reopened.trackedShow.findUnique({where:{id:show.id}})).toMatchObject({bannerUrl:null,backgroundUrl:null,bannerNextCheckAt:new Date(+start+14*day)});
-    await refreshArtwork(reopened,{artwork},(await reopened.trackedShow.findUniqueOrThrow({where:{id:show.id}})),new Date(+start+8*day));
+    await refreshArtwork(reopened,{artwork},(await reopened.catalogShow.findUniqueOrThrow({where:{id:show.id}})),new Date(+start+7*day));
+    expect(await reopened.catalogShow.findUnique({where:{id:show.id}})).toMatchObject({bannerUrl:null,backgroundUrl:null,artworkNextCheckAt:new Date(+start+14*day)});
+    await refreshArtwork(reopened,{artwork},(await reopened.catalogShow.findUniqueOrThrow({where:{id:show.id}})),new Date(+start+8*day));
     expect(artwork).toHaveBeenCalledTimes(2);
   }finally{await reopened.$disconnect();}
 });
 it("retains the previous banner and background on a source error and retries no earlier than 24 hours",async()=>{
-  const {db,show}=await setup();await db.trackedShow.update({where:{id:show.id},data:{bannerUrl:url,backgroundUrl}});
+  const {db,show}=await setup();await db.catalogShow.update({where:{id:show.id},data:{bannerUrl:url,backgroundUrl}});
   const artwork=vi.fn(async():Promise<ShowArtwork>=>{throw Error("temporary source error");});
-  const current=()=>db.trackedShow.findUniqueOrThrow({where:{id:show.id}});
+  const current=()=>db.catalogShow.findUniqueOrThrow({where:{id:show.id}});
   await refreshArtwork(db,{artwork},await current(),start);
-  expect(await current()).toMatchObject({bannerUrl:url,backgroundUrl,bannerNextCheckAt:new Date(+start+day)});
+  expect(await current()).toMatchObject({bannerUrl:url,backgroundUrl,artworkNextCheckAt:new Date(+start+day)});
   await refreshArtwork(db,{artwork},await current(),new Date(+start+day-1));
   expect(artwork).toHaveBeenCalledTimes(1);
   await refreshArtwork(db,{artwork},await current(),new Date(+start+day));
   expect(artwork).toHaveBeenCalledTimes(2);
-  expect(await current()).toMatchObject({bannerUrl:url,backgroundUrl,bannerNextCheckAt:new Date(+start+2*day)});
+  expect(await current()).toMatchObject({bannerUrl:url,backgroundUrl,artworkNextCheckAt:new Date(+start+2*day)});
 });
 it("does not let banner failure block following/Calendar sync or let new banners alter events",async()=>{
   const {db}=await setup();const google=simulatedCalendar();const config={calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam"};
-  await db.calendarSettings.create({data:{userId:"owner",...config,summary:"When2Watch",accessRole:"owner",defaultRemindersJson:"[]"}});
+  await bindCalendar(db,"owner",config.calendarId);
   let now=start;
   const artwork=vi.fn(async():Promise<ShowArtwork>=>{throw Error("source unavailable");});
   const source={snapshot:async()=>parseSnapshot(raw,45039),artwork};
-  const service=new SyncService(db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,config,()=>now);
+  const service=new SyncService(db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,config,()=>now,{sourceMaxAgeMs:0});
   expect((await service.add("owner",45039)).status).toBe("success");
   const links=await db.calendarEventLink.findMany({orderBy:{id:"asc"}}), events=structuredClone([...google.events.entries()]);
   google.writes.length=0;
@@ -104,12 +105,11 @@ it("adds a nullable background while preserving every existing show field and th
   } finally {legacy.close();}
   // Runtime behaviour of the preserved negative cache, on the current PostgreSQL schema.
   storage=testDatabase();const db=storage.db;
-  await db.user.create({data:{id:"owner"}});
-  await db.trackedShow.create({data:{id:"existing",userId:"owner",tvmazeId:44776,title:"Lanterns",sourceUrl:"https://www.tvmaze.com/shows/44776",status:"Running",poster:"https://static.tvmaze.com/uploads/images/medium_portrait/637/1592971.jpg",bannerNextCheckAt:new Date(+start+7*day)}});
-  const show=await db.trackedShow.findUniqueOrThrow({where:{id:"existing"}});
+  await db.catalogShow.create({data:{id:"existing",tvmazeId:44776,title:"Lanterns",sourceUrl:"https://www.tvmaze.com/shows/44776",status:"Running",poster:"https://static.tvmaze.com/uploads/images/medium_portrait/637/1592971.jpg",artworkNextCheckAt:new Date(+start+7*day)}});
+  const show=await db.catalogShow.findUniqueOrThrow({where:{id:"existing"}});
   expect(show.backgroundUrl).toBeNull();
   const artwork=vi.fn(async()=>({bannerUrl:null,backgroundUrl}));
   await refreshArtwork(db,{artwork},show,new Date(+start+day));
   expect(artwork).not.toHaveBeenCalled();
-  expect((await db.trackedShow.findUniqueOrThrow({where:{id:show.id}})).bannerNextCheckAt).toEqual(new Date(+start+7*day));
+  expect((await db.catalogShow.findUniqueOrThrow({where:{id:show.id}})).artworkNextCheckAt).toEqual(new Date(+start+7*day));
 });

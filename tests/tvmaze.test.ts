@@ -31,14 +31,14 @@ describe("TVmaze banner contract", () => {
   });
   it("uses the same bounded request/retry path for image lists", async () => {
     const calls:string[] = [], pauses:number[] = [];
-    const api = new TVmaze(async url => { calls.push(String(url)); return calls.length < 3 ? new Response(null,{status:429,headers:{"retry-after":"1"}}) : Response.json(images); }, async ms => {pauses.push(ms);});
+    const api = new TVmaze(async url => { calls.push(String(url)); return calls.length < 4 ? new Response(null,{status:429,headers:{"retry-after":"2"}}) : Response.json(images); }, async ms => {pauses.push(ms);});
     expect(await api.artwork(45039)).toEqual(parseArtwork(images));
-    expect(calls).toEqual(Array(3).fill("https://api.tvmaze.com/shows/45039/images"));
-    expect(pauses.filter(ms=>ms===1000)).toHaveLength(2);
+    expect(calls).toEqual(Array(4).fill("https://api.tvmaze.com/shows/45039/images"));
+    expect(pauses.filter(ms=>ms===2000)).toHaveLength(3);
     let attempts=0;
     const exhausted=new TVmaze(async()=>{attempts++;return new Response(null,{status:429});},async()=>{});
     await expect(exhausted.artwork(45039)).rejects.toMatchObject({code:"SOURCE_UNAVAILABLE"});
-    expect(attempts).toBe(3);
+    expect(attempts).toBe(4);
   });
 });
 
@@ -141,15 +141,56 @@ describe("TVmaze real response contract", () => {
     expect(() => parseSearch({})).toThrowError(expect.objectContaining({code:"INVALID_SOURCE"}));
   });
   it("only fetches searches from four trimmed characters and bounds rate-limit retries", async () => {
-    const requests: string[] = []; let limited = 2;
+    const requests: string[] = []; let limited = 3;
     const api = new TVmaze(async input => { requests.push(String(input)); return limited-- > 0 ? new Response(null,{status:429}) : Response.json(matches); }, async () => {});
     for (const query of ["", "  ", "S", "Sl", " Slo "]) expect(await api.search(query)).toEqual([]);
     expect(requests).toHaveLength(0);
     expect((await api.search(" Slow "))[0].id).toBe(45039);
-    expect(requests).toEqual(Array(3).fill("https://api.tvmaze.com/search/shows?q=Slow"));
+    expect(requests).toEqual(Array(4).fill("https://api.tvmaze.com/search/shows?q=Slow"));
     let attempts=0;
     const failing = new TVmaze(async () => { attempts++; return new Response(null,{status:429}); },async()=>{});
     await expect(failing.search("Slow Horses")).rejects.toMatchObject({code:"SOURCE_UNAVAILABLE"});
-    expect(attempts).toBe(3);
+    expect(attempts).toBe(4);
+  });
+});
+
+describe("TVmaze source client limits", () => {
+  it("spaces every source request at least one second apart", async () => {
+    const pauses: number[] = [];
+    const api = new TVmaze(async () => Response.json(matches), async ms => { pauses.push(ms); });
+    await api.search("Slow Horses"); await api.search("Slow Horses");
+    expect(Math.max(...pauses)).toBeGreaterThan(900);
+  });
+  it("retries server and network failures at most three times with growing waits, never other client errors", async () => {
+    const pauses: number[] = []; let attempts = 0;
+    const flaky = new TVmaze(async () => { attempts++; if (attempts === 1) throw new Error("reset"); return attempts < 4 ? new Response(null, { status: 503 }) : Response.json(matches); }, async ms => { pauses.push(ms); });
+    expect((await flaky.search("Slow Horses"))[0].id).toBe(45039);
+    expect(attempts).toBe(4);
+    // Backoff 1 s, 2 s, 4 s (spacing pauses are at most one second).
+    expect(pauses).toEqual(expect.arrayContaining([2000, 4000]));
+    let notFound = 0;
+    await expect(new TVmaze(async () => { notFound++; return new Response(null, { status: 404 }); }, async () => {}).snapshot(1)).rejects.toMatchObject({ code: "SOURCE_UNAVAILABLE" });
+    expect(notFound).toBe(1);
+  });
+  it("reads the update index as show ID → timestamp and rejects malformed data", async () => {
+    const urls: string[] = [];
+    const api = new TVmaze(async url => { urls.push(String(url)); return Response.json({ "45039": 1790000000, "44776": 1780000000 }); }, async () => {});
+    expect(await api.updates("week")).toEqual(new Map([[45039, 1790000000], [44776, 1780000000]]));
+    expect(await api.updates(null)).toBeInstanceOf(Map);
+    expect(urls).toEqual(["https://api.tvmaze.com/updates/shows?since=week", "https://api.tvmaze.com/updates/shows"]);
+    const bad = new TVmaze(async () => Response.json({ x: "y" }), async () => {});
+    await expect(bad.updates("week")).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  });
+});
+
+describe("request counter", () => {
+  it("counts every outgoing TVmaze request by kind, retries included", async () => {
+    const { sourceRequestCounts } = await import("@/server/tvmaze");
+    let calls = 0;
+    const client = new TVmaze((async (url: string) => { calls++; return calls === 1 ? new Response("", { status: 503 }) : Response.json([]); }) as typeof fetch, async () => {});
+    const before = sourceRequestCounts();
+    await client.search("slow horses");
+    const after = sourceRequestCounts();
+    expect(after.total - before.total).toBe(2); expect(after.search - before.search).toBe(2); expect(after.show - before.show).toBe(0);
   });
 });

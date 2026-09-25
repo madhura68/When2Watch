@@ -1,3 +1,4 @@
+import { open, seal } from "@/server/credentials";
 import { afterEach, expect, it, vi } from "vitest";
 import { testDatabase } from "./database";
 import { importLegacyInstallation } from "@/server/installation";
@@ -14,7 +15,7 @@ it("uses the verified OAuth callback profile when NextAuth passes a normalized p
   storage = testDatabase(); const db = storage.db;
   const user = { id: "owner", email: "owner@example.test", name: "Owner", emailVerified: null };
   await db.user.create({ data: user });
-  await db.account.create({ data: { id: "account", userId: user.id, provider: "google", providerAccountId: "subject", type: "oauth", refresh_token: "existing-refresh" } });
+  await db.account.create({ data: { id: "account", userId: user.id, provider: "google", providerAccountId: "subject", type: "oauth", refresh_token: seal("existing-refresh", "account.refresh_token", "account") } });
   await db.session.create({ data: { userId: user.id, sessionToken: "current-session", expires: new Date(Date.now()+3600000) } });
   await importLegacyInstallation(db, { allowedEmail: user.email, clientId: "synthetic-client", clientSecret: "synthetic-secret" });
   const service = new GoogleConnectionService(db), attempt = await service.begin(user.id,"current-session",{mode:"calendar"});
@@ -26,5 +27,5 @@ it("uses the verified OAuth callback profile when NextAuth passes a normalized p
   // email_verified exists only on OAuthProfile supplied to callbacks.signIn.
   await options.events!.signIn!({ user, account, profile: { email:user.email, name:"Normalized name" }, isNewUser:false });
   expect(await db.googleConnectionAttempt.findUnique({where:{id:attempt.id}})).toMatchObject({status:"completed",profileName:"Verified name"});
-  expect((await db.account.findUniqueOrThrow({where:{id:"account"}})).refresh_token).toBe("existing-refresh");
+  expect(open((await db.account.findUniqueOrThrow({where:{id:"account"}})).refresh_token!,"account.refresh_token","account")).toBe("existing-refresh");
 });

@@ -19,6 +19,9 @@ services:
         aliases: [when2watch-web]
       database: {}
     read_only: true
+    # Append-only deletion journal (P10), outside the database volume and its backups; host dir 0700, uid 1000.
+    volumes:
+      - /srv/apps/when2watch/journal:/journal
     tmpfs:
       - /tmp:size=64m,mode=1777
     cap_drop: [ALL]

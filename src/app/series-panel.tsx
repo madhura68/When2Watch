@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Show } from "@/server/tvmaze";
 import type { Overview } from "@/server/overview";
 import type { SyncResult } from "@/server/sync";
-import { LatestSearch, MIN_SEARCH_LENGTH } from "@/lib/latest-search";
+import { LatestSearch, MIN_SEARCH_LENGTH, SEARCH_DEBOUNCE_MS } from "@/lib/latest-search";
 import { SeriesPoster } from "./series-poster";
 import { sourceStatus, visibleSeries, type SourceFilter, type ChoiceFilter } from "@/lib/series-list";
 
@@ -33,7 +33,7 @@ export function SeriesPanel({data}:{data:Overview}) {
       void search.find(query,result=>{setMatches(result);setSearching(false);setSearched(true);},error=>{
         setSearchError(error instanceof Error?error.message:"Zoeken is niet gelukt. Probeer opnieuw.");setSearching(false);
       });
-    },350);
+    },SEARCH_DEBOUNCE_MS);
     return()=>{clearTimeout(timer);search.cancel();};
   },[query,search]);
   function changeQuery(value:string) {
@@ -59,6 +59,17 @@ export function SeriesPanel({data}:{data:Overview}) {
       const body=await response.json();
       if(!response.ok)throw new Error(body.error??"Opslaan is niet gelukt. Probeer opnieuw.");
       setMessage("Voorkeur opgeslagen. Deze serie blijft met je agenda synchroniseren.");
+    }catch(error){setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer opnieuw.");}
+    finally{router.refresh();setBusy(false);}
+  }
+  async function unfollow(showId:number,title:string) {
+    if(!window.confirm(`${title} niet meer volgen? Je eigen agenda-items van deze serie worden verwijderd; anderen merken er niets van.`))return;
+    setBusy(true);setFailed(false);setMessage("Serie verwijderen…");
+    try {
+      const response=await fetch("/api/shows",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({showId:String(showId)})});
+      const body=await response.json();
+      if(!response.ok)throw new Error(body.error??"Verwijderen is niet gelukt. Probeer opnieuw.");
+      setMessage(`Je volgt ${title} niet meer.`);
     }catch(error){setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer opnieuw.");}
     finally{router.refresh();setBusy(false);}
   }
@@ -101,7 +112,7 @@ export function SeriesPanel({data}:{data:Overview}) {
     {shown.map(show=><section className="card followed-show" key={show.id}>
       <div className="show-identity">
       <div className="show-heading"><SeriesPoster src={show.poster}/><div className="show-info"><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
-      <div className="show-preference"><label htmlFor={`trying-${show.id}`}>Jouw keuze voor {show.title}</label><select id={`trying-${show.id}`} value={show.trying?"trying":"following"} disabled={busy} onChange={e=>void changeTrying(show.id,e.target.value==="trying")}><option value="following">Volgen</option><option value="trying">Proberen</option></select></div>
+      <div className="show-preference"><label htmlFor={`trying-${show.id}`}>Jouw keuze voor {show.title}</label><select id={`trying-${show.id}`} value={show.trying?"trying":"following"} disabled={busy} onChange={e=>void changeTrying(show.id,e.target.value==="trying")}><option value="following">Volgen</option><option value="trying">Proberen</option></select></div><button className="secondary" disabled={busy} onClick={()=>void unfollow(show.id,show.title)}>Niet meer volgen</button>
       {show.error&&<p className="notice error">{show.error}</p>}
       </div>
       <div className="show-content">

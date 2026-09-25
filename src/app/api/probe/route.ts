@@ -1,4 +1,4 @@
-import { requireUser } from "@/server/auth";
+import { requireUser } from "@/server/user-access";
 import { config } from "@/server/config";
 import { requireSameOrigin, stringField } from "@/server/http-guards";
 import { probeService } from "@/server/services";
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     requireSameOrigin(request, config().origin);
     const date = await stringField(request, "date");
     const probe = await probeService(user.id).create(user.id, date);
-    return Response.json({ probe });
+    return Response.json({ probe }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return errorResponse(error); }
 }
 

@@ -1,14 +1,15 @@
-import { currentSessionToken, requireUser } from "@/server/auth";
+import { currentSessionToken } from "@/server/auth";
+import { requireUser } from "@/server/user-access";
 import { config } from "@/server/config";
 import { database } from "@/server/db";
 import { AppError, errorResponse } from "@/server/errors";
 import { connectionCookie, GoogleConnectionService, type ConnectionMode } from "@/server/google-connection";
 import { requireSameOrigin } from "@/server/http-guards";
-import { publicInstallation } from "@/server/installation";
+import { userSettings } from "@/server/installation";
 
 export const runtime = "nodejs";
 export async function GET() {
-  try { const user = await requireUser(); return Response.json(await publicInstallation(database(), user.id), { headers: { "Cache-Control": "private, no-store" } }); }
+  try { const user = await requireUser(); return Response.json(await userSettings(database(), user.id), { headers: { "Cache-Control": "private, no-store" } }); }
   catch (error) { return errorResponse(error); }
 }
 export async function POST(request: Request) {
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     const service = new GoogleConnectionService(database()), token = await currentSessionToken();
     if (input.action === "confirm" || input.action === "cancel") {
       if (typeof input.id !== "string" || Object.keys(input).some(k => !["action", "id"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Kies een geldige koppelpoging.");
-      if (input.action === "confirm") return Response.json(await service.confirm(user.id, token, input.id));
+      if (input.action === "confirm") return Response.json(await service.confirm(user.id, token, input.id), { headers: { "Cache-Control": "private, no-store" } });
       await service.cancel(input.id, token); return Response.json({ cancelled: true });
     }
     if (input.action !== "begin" || Object.keys(input).some(k => !["action", "mode", "clientId", "clientSecret"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Kies een Google-actie.");

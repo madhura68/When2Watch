@@ -1,16 +1,19 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { Account } from "next-auth";
-import { ownerInstallation } from "./installation";
+import { getInstallation } from "./installation";
+import { connectionAccount } from "./calendar-bindings";
+import { accessFor, adminFor } from "./user-access";
 import { AppError } from "./errors";
 import { serializeCalendarMutation } from "./calendar-mutations";
-import { calendarScopes, calendarCreationScope, hasCalendarScopes } from "./auth-policy";
+import { calendarScopes, hasCalendarScopes } from "./auth-policy";
 import { googleTokenRefresher } from "./google-tokens";
 import { GoogleCalendar } from "./google-calendar";
+import { clientSecretOf, open, openOptional, seal, sealOptional, sealedClient } from "./credentials";
 
 export const connectionCookie = "when2watch.connection";
 export const hashSession = (token: string) => createHash("sha256").update(token).digest("hex");
-export type ConnectionMode = "calendar" | "create" | "candidate" | "replace-client";
+export type ConnectionMode = "calendar" | "candidate" | "replace-client";
 export type GoogleProfile = { email?: string; email_verified?: boolean; name?: string };
 type ConnectionInput = { mode: ConnectionMode; clientId?: string; clientSecret?: string };
 const expired = () => new AppError("CONNECTION_EXPIRED", 409, "Deze koppelpoging is verlopen of hoort bij een andere sessie. Start de koppeling opnieuw vanuit Instellingen.");
@@ -27,14 +30,18 @@ export class GoogleConnectionService {
 
   begin(userId: string, sessionToken: string, input: ConnectionInput) {
     return serializeCalendarMutation(userId, async () => {
-      const installation = await ownerInstallation(this.db, userId);
+      await accessFor(this.db, userId);
       if (await this.sessionOwner(sessionToken) !== userId) throw expired();
-      if (!input || !["calendar", "create", "candidate", "replace-client"].includes(input.mode)) throw new AppError("INVALID_INPUT", 400, "Kies een geldige Google-actie.");
+      if (!input || !["calendar", "candidate", "replace-client"].includes(input.mode)) throw new AppError("INVALID_INPUT", 400, "Kies een geldige Google-actie.");
+      // The OAuth client is central installation configuration: only an admin may replace it.
+      if (input.mode === "replace-client") await adminFor(this.db, userId);
+      const installation = await getInstallation(this.db);
+      if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Richt eerst de Google-koppeling van deze installatie in.");
       let clientId = installation.oauthClientConfigId;
-      const account = await this.db.account.findUniqueOrThrow({ where: { id: installation.activeAccountId } });
+      const account = await connectionAccount(this.db, userId);
       const required = input.mode === "replace-client"
-        ? [...calendarScopes, calendarCreationScope].filter(scope => account.scope?.split(/\s+/).includes(scope))
-        : [...calendarScopes, ...(input.mode === "create" ? [calendarCreationScope] : [])];
+        ? [...calendarScopes].filter(scope => account?.scope?.split(/\s+/).includes(scope))
+        : [...calendarScopes];
       return this.db.$transaction(async tx => {
         if (input.mode === "replace-client") {
           if (typeof input.clientId !== "string" || !/^[a-zA-Z0-9._-]+\.apps\.googleusercontent\.com$/.test(input.clientId) ||
@@ -43,7 +50,7 @@ export class GoogleConnectionService {
           }
           const current = await tx.oAuthClientConfig.findUniqueOrThrow({ where: { id: clientId } });
           if (current.clientId === input.clientId) throw new AppError("SAME_OAUTH_CLIENT", 409, "Dit is de huidige client. Kies een andere OAuth-webclient.");
-          clientId = (await tx.oAuthClientConfig.create({ data: { clientId: input.clientId, clientSecret: input.clientSecret.trim() } })).id;
+          clientId = (await tx.oAuthClientConfig.create({ data: sealedClient(input.clientId, input.clientSecret.trim()) })).id;
         }
         await tx.googleConnectionAttempt.updateMany({ where: { ownerId: userId, status: { in: ["pending", "completed", "ready"] } }, data: { status: "cancelled", tokensJson: null } });
         return tx.googleConnectionAttempt.create({ data: { id: randomBytes(24).toString("hex"), ownerId: userId,
@@ -57,17 +64,20 @@ export class GoogleConnectionService {
     const attempt = await this.db.googleConnectionAttempt.findUnique({ where: { id } });
     if (!attempt || !(Array.isArray(status) ? status : [status]).includes(attempt.status) || attempt.expiresAt <= new Date() || attempt.sessionHash !== hashSession(sessionToken) ||
         !attempt.ownerId || await this.sessionOwner(sessionToken) !== attempt.ownerId) throw expired();
-    await ownerInstallation(this.db, attempt.ownerId);
+    await accessFor(this.db, attempt.ownerId);
     return attempt;
   }
 
   async accepts(id: string, sessionToken: string, account: Account | null, profile: GoogleProfile | undefined) {
     const attempt = await this.validate(id, sessionToken);
     if (account?.provider !== "google" || !account.providerAccountId || !profile?.email || profile.email_verified !== true) return false;
+    // A Google identity that already belongs to another user is never linked here.
+    const linked = await this.db.account.findUnique({ where: { provider_providerAccountId: { provider: "google", providerAccountId: account.providerAccountId } } });
+    if (linked && linked.userId !== attempt.ownerId) return false;
     if (attempt.mode === "candidate") return true;
-    const installation = await ownerInstallation(this.db, attempt.ownerId!);
-    const active = await this.db.account.findUniqueOrThrow({ where: { id: installation.activeAccountId } });
-    return active.providerAccountId === account.providerAccountId;
+    const current = await connectionAccount(this.db, attempt.ownerId!);
+    // Reconnect keeps the chosen account; a first connection uses the user's own login identity.
+    return current ? current.providerAccountId === account.providerAccountId : !!linked;
   }
 
   complete(id: string, sessionToken: string, userId: string, account: Account, profile: GoogleProfile) {
@@ -82,9 +92,9 @@ export class GoogleConnectionService {
     const linked = await this.db.account.findUnique({ where: { provider_providerAccountId: { provider: "google", providerAccountId: account.providerAccountId } } });
     if (!linked || linked.userId !== userId) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "Deze Google-identiteit hoort niet bij de bestaande eigenaar.");
     const tokens = { access_token: account.access_token, expires_at: account.expires_at, scope: account.scope, token_type: account.token_type,
-      refresh_token: account.refresh_token || (linked.oauthClientConfigId === attempt.oauthClientConfigId ? linked.refresh_token : undefined) };
+      refresh_token: account.refresh_token || (linked.oauthClientConfigId === attempt.oauthClientConfigId ? openOptional(linked.refresh_token, "account.refresh_token", linked.id) : undefined) };
     await this.db.googleConnectionAttempt.update({ where: { id }, data: { status: "completed", accountId: linked.id,
-      providerAccountId: account.providerAccountId, profileEmail: profile.email, profileName: profile.name, tokensJson: JSON.stringify(tokens) } });
+      providerAccountId: account.providerAccountId, profileEmail: profile.email, profileName: profile.name, tokensJson: seal(JSON.stringify(tokens), "connectionAttempt.tokens", id) } });
   }
 
   cancel(id: string, sessionToken: string) {
@@ -96,32 +106,44 @@ export class GoogleConnectionService {
     await this.db.googleConnectionAttempt.update({ where: { id: attempt.id }, data: { status: "cancelled", tokensJson: null } });
   }
 
-  confirm(userId: string, sessionToken: string, id: string) {
+  async confirm(userId: string, sessionToken: string, id: string) {
+    // Switching the Calendar account is refused while a sync of this user runs.
+    const switching = (await this.db.googleConnectionAttempt.findUnique({ where: { id }, select: { mode: true } }))?.mode === "candidate";
     return serializeCalendarMutation(userId, async () => {
-      const attempt = await this.validate(id, sessionToken, "completed"), installation = await ownerInstallation(this.db, userId);
+      const attempt = await this.validate(id, sessionToken, "completed"), current = await connectionAccount(this.db, userId);
       if (attempt.ownerId !== userId || !attempt.accountId || !attempt.tokensJson) throw expired();
-      const tokens = JSON.parse(attempt.tokensJson) as Account;
+      const tokens = JSON.parse(open(attempt.tokensJson, "connectionAttempt.tokens", attempt.id)) as Account;
       const required = JSON.parse(attempt.requiredScopesJson) as string[];
       if (!required.every(scope => tokens.scope?.split(/\s+/).includes(scope))) throw new AppError("CALENDAR_PERMISSION_REQUIRED", 409, "Niet alle gevraagde agendarechten zijn verleend. Verbind opnieuw en selecteer de benodigde toestemmingen.");
       if (!tokens.refresh_token) throw new AppError("RECONNECT_GOOGLE", 409, "De blijvende Google-toegang ontbreekt. Verbind opnieuw voordat je deze keuze bevestigt.");
       const client = await this.db.oAuthClientConfig.findUniqueOrThrow({ where: { id: attempt.oauthClientConfigId } });
       let refreshed: Awaited<ReturnType<ReturnType<RefreshFactory>>>;
-      try { refreshed = await this.refresh(client.clientId, client.clientSecret)(tokens.refresh_token); }
+      try { refreshed = await this.refresh(client.clientId, clientSecretOf(client))(tokens.refresh_token); }
       catch { throw new AppError("RECONNECT_GOOGLE", 409, "De nieuwe Google-verbinding kon niet blijvend worden bevestigd. De bestaande verbinding is behouden."); }
       if (!refreshed.access_token || !refreshed.expiry_date) throw new AppError("RECONNECT_GOOGLE", 409, "Google gaf geen bruikbare blijvende toegang.");
       if (hasCalendarScopes(tokens.scope)) await new GoogleCalendar(async () => refreshed.access_token!, this.fetcher).calendars();
       await this.db.$transaction(async tx => {
         await tx.account.update({ where: { id: attempt.accountId! }, data: { oauthClientConfigId: attempt.oauthClientConfigId,
-          access_token: refreshed.access_token, refresh_token: refreshed.refresh_token || tokens.refresh_token, expires_at: Math.floor(refreshed.expiry_date! / 1000),
+          access_token: seal(refreshed.access_token!, "account.access_token", attempt.accountId!), refresh_token: sealOptional(refreshed.refresh_token || tokens.refresh_token, "account.refresh_token", attempt.accountId!), expires_at: Math.floor(refreshed.expiry_date! / 1000),
           scope: tokens.scope, token_type: tokens.token_type, needsReauth: false, profileEmail: attempt.profileEmail, profileName: attempt.profileName } });
+        if (attempt.mode === "candidate") {
+          // Account switch: same internal user, new Calendar account; the old binding stays as inactive history.
+          await tx.userConnection.upsert({ where: { userId }, create: { userId, accountId: attempt.accountId! }, update: { accountId: attempt.accountId! } });
+          await tx.calendarBinding.updateMany({ where: { userId, status: "ACTIVE", accountId: { not: attempt.accountId! } }, data: { status: "INACTIVE" } });
+        }
         if (attempt.mode !== "candidate") {
-          if (attempt.accountId !== installation.activeAccountId) throw expired();
-          await tx.installation.update({ where: { id: installation.id }, data: { oauthClientConfigId: attempt.oauthClientConfigId } });
-          await tx.user.update({ where: { id: userId }, data: { email: attempt.profileEmail, name: attempt.profileName } });
+          if (current && attempt.accountId !== current.id) throw expired();
+          await tx.userConnection.upsert({ where: { userId }, create: { userId, accountId: attempt.accountId! }, update: { accountId: attempt.accountId! } });
+          if (attempt.mode === "replace-client") {
+            await adminFor(this.db, userId);
+            await tx.installation.update({ where: { id: "singleton" }, data: { oauthClientConfigId: attempt.oauthClientConfigId } });
+          }
+          // The login identity (User.email) stays as Google reported it at sign-in; the Calendar
+          // account's profile lives on the Account row.
         }
         await tx.googleConnectionAttempt.update({ where: { id }, data: { status: attempt.mode === "candidate" ? "ready" : "confirmed", tokensJson: null } });
       });
       return { confirmed: true };
-    });
+    }, switching);
   }
 }

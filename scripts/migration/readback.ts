@@ -4,6 +4,7 @@
  * Run behind maintenance, before opening the app and scheduler:
  *   DATABASE_URL=<private env> npx tsx scripts/migration/readback.ts --authorized-readback
  */
+import { clientSecretOf, open } from "../../src/server/credentials";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { AppError } from "../../src/server/errors";
@@ -29,13 +30,15 @@ export function readOnlyFetch(fetcher: typeof fetch = fetch): typeof fetch {
 
 export async function readbackOwnEvents(db: PrismaClient, google: GoogleCalendar, userId: string, calendarId: string): Promise<ReadbackReport> {
   const report: ReadbackReport = { links: 0, unchanged: 0, remoteChanged: 0, sourceChanged: 0, missing: 0, foreign: 0, pending: 0, deleted: 0, otherCalendar: 0 };
-  report.otherCalendar = await db.calendarEventLink.count({ where: { calendarId: { not: calendarId }, episode: { show: { userId } } } });
-  const links = await db.calendarEventLink.findMany({ where: { calendarId, episode: { show: { userId } } }, include: { episode: { include: { show: true } } }, orderBy: { id: "asc" } });
+  // R2 links carry their owner; R1 links are owned through the legacy series.
+  const own = { OR: [{ userId }, { episode: { show: { userId } } }] };
+  report.otherCalendar = await db.calendarEventLink.count({ where: { calendarId: { not: calendarId }, ...own } });
+  const links = await db.calendarEventLink.findMany({ where: { calendarId, ...own }, include: { episode: { include: { show: true } }, catalogEpisode: { include: { show: true } } }, orderBy: { id: "asc" } });
   for (const link of links) {
     report.links++;
     if (link.status === "deleted") { report.deleted++; continue; }
     if (link.status !== "synced") { report.pending++; continue; }
-    const { episode } = link, show = episode.show;
+    const episode = link.catalogEpisode ?? link.episode!, show = episode.show;
     let event;
     try { event = await google.event(calendarId, link.eventId); }
     catch (error) { if (error instanceof AppError && [404, 410].includes(error.status)) { report.missing++; continue; } throw error; }
@@ -54,20 +57,23 @@ async function main() {
   if (!process.argv.includes("--authorized-readback")) throw Error("Explicit --authorized-readback is required.");
   const db = new PrismaClient();
   try {
+    // One user per run (default: the installation owner); the user's own active binding and its account.
     const installation = await db.installation.findUniqueOrThrow({ where: { id: "singleton" } });
-    if (!installation.ownerId || !installation.activeAccountId) throw Error("No configured owner/account in the target database.");
-    const settings = await db.calendarSettings.findUniqueOrThrow({ where: { userId: installation.ownerId } });
-    const account = await db.account.findUniqueOrThrow({ where: { id: installation.activeAccountId }, include: { oauthClient: true } });
+    const userId = process.argv.find(arg => arg.startsWith("--user="))?.slice(7) ?? installation.ownerId;
+    if (!userId) throw Error("No user to read back.");
+    const binding = await db.calendarBinding.findFirst({ where: { userId, status: "ACTIVE" }, include: { account: { include: { oauthClient: true } } } });
+    if (!binding?.account) throw Error("This user has no active calendar binding with a proven account.");
+    const settings = { calendarId: binding.calendarId }, account = binding.account;
     // Token is refreshed in memory only; the target database stays untouched.
-    let token: string | undefined = account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60 ? account.access_token : undefined;
+    let token: string | undefined = account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60 ? open(account.access_token, "account.access_token", account.id) : undefined;
     const accessToken = async () => {
       if (token) return token;
       if (!account.refresh_token || !account.oauthClient) throw Error("No usable refresh token; reconnect after opening.");
-      const refreshed = await googleTokenRefresher(account.oauthClient.clientId, account.oauthClient.clientSecret)(account.refresh_token);
+      const refreshed = await googleTokenRefresher(account.oauthClient.clientId, clientSecretOf(account.oauthClient))(open(account.refresh_token, "account.refresh_token", account.id));
       if (!refreshed.access_token) throw Error("Token refresh returned no access token.");
       return token = refreshed.access_token;
     };
-    const report = await readbackOwnEvents(db, new GoogleCalendar(accessToken, readOnlyFetch()), installation.ownerId, settings.calendarId);
+    const report = await readbackOwnEvents(db, new GoogleCalendar(accessToken, readOnlyFetch()), userId, settings.calendarId);
     console.log(JSON.stringify(report));
     if (readbackNeedsAttention(report)) process.exitCode = 2;
   } finally { await db.$disconnect(); }

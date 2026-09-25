@@ -1,10 +1,11 @@
 import type { SyncConfiguration } from "./sync";
-import type { PrismaClient, Probe, CalendarSettings } from "@prisma/client";
+import type { CalendarBinding, PrismaClient, Probe } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { GoogleCalendar, safeEvent, type CalendarEvent } from "./google-calendar";
 import { AppError } from "./errors";
 import { localDate, nextDate } from "@/lib/dates";
 import { serializeCalendarMutation } from "./calendar-mutations";
+import { bindingMetadata, bindingUsable, getActiveBinding } from "./calendar-bindings";
 
 export class CalendarProbeService {
   constructor(private readonly db: PrismaClient, private readonly google: GoogleCalendar, private readonly config: SyncConfiguration | (() => Promise<SyncConfiguration>), private readonly now = () => new Date()) {}
@@ -15,16 +16,17 @@ export class CalendarProbeService {
     if (typeof this.config === "function") throw new Error("Configuration must be resolved inside the owner lock");
     return this.config;
   }
-  async verifyCalendar(userId: string): Promise<CalendarSettings> {
+  async verifyCalendar(userId: string): Promise<CalendarBinding> {
     return serializeCalendarMutation(userId, async () => (await this.configured()).verifyLocked(userId));
   }
-  private async verifyLocked(userId: string): Promise<CalendarSettings> {
-    const calendar = await this.google.calendar(this.settings.calendarId);
-    const data = {
-      calendarId: calendar.id, summary: calendar.summary, timeZone: calendar.timeZone,
-      accessRole: calendar.accessRole, defaultRemindersJson: JSON.stringify(calendar.defaultReminders), confirmedAt: this.now(),
-    };
-    return this.db.calendarSettings.upsert({ where: { userId }, create: { userId, ...data }, update: data });
+  private async verifyLocked(userId: string): Promise<CalendarBinding> {
+    const active = await getActiveBinding(this.db, userId);
+    if (!("binding" in active) || active.binding.calendarId !== this.settings.calendarId) {
+      throw new AppError("CALENDAR_NOT_CONFIRMED", 409, "Kies en bevestig eerst je eigen agenda bij Instellingen.");
+    }
+    if (bindingUsable(active.binding, active.account) !== "ok") throw new AppError("CALENDAR_PAUSED", 409, "Deze agenda is niet door When2Watch aangemaakt of de toegang ontbreekt. Maak bij Instellingen een When2Watch-agenda.");
+    const calendar = await this.google.calendar(active.binding.calendarId);
+    return this.db.calendarBinding.update({ where: { id: active.binding.id }, data: bindingMetadata(calendar, this.now()) });
   }
 
   async create(userId: string, date: string): Promise<Probe> {
@@ -40,11 +42,7 @@ export class CalendarProbeService {
     const existing = await this.db.probe.findUnique({ where: { userId_date: { userId, date } } });
     const futureDate = date > localDate(this.now(), this.settings.timeZone);
     if (!existing && !futureDate) throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de meldingsproef.");
-    const calendar = await this.db.calendarSettings.findUnique({ where: { userId } });
-    if (calendar?.calendarId !== this.settings.calendarId) {
-      throw new AppError("CALENDAR_NOT_CONFIRMED", 409, "Controleer en bevestig eerst de gekozen agenda.");
-    }
-    await this.verifyLocked(userId);
+    const calendar = await this.verifyLocked(userId);
     const id = randomUUID();
     const eventId = `p${randomUUID().replaceAll("-", "")}`;
     const request: CalendarEvent = {
@@ -57,7 +55,7 @@ export class CalendarProbeService {
     // Persist the ID before touching Google, so a lost response can be retried.
     const probe = await this.db.probe.upsert({
       where: { userId_date: { userId, date } }, update: {},
-      create: { id, userId, calendarId: calendar.calendarId, eventId, date, requestJson: JSON.stringify(request) },
+      create: { id, userId, calendarId: calendar.calendarId, bindingId: calendar.id, eventId, date, requestJson: JSON.stringify(request) },
     });
     if (probe.calendarId !== calendar.calendarId) throw new AppError("WRONG_CALENDAR", 409, "Dit proefitem hoort bij een andere agenda.");
     if (probe.status === "deleted") throw new AppError("PROBE_ALREADY_REMOVED", 409, "Deze proef is opgeruimd. Kies een andere datum voor een nieuwe proef.");

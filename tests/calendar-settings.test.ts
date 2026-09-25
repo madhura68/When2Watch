@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { CalendarSettingsService } from "@/server/calendar-settings";
 import { importLegacyInstallation } from "@/server/installation";
-import { calendarScopes, calendarCreationScope } from "@/server/auth-policy";
+import { calendarScopes } from "@/server/auth-policy";
 import { testDatabase } from "./database";
 
 let storage: ReturnType<typeof testDatabase>;
@@ -13,7 +13,7 @@ async function fixture(fetcher: typeof fetch) {
   storage = testDatabase(); const db = storage.db;
   await db.user.create({ data: { id: "owner", email: "owner@example.test" } });
   await db.account.create({ data: { id: "account", userId: "owner", provider: "google", providerAccountId: "subject", type: "oauth",
-    refresh_token: "synthetic", scope: [...calendarScopes, calendarCreationScope].join(" ") } });
+    refresh_token: "synthetic", scope: [...calendarScopes].join(" ") } });
   await importLegacyInstallation(db, { allowedEmail: "owner@example.test", clientId: "synthetic-client", clientSecret: "synthetic-secret" });
   const google = new GoogleCalendar(async () => "synthetic", fetcher);
   return { db, google, service: new CalendarSettingsService(db, () => google) };
@@ -51,11 +51,12 @@ it("persists creation intent before POST and returns the same calendar after dou
   finally { await reopened.$disconnect(); }
   expect(posts).toBe(1);
   await service.select("owner", calendar.id);
-  expect(await db.calendarSettings.findUnique({ where: { userId: "owner" } })).toMatchObject({ calendarId: calendar.id, timeZone: calendar.timeZone });
+  // Created by this user and account, and read back: proven app ownership.
+  expect(await db.calendarBinding.findUnique({ where: { userId_calendarId: { userId: "owner", calendarId: calendar.id } } })).toMatchObject({ status: "ACTIVE", accountId: "account", provenance: "APP_CREATED", timeZone: calendar.timeZone });
   expect((await db.calendarCreationAttempt.findUniqueOrThrow({ where: { id: input.requestId } })).status).toBe("selected");
 });
 
-it("does not repeat an uncertain calendar POST, even under a new request ID, and recovers through explicit ID selection", async () => {
+it("does not repeat an uncertain calendar POST, even under a new request ID, and never adopts the unproven calendar", async () => {
   let posts = 0;
   const { db, service } = await fixture(async (_input, init) => {
     if (init?.method === "POST") { posts++; throw new Error("response lost after provider commit"); }
@@ -66,13 +67,17 @@ it("does not repeat an uncertain calendar POST, even under a new request ID, and
   await expect(service.create("owner", input)).rejects.toMatchObject({ code: "CALENDAR_CREATION_UNCERTAIN" });
   await expect(service.create("owner", { ...input, requestId: "new-request-id" })).rejects.toMatchObject({ code: "CALENDAR_CREATION_PENDING" });
   expect(posts).toBe(1);
-  await service.select("owner", calendar.id);
-  expect((await db.calendarCreationAttempt.findUniqueOrThrow({ where: { id: input.requestId } })).status).toBe("selected");
+  // Narrow grants: an unproven calendar is never bound by ID or name; the user may release the attempt instead.
+  await expect(service.select("owner", calendar.id)).rejects.toMatchObject({ code: "NOT_APP_CALENDAR" });
+  await service.abandonCreation("owner", input.requestId);
+  expect((await db.calendarCreationAttempt.findUniqueOrThrow({ where: { id: input.requestId } })).status).toBe("abandoned");
+  await expect(service.create("owner", { ...input, requestId: "after-release" })).rejects.not.toMatchObject({ code: "CALENDAR_CREATION_PENDING" });
 });
 
 it("cannot replace an existing destination through the first-choice endpoint", async () => {
   const { db, service } = await fixture(async () => Response.json(calendar));
-  await db.calendarSettings.create({ data: { userId: "owner", calendarId: "existing", summary: "Existing", timeZone: "UTC", accessRole: "owner", defaultRemindersJson: "[]" } });
+  await db.calendarBinding.create({ data: { userId: "owner", accountId: "account", calendarId: "existing", status: "ACTIVE", provenance: "LEGACY_UNVERIFIED" } });
+  await db.calendarCreationAttempt.create({ data: { id: "proven-new", ownerId: "owner", accountId: "account", name: calendar.summary, timeZone: calendar.timeZone, status: "ready", calendarId: calendar.id } });
   await expect(service.select("owner", calendar.id)).rejects.toMatchObject({ code: "CALENDAR_TRANSITION_REQUIRED" });
-  expect((await db.calendarSettings.findUniqueOrThrow({ where: { userId: "owner" } })).calendarId).toBe("existing");
+  expect((await db.calendarBinding.findFirstOrThrow({ where: { userId: "owner", status: "ACTIVE" } })).calendarId).toBe("existing");
 });
