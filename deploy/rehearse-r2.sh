@@ -41,13 +41,15 @@ docker exec "$DB" psql -qAt -U postgres -d when2watch -c 'GRANT SELECT, INSERT, 
 SUM=$(sha256sum "$R/private/live.dump" | cut -c1-64)
 echo "before $(docker exec "$DB" psql -qAt -U postgres -d when2watch -c 'SELECT json_build_object($$users$$,(SELECT count(*) FROM "User"),$$shows$$,(SELECT count(*) FROM "TrackedShow"),$$episodes$$,(SELECT count(*) FROM "Episode"),$$links$$,(SELECT count(*) FROM "CalendarEventLink"),$$sessions$$,(SELECT count(*) FROM "Session"))')"
 
-TOOLS="docker run --rm --network $NET --user 1000:1000 -v $R/journal:/journal --env-file $R/private/.env.tools -e NEXT_TELEMETRY_DISABLED=1 when2watch-tools:r2-rehearsal-$SHA"
+IMG=when2watch-tools:r2-rehearsal-$SHA
+RUN_TOOLS="docker run --rm --network $NET --user 1000:1000 -v $R/journal:/journal --env-file $R/private/.env.tools -e NEXT_TELEMETRY_DISABLED=1"
+TOOLS="$RUN_TOOLS $IMG"
 echo "egress_check $($TOOLS node -e "fetch('https://api.tvmaze.com/shows/1',{signal:AbortSignal.timeout(5000)}).then(()=>console.log('OPEN')).catch(()=>console.log('blocked'))")"
 t=$(ms); docker run --rm --network "$NET" --read-only --env-file "$R/private/.env.migrate" when2watch:r2-rehearsal-$SHA sh scripts/migrate.sh >/dev/null; echo "expand_ms $(( $(ms) - t ))"
 RUN=$(python3 -c 'import uuid;print(uuid.uuid4())')
-t=$(ms); echo "backfill $($TOOLS -e W2W_BACKFILL_RUN_ID=$RUN -e W2W_BACKFILL_SOURCE_CHECKSUM=$SUM npx tsx scripts/migration/backfill-catalog.ts)"; echo "backfill_ms $(( $(ms) - t ))"
-echo "backfill_retry $($TOOLS -e W2W_BACKFILL_RUN_ID=$RUN -e W2W_BACKFILL_SOURCE_CHECKSUM=$SUM npx tsx scripts/migration/backfill-catalog.ts | cut -c1-40)"
-echo "verify_catalog $($TOOLS -e W2W_BACKFILL_RUN_ID=$RUN npx tsx scripts/migration/verify-catalog.ts)"
+t=$(ms); echo "backfill $($RUN_TOOLS -e W2W_BACKFILL_RUN_ID=$RUN -e W2W_BACKFILL_SOURCE_CHECKSUM=$SUM $IMG npx tsx scripts/migration/backfill-catalog.ts)"; echo "backfill_ms $(( $(ms) - t ))"
+echo "backfill_retry $($RUN_TOOLS -e W2W_BACKFILL_RUN_ID=$RUN -e W2W_BACKFILL_SOURCE_CHECKSUM=$SUM $IMG npx tsx scripts/migration/backfill-catalog.ts | cut -c1-40)"
+echo "verify_catalog $($RUN_TOOLS -e W2W_BACKFILL_RUN_ID=$RUN $IMG npx tsx scripts/migration/verify-catalog.ts)"
 echo "encrypt $($TOOLS npx tsx scripts/migration/encrypt-credentials.ts)"
 echo "encrypt_retry $($TOOLS npx tsx scripts/migration/encrypt-credentials.ts)"
 echo "journal $($TOOLS npx tsx scripts/restore-privacy.ts init)"
