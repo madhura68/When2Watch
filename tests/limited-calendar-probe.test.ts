@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertProbeCalendar, grantStatus, limitedScopes, parseProbeConfig, probeOutcome, reconcileLostCalendarCreate, resumeSentCreate, sanitizeShape,
+  assertProbeCalendar, grantStatus, limitedScopes, parseProbeConfig, probeOutcome, paginationProven, reconcileLostCalendarCreate, resumeSentCreate, sanitizeShape,
 } from "../scripts/prove-limited-calendar";
 
 const config = {
@@ -99,5 +99,13 @@ describe("resume after a sent create", () => {
     expect(resumeSentCreate(entry, [{ id: "a" }, { id: "b", summary: entry.name, description: "nonce n-1" }])).toEqual({ status: "adopted", id: "b" });
     expect(resumeSentCreate(entry, [{ id: "a" }])).toEqual({ status: "uncertain" });
     expect(() => resumeSentCreate({ ...entry, beforeIds: undefined }, [])).toThrow(/snapshot/);
+  });
+});
+
+describe("pagination evidence", () => {
+  it("does not count a single-calendar, single-page list as proven pagination", () => {
+    expect(paginationProven(1, 1)).toBe(false);
+    expect(paginationProven(1, 3)).toBe(false);
+    expect(paginationProven(3, 3)).toBe(true);
   });
 });

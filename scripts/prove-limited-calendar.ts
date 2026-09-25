@@ -74,6 +74,9 @@ export function resumeSentCreate(entry: { name: string; nonce?: string; beforeId
   return reconcileLostCalendarCreate({ name: entry.name, nonce: entry.nonce }, entry.beforeIds, after);
 }
 
+/** Pagination is only proven when a list of several calendars was actually read page by page. */
+export const paginationProven = (pages: number, count: number) => count >= 2 && pages >= 2;
+
 export const requiredSteps = ["authorize", "grant-narrow", "list-paginated", "calendar-created", "event-crud", "calendar-renamed", "token-refresh", "lost-create-reconciled", "legacy-readonly-checked"];
 export function probeOutcome(results: { step: string; ok: boolean; cause?: string }[]) {
   // A retried step is judged on its latest attempt; earlier failures stay in the history.
@@ -154,8 +157,9 @@ async function main() {
     if (outcome.status !== "adopted") { entry.phase = "uncertain"; save(); throw Error(`create not provable: ${outcome.status}`); }
     entry.id = outcome.id; entry.phase = "ready"; save(); return entry;
   }
+  const redo = new Set((process.argv.find(arg => arg.startsWith("--redo="))?.slice(7) ?? "").split(",").filter(Boolean));
   const step = async (name: string, run: () => Promise<unknown>) => {
-    if (state.results.some(result => result.step === name && result.ok)) return;
+    if (!redo.has(name) && state.results.some(result => result.step === name && result.ok)) return;
     try { record(name, true, undefined, await run()); } catch (error) { record(name, false, (error as Error).message); throw error; }
   };
 
@@ -166,7 +170,6 @@ async function main() {
       if (!status.narrow) throw Error(`effective grant not narrow: missing=${status.missing.join(",") || "-"} broader=${status.broader.join(",") || "-"}; revoke the probe client grant and re-authorize`);
       return { ...status, includeGrantedScopes: state.flow?.includeGranted };
     });
-    await step("list-paginated", async () => { const { items, pages } = await listAll("calendar-list"); if (pages < 2 && items.length > 1) throw Error("pagination not exercised"); return { pages, count: items.length }; });
     await step("calendar-created", async () => {
       const entry = await createOnce("calendar-created", `${config.calendarPrefix} ${new Date().toISOString().slice(0, 10)} vrije naam`, false);
       const listed = (await listAll("after-create", "250")).items.some(item => item.id === entry.id);
@@ -211,6 +214,8 @@ async function main() {
       await createOnce("lost-create-reconciled", `${config.calendarPrefix} onzeker`, true);
       return { outcome: "adopted", postsSent: 1 };
     });
+    // After both creates the account holds several calendars, so page size 1 forces real pagination.
+    await step("list-paginated", async () => { const { items, pages } = await listAll("calendar-list"); if (!paginationProven(pages, items.length)) throw Error(`pagination not exercised (${items.length} calendar(s), ${pages} page(s)); rerun after calendar-created`); return { pages, count: items.length }; });
     await step("legacy-readonly-checked", async () => {
       if (!config.existingCalendarId) throw Error("configure existingCalendarId (read-only check of a non-app calendar)");
       const entry = await api(`users/me/calendarList/${encodeURIComponent(config.existingCalendarId)}`, {}, "legacy-calendarlist");
@@ -252,7 +257,14 @@ async function main() {
         <a href="/start?include=true">Autoriseer met include_granted_scopes=true</a></p>`);
     } catch (error) { record("authorize", false, (error as Error).message); res.writeHead(400).end("Proef geweigerd; zie terminal."); }
   });
-  if (state.tokens && process.argv.includes("--resume")) { await runProbe(); return; }
+  if (state.tokens && process.argv.includes("--resume")) {
+    // Access tokens live one hour; refresh from the stored refresh token before resuming.
+    if (state.tokens.refresh_token) {
+      const refreshed = await token({ grant_type: "refresh_token", refresh_token: state.tokens.refresh_token });
+      state.tokens = { ...state.tokens, access_token: refreshed.access_token, scope: refreshed.scope }; save();
+    }
+    await runProbe(); return;
+  }
   server.listen(3401, "127.0.0.1", () => console.log(`Open ${origin}/ in de browser (proefaccount).`));
 }
 

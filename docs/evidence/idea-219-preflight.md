@@ -1,6 +1,6 @@
 # IDEA-219 P1 — preflight (T-17)
 
-Status 25 september 2026: **bron, host en SQLite-opslagtypen vastgesteld; echte Google-proef nog open** (zie §5).
+Status 25 september 2026: **bron, host en SQLite-opslagtypen vastgesteld; echte Google-proef grotendeels geslaagd, paginering en niet-app-agenda nog te herhalen** (zie §5b).
 
 ## 1. Bron
 
@@ -61,9 +61,23 @@ Consistente kopie via de SQLite backup-API: `/srv/apps/when2watch/db-backups/ide
 
 Opslagtypen: **alle gevulde DateTime-kolommen zijn INTEGER (Unix-milliseconden)**, ook kolommen met `DEFAULT CURRENT_TIMESTAMP` (Prisma schrijft de waarde zelf). Alle booleans INTEGER 0/1. Nullable tekstkolommen bevatten alleen `text` of `null`. Er is dus geen tekst-datum in de productiebron; de importer ondersteunt die vorm wel (getest) maar hoeft hem hier niet te gebruiken.
 
-## 5b. Open punt
+## 5b. Beperkte Google-proef — 25 september 18:25 UTC
 
-**Echte Google-proef** met `scripts/prove-limited-calendar.ts`: vereist een apart proef-OAuth-client, een proefaccount en JP's toestemmingsklik ([runbook](../runbooks/idea-219-google-proef.md)). Uitkomst nu: **BLOCKED — not executed: authorize**. Een fixture-run geldt niet als proef. Dit blokkeert P9/R2, niet de providerwissel van R1.
+`scripts/prove-limited-calendar.ts`, apart proef-OAuth-client (niet de productieclient), één proefaccount op de allowlist, `include_granted_scopes=false`. Productiegrants en de productieagenda zijn niet aangeraakt. Geschoonde responsvormen staan privé naast de proefconfig; hieronder alleen de uitkomsten.
+
+| Stap | Werkelijke uitkomst |
+|---|---|
+| Autorisatie | Eerste pogingen gaven alleen identiteitsscopes (agendavinkjes niet aangezet) of een ander account; het script weigerde die. Daarna geslaagd met het juiste account. |
+| Effectieve grants | Token én tokeninfo: alleen `openid`, `userinfo.email`, `userinfo.profile`, `calendar.calendarlist.readonly`, `calendar.app.created`. Niets breder, ook niet na refresh. |
+| Agenda aanmaken | Vrije naam, `Europe/Amsterdam`; direct zichtbaar in de agendalijst met `accessRole=owner`. |
+| Proefevent | insert 200, get 200, patch met If-Match 200, tweede insert met dezelfde ID **409 duplicate**, delete 204, daarna `cancelled`. |
+| Hernoemen | 200, zelfde agenda-ID in de readback. |
+| Tokenrefresh | Geslaagd; lezen daarna 200; scope ongewijzigd smal. |
+| Verloren aanmaakantwoord | POST-antwoord weggegooid; precies één nieuwe agenda met de nonce teruggevonden en overgenomen; 1 POST verzonden. |
+| Paginering | **Niet bewezen**: de lijst had toen 1 agenda op 1 pagina. Het script eist nu ≥ 2 agenda's over ≥ 2 pagina's en draait de stap pas na de aanmaakstappen. |
+| Bestaande niet-app-agenda | **Niet bewezen**: het opgegeven ID stond niet in de agendalijst van het proefaccount (lijst en events beide 404). Opnieuw uitvoeren met een agenda van dat account zelf (bijv. `primary`). |
+
+Tussenstand: **7 van 9 stappen echt bewezen, 2 opnieuw te doen.** Nog niet beproefd: `include_granted_scopes=true` en de overgang van een bestaande grant met `calendar.events` naar de smalle scopes (spec §6.2); dat hoort bij P9 en vereist dezelfde productieclient-vraag.
 
 ## 6. Meetplan downtime (uitvoering in P3-repetitie)
 
