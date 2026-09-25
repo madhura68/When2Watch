@@ -238,7 +238,10 @@ async function main() {
         if (url.searchParams.get("error")) throw Error(`consent ${url.searchParams.get("error")}`);
         const tokens = await token({ grant_type: "authorization_code", code: url.searchParams.get("code") ?? "", code_verifier: flow.verifier, redirect_uri: origin + callbackPath });
         const claims = JSON.parse(Buffer.from((tokens.id_token ?? "..").split(".")[1], "base64url").toString() || "{}") as { email?: string; email_verified?: boolean };
-        if (!claims.email_verified || !config.accounts.includes((claims.email ?? "").toLowerCase())) throw Error("account not on the probe allowlist");
+        if (!claims.email_verified) throw Error("account email not verified by Google");
+        if (!config.accounts.includes((claims.email ?? "").toLowerCase())) throw Error("account not on the probe allowlist (check the chosen Google account)");
+        const granted = grantStatus(tokens.scope);
+        if (granted.missing.length) throw Error(`Calendar scopes not granted: ${granted.missing.map(scope => scope.split("/").pop()).join(", ")}; tick both Calendar boxes on the consent screen`);
         state.tokens = tokens; state.email = claims.email!.toLowerCase(); state.flow = { ...flow, state: "used" }; save();
         record("authorize", true, undefined, { includeGrantedScopes: flow.includeGranted, grant: grantStatus(tokens.scope) });
         res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" }).end("Toestemming ontvangen. De proef loopt in de terminal.");
