@@ -23,10 +23,14 @@ ADD COLUMN     "userId" TEXT,
 ALTER COLUMN "episodeId" DROP NOT NULL;
 
 -- AlterTable
-ALTER TABLE "Installation" ADD COLUMN     "catalogIndexCheckedAt" TIMESTAMP(3);
+ALTER TABLE "Installation" ADD COLUMN     "catalogIndexCheckedAt" TIMESTAMP(3),
+ADD COLUMN     "deletionJournalId" TEXT;
 
 -- AlterTable
 ALTER TABLE "Probe" ADD COLUMN     "bindingId" TEXT;
+
+-- AlterTable
+ALTER TABLE "Session" ADD COLUMN     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- AlterTable
 ALTER TABLE "User" ADD COLUMN     "accessStatus" "AccessStatus" NOT NULL DEFAULT 'UNCLAIMED',

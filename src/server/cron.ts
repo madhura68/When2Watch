@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { AppError, errorResponse } from "./errors";
 import { refreshFollowedCatalog, type CatalogSource } from "./catalog";
 import type { SyncService } from "./sync";
+import { runRetention } from "./retention";
 
 export async function cronResponse(request: Request, secret: string | undefined, run: () => Promise<{status: string}>): Promise<Response> {
   const actual = Buffer.from(request.headers.get("authorization") ?? ""), expected = Buffer.from(`Bearer ${secret ?? ""}`);
@@ -39,4 +40,11 @@ export async function runScheduledSync(db: PrismaClient, source: CatalogSource, 
   const problems = report.partial + report.failed + report.busy + catalog.failed + (catalog.index === "failed" ? 1 : 0);
   report.status = !problems ? "success" : report.succeeded + report.partial > 0 ? "partial" : "failed";
   return report;
+}
+
+/** The daily scheduler run: sync first, then retention. A retention failure makes the run partial, never hides the sync result. */
+export async function runDaily(db: PrismaClient, source: CatalogSource, syncFor: (userId: string) => SyncService, now = new Date()) {
+  const report = await runScheduledSync(db, source, syncFor, now);
+  try { return { ...report, retention: await runRetention(db, now) }; }
+  catch { return { ...report, status: report.status === "success" ? "partial" as const : report.status, retention: "failed" as const }; }
 }

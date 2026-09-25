@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { database } from "./db";
 import { AppError } from "./errors";
 import { hasCalendarScopes } from "./auth-policy";
+import { sealedClient } from "./credentials";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { getPreferences } from "./preferences";
 import { bindingUsable, connectionAccount, getActiveBinding } from "./calendar-bindings";
@@ -27,7 +28,7 @@ export async function importLegacyInstallation(db: PrismaClient, legacy: LegacyI
     }
     const owner = matches[0], account = owner.accounts[0];
     return db.$transaction(async tx => {
-      const client = await tx.oAuthClientConfig.create({ data: { clientId: legacy.clientId, clientSecret: legacy.clientSecret } });
+      const client = await tx.oAuthClientConfig.create({ data: sealedClient(legacy.clientId, legacy.clientSecret) });
       await tx.account.update({ where: { id: account.id }, data: { oauthClientConfigId: client.id, profileEmail: owner.email, profileName: owner.name } });
       // The proven existing owner becomes the only initial admin, with its own Calendar account.
       await tx.user.update({ where: { id: owner.id }, data: { role: "ADMIN", accessStatus: "ACTIVE" } });

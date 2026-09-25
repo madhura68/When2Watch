@@ -9,6 +9,7 @@ import { serializeCalendarMutation } from "./calendar-mutations";
 import { calendarScopes, hasCalendarScopes } from "./auth-policy";
 import { googleTokenRefresher } from "./google-tokens";
 import { GoogleCalendar } from "./google-calendar";
+import { clientSecretOf, open, openOptional, seal, sealOptional, sealedClient } from "./credentials";
 
 export const connectionCookie = "when2watch.connection";
 export const hashSession = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -49,7 +50,7 @@ export class GoogleConnectionService {
           }
           const current = await tx.oAuthClientConfig.findUniqueOrThrow({ where: { id: clientId } });
           if (current.clientId === input.clientId) throw new AppError("SAME_OAUTH_CLIENT", 409, "Dit is de huidige client. Kies een andere OAuth-webclient.");
-          clientId = (await tx.oAuthClientConfig.create({ data: { clientId: input.clientId, clientSecret: input.clientSecret.trim() } })).id;
+          clientId = (await tx.oAuthClientConfig.create({ data: sealedClient(input.clientId, input.clientSecret.trim()) })).id;
         }
         await tx.googleConnectionAttempt.updateMany({ where: { ownerId: userId, status: { in: ["pending", "completed", "ready"] } }, data: { status: "cancelled", tokensJson: null } });
         return tx.googleConnectionAttempt.create({ data: { id: randomBytes(24).toString("hex"), ownerId: userId,
@@ -91,9 +92,9 @@ export class GoogleConnectionService {
     const linked = await this.db.account.findUnique({ where: { provider_providerAccountId: { provider: "google", providerAccountId: account.providerAccountId } } });
     if (!linked || linked.userId !== userId) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "Deze Google-identiteit hoort niet bij de bestaande eigenaar.");
     const tokens = { access_token: account.access_token, expires_at: account.expires_at, scope: account.scope, token_type: account.token_type,
-      refresh_token: account.refresh_token || (linked.oauthClientConfigId === attempt.oauthClientConfigId ? linked.refresh_token : undefined) };
+      refresh_token: account.refresh_token || (linked.oauthClientConfigId === attempt.oauthClientConfigId ? openOptional(linked.refresh_token, "account.refresh_token", linked.id) : undefined) };
     await this.db.googleConnectionAttempt.update({ where: { id }, data: { status: "completed", accountId: linked.id,
-      providerAccountId: account.providerAccountId, profileEmail: profile.email, profileName: profile.name, tokensJson: JSON.stringify(tokens) } });
+      providerAccountId: account.providerAccountId, profileEmail: profile.email, profileName: profile.name, tokensJson: seal(JSON.stringify(tokens), "connectionAttempt.tokens", id) } });
   }
 
   cancel(id: string, sessionToken: string) {
@@ -111,19 +112,19 @@ export class GoogleConnectionService {
     return serializeCalendarMutation(userId, async () => {
       const attempt = await this.validate(id, sessionToken, "completed"), current = await connectionAccount(this.db, userId);
       if (attempt.ownerId !== userId || !attempt.accountId || !attempt.tokensJson) throw expired();
-      const tokens = JSON.parse(attempt.tokensJson) as Account;
+      const tokens = JSON.parse(open(attempt.tokensJson, "connectionAttempt.tokens", attempt.id)) as Account;
       const required = JSON.parse(attempt.requiredScopesJson) as string[];
       if (!required.every(scope => tokens.scope?.split(/\s+/).includes(scope))) throw new AppError("CALENDAR_PERMISSION_REQUIRED", 409, "Niet alle gevraagde agendarechten zijn verleend. Verbind opnieuw en selecteer de benodigde toestemmingen.");
       if (!tokens.refresh_token) throw new AppError("RECONNECT_GOOGLE", 409, "De blijvende Google-toegang ontbreekt. Verbind opnieuw voordat je deze keuze bevestigt.");
       const client = await this.db.oAuthClientConfig.findUniqueOrThrow({ where: { id: attempt.oauthClientConfigId } });
       let refreshed: Awaited<ReturnType<ReturnType<RefreshFactory>>>;
-      try { refreshed = await this.refresh(client.clientId, client.clientSecret)(tokens.refresh_token); }
+      try { refreshed = await this.refresh(client.clientId, clientSecretOf(client))(tokens.refresh_token); }
       catch { throw new AppError("RECONNECT_GOOGLE", 409, "De nieuwe Google-verbinding kon niet blijvend worden bevestigd. De bestaande verbinding is behouden."); }
       if (!refreshed.access_token || !refreshed.expiry_date) throw new AppError("RECONNECT_GOOGLE", 409, "Google gaf geen bruikbare blijvende toegang.");
       if (hasCalendarScopes(tokens.scope)) await new GoogleCalendar(async () => refreshed.access_token!, this.fetcher).calendars();
       await this.db.$transaction(async tx => {
         await tx.account.update({ where: { id: attempt.accountId! }, data: { oauthClientConfigId: attempt.oauthClientConfigId,
-          access_token: refreshed.access_token, refresh_token: refreshed.refresh_token || tokens.refresh_token, expires_at: Math.floor(refreshed.expiry_date! / 1000),
+          access_token: seal(refreshed.access_token!, "account.access_token", attempt.accountId!), refresh_token: sealOptional(refreshed.refresh_token || tokens.refresh_token, "account.refresh_token", attempt.accountId!), expires_at: Math.floor(refreshed.expiry_date! / 1000),
           scope: tokens.scope, token_type: tokens.token_type, needsReauth: false, profileEmail: attempt.profileEmail, profileName: attempt.profileName } });
         if (attempt.mode === "candidate") {
           // Account switch: same internal user, new Calendar account; the old binding stays as inactive history.

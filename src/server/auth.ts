@@ -1,4 +1,5 @@
 import type { NextAuthOptions } from "next-auth";
+import { clientSecretOf } from "./credentials";
 import type { AdapterAccount } from "next-auth/adapters";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
@@ -42,7 +43,7 @@ export async function authOptions(connection?: { attemptId: string; sessionToken
   return {
     secret: settings.secret, adapter,
     session: { strategy: "database", maxAge: 30 * 24 * 60 * 60 },
-    providers: [GoogleProvider({ clientId: client.clientId, clientSecret: client.clientSecret, checks: ["pkce", "state"],
+    providers: [GoogleProvider({ clientId: client.clientId, clientSecret: clientSecretOf(client), checks: ["pkce", "state"],
       authorization: { params: { scope: ["openid", "email", "profile", ...(attempt ? JSON.parse(attempt.requiredScopesJson) as string[] : [])].join(" "),
         access_type: "offline", prompt: attempt ? "consent select_account" : "select_account", include_granted_scopes: "false", response_type: "code" } } })],
     pages: { signIn: "/", error: attempt ? "/settings" : "/" },

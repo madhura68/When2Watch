@@ -28,6 +28,7 @@ const env = {
   GOOGLE_CLIENT_ID: "http-test.apps.googleusercontent.com", GOOGLE_CLIENT_SECRET: "synthetic-client-secret",
   GOOGLE_CALENDAR_ID: "chosen@example.test", ALLOWED_GOOGLE_EMAIL: "owner@example.test",
   CRON_SECRET: randomBytes(32).toString("hex"),
+  W2W_CREDENTIAL_KEYS: `smoke:${randomBytes(32).toString("base64")}`,
 };
 const db = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
 let server;
@@ -124,6 +125,18 @@ try {
   check((await db.googleConnectionAttempt.findUniqueOrThrow({where:{id:pending.id}})).status === "cancelled","cancellation persists");
   check((await db.installation.findUniqueOrThrow({where:{id:"singleton"}})).ownerId === "owner","legacy owner imported without changing identity");
   check(await db.oAuthClientConfig.count() === 1,"legacy client import is idempotent across requests");
+  const storedClient = await db.oAuthClientConfig.findFirstOrThrow();
+  check(storedClient.clientSecret.startsWith("w2w:v1:") && !storedClient.clientSecret.includes(env.GOOGLE_CLIENT_SECRET),"imported client secret is stored sealed");
+  check((await request("/privacy")).status === 200,"privacy statement is public");
+  check((await request("/api/account/export")).status === 401,"export requires a session");
+  const exported = await request("/api/account/export",{headers:cookie("owner")}), exportText = await exported.text();
+  check(exported.ok && exported.headers.get("cache-control")?.includes("no-store") && exported.headers.get("content-disposition")?.includes("attachment"),"own export downloads privately");
+  check(JSON.parse(exportText).user.id === "owner" && !exportText.includes("never-serialize") && !exportText.includes("w2w:v1") && !exportText.includes(sessions.owner),"export holds own data without tokens or session");
+  const deleteRequest = (headers, body) => request("/api/account/delete",{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  check((await deleteRequest({...cookie("owner"),origin:"https://evil.example"},{confirmation:"VERWIJDEREN"})).status === 403,"cross-origin delete refused");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"ja"})).status === 400,"delete requires typed confirmation");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"VERWIJDEREN",userId:"other"})).status === 400,"delete cannot target another user");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"VERWIJDEREN"})).status === 409,"the last admin cannot delete the account");
   for (const path of ["/api/shows","/api/settings/google","/api/settings/preferences"]) {
     check((await request(path,{headers:cookie("owner")})).headers.get("cache-control")?.includes("no-store"),"private API responses must not be cached between users");
   }

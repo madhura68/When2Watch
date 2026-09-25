@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#176b60" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="nl"><body><main>{children}</main><footer>When2Watch · Persoonlijke serieagenda</footer></body></html>;
+  return <html lang="nl"><body><main>{children}</main><footer>When2Watch · Persoonlijke serieagenda · <a href="/privacy">Privacy</a></footer></body></html>;
 }

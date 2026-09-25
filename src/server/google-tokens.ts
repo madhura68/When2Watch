@@ -3,6 +3,7 @@ import type { Account } from "next-auth";
 import { OAuth2Client } from "google-auth-library";
 import { AppError } from "./errors";
 import { hasCalendarScopes } from "./auth-policy";
+import { clientSecretOf, open, sealOptional } from "./credentials";
 
 type Refresher = (refreshToken: string) => Promise<{ access_token?: string | null; refresh_token?: string | null; expiry_date?: number | null }>;
 
@@ -15,8 +16,8 @@ export async function saveGoogleTokens(db: PrismaClient, accountId: string, oaut
     where: { id: accountId },
     data: {
       oauthClientConfigId,
-      access_token: account.access_token,
-      refresh_token: account.refresh_token || undefined,
+      access_token: sealOptional(account.access_token, "account.access_token", accountId),
+      refresh_token: sealOptional(account.refresh_token, "account.refresh_token", accountId) || undefined,
       expires_at: account.expires_at,
       scope: account.scope,
       token_type: account.token_type,
@@ -29,12 +30,13 @@ export async function getGoogleAccessToken(db: PrismaClient, accountId: string, 
   const account = await db.account.findUnique({ where: { id: accountId }, include: { oauthClient: true } });
   const reconnect = () => new AppError("RECONNECT_GOOGLE", 401, "Koppel Google opnieuw en geef beide agendatoestemmingen.");
   if (!account || account.provider !== "google" || !account.oauthClient || account.needsReauth || !hasCalendarScopes(account.scope)) throw reconnect();
-  if (!forceRefresh && account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60) return account.access_token;
+  if (!forceRefresh && account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60) return open(account.access_token, "account.access_token", account.id);
   if (!account.refresh_token) throw reconnect();
+  const refreshToken = open(account.refresh_token, "account.refresh_token", account.id), clientSecret = clientSecretOf(account.oauthClient);
 
   let tokens: Awaited<ReturnType<Refresher>>;
   try {
-    tokens = await refreshFactory(account.oauthClient.clientId, account.oauthClient.clientSecret)(account.refresh_token);
+    tokens = await refreshFactory(account.oauthClient.clientId, clientSecret)(refreshToken);
   } catch (error) {
     const reason = (error as { response?: { data?: { error?: string } } })?.response?.data?.error;
     if (reason === "invalid_grant") {
@@ -47,8 +49,8 @@ export async function getGoogleAccessToken(db: PrismaClient, accountId: string, 
   await db.account.update({
     where: { id: account.id },
     data: {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token || undefined,
+      access_token: sealOptional(tokens.access_token, "account.access_token", account.id),
+      refresh_token: sealOptional(tokens.refresh_token, "account.refresh_token", account.id) || undefined,
       expires_at: Math.floor(tokens.expiry_date / 1000),
     },
   });

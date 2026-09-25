@@ -4,6 +4,7 @@
  * Run behind maintenance, before opening the app and scheduler:
  *   DATABASE_URL=<private env> npx tsx scripts/migration/readback.ts --authorized-readback
  */
+import { clientSecretOf, open } from "../../src/server/credentials";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { AppError } from "../../src/server/errors";
@@ -64,11 +65,11 @@ async function main() {
     if (!binding?.account) throw Error("This user has no active calendar binding with a proven account.");
     const settings = { calendarId: binding.calendarId }, account = binding.account;
     // Token is refreshed in memory only; the target database stays untouched.
-    let token: string | undefined = account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60 ? account.access_token : undefined;
+    let token: string | undefined = account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60 ? open(account.access_token, "account.access_token", account.id) : undefined;
     const accessToken = async () => {
       if (token) return token;
       if (!account.refresh_token || !account.oauthClient) throw Error("No usable refresh token; reconnect after opening.");
-      const refreshed = await googleTokenRefresher(account.oauthClient.clientId, account.oauthClient.clientSecret)(account.refresh_token);
+      const refreshed = await googleTokenRefresher(account.oauthClient.clientId, clientSecretOf(account.oauthClient))(open(account.refresh_token, "account.refresh_token", account.id));
       if (!refreshed.access_token) throw Error("Token refresh returned no access token.");
       return token = refreshed.access_token;
     };

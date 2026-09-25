@@ -13,6 +13,15 @@ De eenmalige overstap van SQLite naar PostgreSQL volgt [het R1-cutover-runbook](
 
 Secrets staan uitsluitend in `.env` (0600), nooit in een commandoargument, document of log. De container draait als UID 1000; app-, data- en PostgreSQL-mappen zijn 0700. De runtime gebruikt de rol `when2watch_app` (alleen DML); `when2watch_migrator` alleen voor migraties en import. Maak geen tweede appproces tegen dezelfde database: de gedeelde gebruikerslock is procesgebonden.
 
+## Privacy, versleuteling en verwijderjournaal (IDEA-219 R2)
+
+- **Sleutel.** `W2W_CREDENTIAL_KEYS=<id>:<32 bytes base64>` staat in de private `.env` (maken: `openssl rand -base64 32`). Zonder of met een verkeerde sleutel weigert de app Google-toegang; er is geen plaintextfallback. Bewaar de sleutel apart van de databasebackups: een backup zonder sleutel geeft geen toegang tot tokens. Bij sleutelrotatie komt de nieuwe sleutel vooraan en blijft de oude erachter staan tot alles opnieuw is verzegeld.
+- **Omzetten bij R2-cutover.** Vóór de eerste start van R2 draait `tsx scripts/migration/encrypt-credentials.ts` eenmalig in één transactie. Het script is idempotent en toont alleen aantallen. Daarna leest de app uitsluitend verzegelde waarden.
+- **Journaal.** `W2W_DELETION_JOURNAL=/journal/deletions.jsonl`. Host-map `/srv/apps/when2watch/journal` met mode 0700 en eigenaar 1000, buiten de postgres-map en buiten de databasebackups. Maak het journaal bij de cutover één keer met `tsx scripts/restore-privacy.ts init`. Daarna hoort het bij deze installatie. Maak het nooit opnieuw aan; een ontbrekend journaal blokkeert verwijderen en herstellen. Neem het journaal mee in de host-backup, apart van de database.
+- **Herstel van een databasebackup.** Na het terugzetten, vóór app en cron starten: `tsx scripts/restore-privacy.ts apply`. Dit verwijdert opnieuw iedereen die na die backup zijn account heeft verwijderd. Zonder geldig journaal van deze installatie geen vrijgave.
+- **Retentie.** Loopt mee in de dagelijkse cron (zoekcache, syncgeschiedenis 30 d, audit 90 d, afgehandelde uitnodigingen 7 d, verlopen sessies en koppelpogingen). Onzekere en bewezen agenda-aanmaakpogingen blijven staan. Databasebackups roteert de beheerder na maximaal 30 dagen.
+- **Privacyverklaring.** `W2W_PRIVACY_CONTROLLER` en `W2W_PRIVACY_CONTACT` vul je bij de uitrol in met de echte beheerdergegevens. Zonder deze waarden toont `/privacy` dat ze nog worden ingevuld.
+
 ## Dagelijkse synchronisatie
 
 `CRON_SECRET` is een willekeurige waarde van minimaal 32 tekens in de private `.env`. `scripts/cron-client.mjs` leest hem binnen de container en roept `POST /api/cron/sync` op localhost aan. De hostregel gebruikt dus geen secret. Zonder of met onjuiste toegang: 401; overlap: 409/busy; volledig succes: 200; gedeeltelijk/mislukt: 502. Het hostscript eindigt bij elk niet-succes met een foutcode.

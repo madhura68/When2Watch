@@ -97,6 +97,8 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+  /// Sign-in moment; NextAuth never updates it, so it proves a fresh login for account deletion (P10).
+  createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -242,6 +244,8 @@ model Installation {
   oauthClient           OAuthClientConfig? @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
   /// Last successful TVmaze update-index check (daily refresh checkpoint).
   catalogIndexCheckedAt DateTime?
+  /// Identity of the external deletion journal (P10); a restored database only accepts its own journal.
+  deletionJournalId     String?
 }
 
 model GoogleConnectionAttempt {

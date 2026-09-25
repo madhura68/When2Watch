@@ -10,14 +10,16 @@ import { Navigation } from "../navigation";
 import { PreferencesPanel } from "./preferences-panel";
 import { GooglePanel } from "./google-panel";
 import { CalendarPanel } from "./calendar-panel";
+import { PrivacyPanel } from "./privacy-panel";
 
 export const dynamic = "force-dynamic";
 export default async function Settings({ searchParams }: { searchParams: Promise<{ error?: string; connection?: string }> }) {
   const user = await currentUser(); if (!user) redirect("/");
   const db = database();
-  const [settings, active, probes, params] = await Promise.all([
+  const [settings, active, probes, params, otherAdmins] = await Promise.all([
     userSettings(db, user.id), getActiveBinding(db, user.id),
     db.probe.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10 }), searchParams,
+    db.user.count({ where: { role: "ADMIN", accessStatus: "ACTIVE", id: { not: user.id } } }),
   ]);
   const calendar = "binding" in active ? active.binding : null;
   return <>
@@ -28,5 +30,6 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     <GooglePanel settings={settings} callbackUrl={`${config().origin}/api/auth/callback/google`} />
     <CalendarPanel settings={settings} />
     {calendar && <TrialPanel key={settings.preferences.timeZone} calendarId={calendar.calendarId} calendar={{ name: calendar.summary ?? calendar.calendarId, timeZone: calendar.timeZone ?? settings.preferences.timeZone, confirmedAt: (calendar.confirmedAt ?? calendar.createdAt).toISOString(), reminders: calendar.defaultRemindersJson ?? "[]" }} tomorrow={nextDate(localDate(new Date(), settings.preferences.timeZone))} probes={probes.map(probe => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />}
+    <PrivacyPanel lastAdmin={user.role === "ADMIN" && otherAdmins === 0} />
   </>;
 }

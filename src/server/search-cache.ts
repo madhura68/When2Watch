@@ -29,7 +29,7 @@ export async function cachedSearch(db: PrismaClient, source: SearchSource, query
   return flight;
 }
 
-async function enforceCapacity(db: PrismaClient, now: Date) {
+export async function enforceCapacity(db: PrismaClient, now: Date) {
   const excess = await db.searchCache.count() - capacity;
   if (excess <= 0) return;
   await db.searchCache.deleteMany({ where: { expiresAt: { lte: now } } });
