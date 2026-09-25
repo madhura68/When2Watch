@@ -11,11 +11,12 @@ RUN npm run build && npm prune --omit=dev
 
 # Operator tools for migration/readback (tsx, dev dependencies). Never the served image.
 FROM base AS tools
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run db:generate
+RUN chown node:node /app
 USER node
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci
+COPY --chown=node:node . .
+RUN npm run db:generate
 
 FROM base AS runtime
 ENV NODE_ENV=production
