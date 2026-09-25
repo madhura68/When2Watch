@@ -5,9 +5,10 @@ import { serializeCalendarMutation } from "./calendar-mutations";
 import { AppError } from "./errors";
 import { GoogleCalendar, type CalendarEvent } from "./google-calendar";
 import { ensureCatalogSnapshot, refreshCatalogArtwork, type CatalogSource } from "./catalog";
+import { bindingUsable } from "./calendar-bindings";
 
 export type SeriesResult = { showId: number; title: string; created: number; updated: number; deleted: number; unchanged: number; failed: number; errors: string[] };
-export type SyncResult = { id: string; status: "success" | "partial" | "failed"; calendarState?: "unconfigured"; startedAt: string; finishedAt: string; series: SeriesResult[] };
+export type SyncResult = { id: string; status: "success" | "partial" | "failed"; calendarState?: "unconfigured" | "paused"; startedAt: string; finishedAt: string; series: SeriesResult[] };
 export type SyncConfiguration = { calendarId: string; timeZone: string };
 export type SyncSource = Pick<CatalogSource, "snapshot"> & Partial<Pick<CatalogSource, "artwork">>;
 type EpisodeFields = Pick<CatalogEpisode, "sourceId" | "title" | "season" | "number" | "airdate" | "sourceUrl">;
@@ -79,8 +80,10 @@ export class SyncService {
     const follow = await this.db.userFollow.findFirst({ where: { userId, show: { tvmazeId } }, include: { show: true } });
     if (!follow) throw new AppError("NOT_FOUND", 404, "Deze serie staat niet in jouw overzicht.");
     const binding = await this.activeBinding(userId);
+    const account = binding?.accountId ? await this.db.account.findUnique({ where: { id: binding.accountId } }) : null;
     let removed = 0;
-    if (binding) {
+    // With a paused binding a 404 may only mean "no access": keep those links as history instead of calling them deleted.
+    if (binding && account && bindingUsable(binding, account) === "ok") {
       const links = await this.db.calendarEventLink.findMany({ where: { userId, bindingId: binding.id, status: { not: "deleted" }, catalogEpisode: { catalogShowId: follow.catalogShowId } }, include: { catalogEpisode: true } });
       for (const link of links) {
         await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleting" } });
@@ -109,7 +112,11 @@ export class SyncService {
     const cutoff = cutoffDate.toISOString().slice(0, 10);
     const run = await this.db.syncRun.create({ data: { userId, trigger, startedAt: started } });
     const series: SeriesResult[] = [];
-    const binding = await this.activeBinding(userId);
+    const active = await this.activeBinding(userId);
+    // Narrow grants: an unproven (legacy) calendar or missing grants pause Calendar work; local data still refreshes.
+    const account = active?.accountId ? await this.db.account.findUnique({ where: { id: active.accountId } }) : null;
+    const paused = !!active && (!account || bindingUsable(active, account) !== "ok");
+    const binding = paused ? null : active;
     for (const follow of follows) {
       let show = await this.db.catalogShow.findUniqueOrThrow({ where: { id: follow.catalogShowId } });
       const result: SeriesResult = { showId: show.tvmazeId, title: show.title, created: 0, updated: 0, deleted: 0, unchanged: 0, failed: 0, errors: [] };
@@ -145,7 +152,7 @@ export class SyncService {
         : { lastError: null, lastSuccessAt: this.now() } });
     }
     const failed = series.reduce((n,s) => n+s.failed,0), succeeded = series.reduce((n,s) => n+s.created+s.updated+s.deleted+s.unchanged,0);
-    const result: SyncResult = { id: run.id, status: failed ? (succeeded ? "partial" : "failed") : "success", ...(!binding ? { calendarState: "unconfigured" as const } : {}), startedAt: started.toISOString(), finishedAt: this.now().toISOString(), series };
+    const result: SyncResult = { id: run.id, status: failed ? (succeeded ? "partial" : "failed") : "success", ...(paused ? { calendarState: "paused" as const } : !binding ? { calendarState: "unconfigured" as const } : {}), startedAt: started.toISOString(), finishedAt: this.now().toISOString(), series };
     await this.db.syncRun.update({ where: { id: run.id }, data: { status: result.status, finishedAt: new Date(result.finishedAt), resultJson: JSON.stringify(result) } });
     return result;
   }

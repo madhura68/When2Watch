@@ -5,7 +5,7 @@ import { GoogleCalendar, safeEvent, type CalendarEvent } from "./google-calendar
 import { AppError } from "./errors";
 import { localDate, nextDate } from "@/lib/dates";
 import { serializeCalendarMutation } from "./calendar-mutations";
-import { bindingMetadata, getActiveBinding } from "./calendar-bindings";
+import { bindingMetadata, bindingUsable, getActiveBinding } from "./calendar-bindings";
 
 export class CalendarProbeService {
   constructor(private readonly db: PrismaClient, private readonly google: GoogleCalendar, private readonly config: SyncConfiguration | (() => Promise<SyncConfiguration>), private readonly now = () => new Date()) {}
@@ -24,6 +24,7 @@ export class CalendarProbeService {
     if (!("binding" in active) || active.binding.calendarId !== this.settings.calendarId) {
       throw new AppError("CALENDAR_NOT_CONFIRMED", 409, "Kies en bevestig eerst je eigen agenda bij Instellingen.");
     }
+    if (bindingUsable(active.binding, active.account) !== "ok") throw new AppError("CALENDAR_PAUSED", 409, "Deze agenda is niet door When2Watch aangemaakt of de toegang ontbreekt. Maak bij Instellingen een When2Watch-agenda.");
     const calendar = await this.google.calendar(active.binding.calendarId);
     return this.db.calendarBinding.update({ where: { id: active.binding.id }, data: bindingMetadata(calendar, this.now()) });
   }

@@ -27,6 +27,8 @@ const google = (fetcher: typeof fetch) => () => new GoogleCalendar(async () => "
 it("keeps calendar choice, binding and settings per user", async () => {
   const { db, b } = await twoUsers(), calendar = simulatedCalendar();
   const settings = new CalendarSettingsService(db, google(calendar.fetcher));
+  // A calendar A's account created itself (proven), then chosen by ID.
+  await db.calendarCreationAttempt.create({ data: { id: "creation-a", ownerId: "a", accountId: "acc-a", name: "When2Watch", timeZone: "Europe/Amsterdam", status: "ready", calendarId: "chosen@example.test" } });
   await settings.select("a", "chosen@example.test");
   const bindingA = await getActiveBinding(db, "a"), bindingB = await getActiveBinding(db, "b");
   expect(bindingA).toMatchObject({ binding: { userId: "a", calendarId: "chosen@example.test", accountId: "acc-a" }, account: { id: "acc-a" } });

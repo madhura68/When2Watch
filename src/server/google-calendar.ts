@@ -86,6 +86,23 @@ export class GoogleCalendar {
     return result;
   }
 
+  /** Every calendar in the user's list (any access role), all pages; for name comparisons only. */
+  async allCalendars(): Promise<{ id: string; summary: string }[]> {
+    const result: { id: string; summary: string }[] = [], seen = new Set<string>();
+    let pageToken: string | undefined;
+    do {
+      const query = new URLSearchParams({ maxResults: "250" });
+      if (pageToken) query.set("pageToken", pageToken);
+      const page = await this.request<{ items?: { id?: unknown; summary?: unknown }[]; nextPageToken?: string }>(`users/me/calendarList?${query}`);
+      if (page.items !== undefined && !Array.isArray(page.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      for (const item of page.items ?? []) if (typeof item?.id === "string" && typeof item.summary === "string") result.push({ id: item.id, summary: item.summary });
+      pageToken = page.nextPageToken;
+      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      if (pageToken) seen.add(pageToken);
+    } while (pageToken);
+    return result;
+  }
+
   async createCalendar(name: string, timeZone: string): Promise<{ id: string }> {
     const calendar = await this.request<{ id?: string }>("calendars", { method: "POST", body: JSON.stringify({ summary: name, timeZone }) });
     if (typeof calendar.id !== "string" || !calendar.id) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De nieuwe agenda is nog niet bevestigd. Vernieuw de agendalijst.");

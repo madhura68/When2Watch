@@ -4,7 +4,7 @@ import { getGoogleAccessToken, saveGoogleTokens } from "@/server/google-tokens";
 import { testDatabase } from "./database";
 
 const email = "owner@example.com";
-const scope = "openid email profile https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events";
+const scope = "openid email profile https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.app.created";
 const account = { provider: "google", providerAccountId: "google-owner", type: "oauth" as const, scope };
 
 describe("Google account adapter", () => {

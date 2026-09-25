@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { calendarScopes, calendarCreationScope } from "@/server/auth-policy";
+import { calendarScopes } from "@/server/auth-policy";
 
 /** An ACTIVE R2 user with own Google account, connection and (optionally) an active calendar binding. */
 export async function activeUser(db: PrismaClient, id: string, options: { role?: "ADMIN" | "USER"; calendarId?: string | null; scope?: string } = {}) {
@@ -7,7 +7,7 @@ export async function activeUser(db: PrismaClient, id: string, options: { role?:
   await db.user.create({ data: { id, email: `${id}@example.test`, name: id, role: options.role ?? "USER", accessStatus: "ACTIVE" } });
   const account = await db.account.create({ data: { id: `acc-${id}`, userId: id, type: "oauth", provider: "google", providerAccountId: `sub-${id}`,
     refresh_token: `refresh-${id}`, access_token: "synthetic-access", expires_at: Math.floor(Date.now() / 1000) + 3600,
-    scope: options.scope ?? [...calendarScopes, calendarCreationScope].join(" ") } });
+    scope: options.scope ?? [...calendarScopes].join(" ") } });
   await db.userConnection.create({ data: { userId: id, accountId: account.id } });
   const binding = calendarId ? await db.calendarBinding.create({ data: { userId: id, accountId: account.id, calendarId, status: "ACTIVE", provenance: "APP_CREATED",
     summary: "When2Watch", timeZone: "Europe/Amsterdam", accessRole: "owner", defaultRemindersJson: "[]", confirmedAt: new Date() } }) : null;
@@ -24,7 +24,7 @@ export async function bindCalendar(db: PrismaClient, userId: string, calendarId:
   const accountId = `acc-${userId}`;
   if (!await db.account.findUnique({ where: { id: accountId } })) {
     await db.account.create({ data: { id: accountId, userId, type: "oauth", provider: "google", providerAccountId: `sub-${userId}`, refresh_token: "synthetic",
-      access_token: "synthetic-access", expires_at: Math.floor(Date.now() / 1000) + 3600, scope: [...calendarScopes, calendarCreationScope].join(" ") } });
+      access_token: "synthetic-access", expires_at: Math.floor(Date.now() / 1000) + 3600, scope: [...calendarScopes].join(" ") } });
     await db.userConnection.create({ data: { userId, accountId } });
   }
   await db.user.update({ where: { id: userId }, data: { accessStatus: "ACTIVE" } });

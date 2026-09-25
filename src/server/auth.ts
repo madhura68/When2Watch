@@ -44,7 +44,7 @@ export async function authOptions(connection?: { attemptId: string; sessionToken
     session: { strategy: "database", maxAge: 30 * 24 * 60 * 60 },
     providers: [GoogleProvider({ clientId: client.clientId, clientSecret: client.clientSecret, checks: ["pkce", "state"],
       authorization: { params: { scope: ["openid", "email", "profile", ...(attempt ? JSON.parse(attempt.requiredScopesJson) as string[] : [])].join(" "),
-        access_type: "offline", prompt: attempt ? "consent select_account" : "select_account", include_granted_scopes: "true", response_type: "code" } } })],
+        access_type: "offline", prompt: attempt ? "consent select_account" : "select_account", include_granted_scopes: "false", response_type: "code" } } })],
     pages: { signIn: "/", error: attempt ? "/settings" : "/" },
     callbacks: {
       async signIn({ account, profile }) {

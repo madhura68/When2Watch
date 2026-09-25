@@ -1,10 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 import { database } from "./db";
 import { AppError } from "./errors";
-import { hasCalendarScopes, calendarCreationScope } from "./auth-policy";
+import { hasCalendarScopes } from "./auth-policy";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { getPreferences } from "./preferences";
-import { connectionAccount, getActiveBinding } from "./calendar-bindings";
+import { bindingUsable, connectionAccount, getActiveBinding } from "./calendar-bindings";
 
 export type LegacyInstallation = { allowedEmail: string; clientId: string; clientSecret: string; calendarId?: string };
 export function legacyInstallation(): LegacyInstallation | null {
@@ -55,10 +55,12 @@ export async function userSettings(db: PrismaClient, userId: string) {
   ]);
   const binding = "binding" in active ? active.binding : null;
   return { account: { email: account?.profileEmail ?? user.email, name: account?.profileName ?? user.name }, isAdmin: user.role === "ADMIN", preferences,
-    calendarPermission: hasCalendarScopes(account?.scope), canCreateCalendar: !!account?.scope?.split(/\s+/).includes(calendarCreationScope),
+    calendarPermission: hasCalendarScopes(account?.scope),
     needsReauth: !account || account.needsReauth || !account.refresh_token, calendarReady: !!binding,
     calendar: binding ? { id: binding.calendarId, name: binding.summary ?? binding.calendarId, timeZone: binding.timeZone ?? preferences.timeZone,
-      confirmedAt: (binding.confirmedAt ?? binding.createdAt).toISOString() } : null,
+      confirmedAt: (binding.confirmedAt ?? binding.createdAt).toISOString(), appCreated: binding.provenance === "APP_CREATED",
+      // "legacy": not created by When2Watch; "permission": grants missing. Sync is paused in both cases.
+      state: "binding" in active ? bindingUsable(active.binding, active.account) : "ok" } : null,
     // Bootstrap hint from the legacy configuration, shown only to the installation owner until a calendar is chosen.
     initialCalendarId: !binding && installation?.ownerId === userId ? installation.initialCalendarId : null,
     connectionAttempt: attempts[0] ?? null, calendarCreation: creation };
