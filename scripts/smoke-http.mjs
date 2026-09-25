@@ -132,6 +132,30 @@ try {
   const replace = await request("/api/settings/google",{method:"POST",headers:{...cookie("other"),origin,"Content-Type":"application/json"},body:JSON.stringify({action:"begin",mode:"replace-client",clientId:"x.apps.googleusercontent.com",clientSecret:"y"})});
   check(replace.status === 403,"only an admin may replace the OAuth client");
   await db.user.update({where:{id:"other"},data:{accessStatus:"UNCLAIMED"}});
+  // P6: invitations and user administration.
+  for (const path of ["/api/admin/users","/api/admin/invitations"]) {
+    check((await request(path)).status === 401 && (await request(path,{headers:cookie("other")})).status === 401,"admin endpoints reject anonymous and unclaimed sessions");
+    check((await request(path,{headers:cookie("owner")})).ok,"admin can read user administration");
+  }
+  await db.user.update({where:{id:"other"},data:{accessStatus:"ACTIVE"}});
+  check((await request("/api/admin/users",{headers:cookie("other")})).status === 403,"ordinary user gets no admin endpoint");
+  check((await request("/beheer/gebruikers",{headers:cookie("other")})).status === 307,"ordinary user is redirected away from the admin page");
+  await db.user.update({where:{id:"other"},data:{accessStatus:"UNCLAIMED"}});
+  const invitationPage = await request("/uitnodiging");
+  const invitationHtml = await invitationPage.text();
+  check(invitationPage.ok && invitationPage.headers.get("referrer-policy") === "no-referrer","invitation page is public and sends no referrer");
+  check(![...invitationHtml.matchAll(/(?:src|href)="(https?:)?\/\/[^"]*"/g)].length,"invitation page loads no external assets");
+  const invited = await request("/api/admin/invitations",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({email:"invited@example.test"})});
+  const { link } = await invited.json();
+  const sentinel = new URL(link).hash.replace("#token=","");
+  check(invited.ok && new URL(link).pathname === "/uitnodiging" && !new URL(link).search && sentinel.length === 43,"invitation link carries the token only in the fragment");
+  check(!(await (await request("/api/admin/invitations",{headers:cookie("owner")})).text()).includes(sentinel),"invitation list never repeats the token");
+  const exchange = token => request("/api/invitations/exchange",{method:"POST",headers:{origin,"Content-Type":"application/json"},body:JSON.stringify({token})});
+  check((await exchange("x".repeat(43))).status === 400,"unknown invitation token is refused neutrally");
+  const exchanged = await exchange(sentinel);
+  check(exchanged.ok && exchanged.headers.get("set-cookie")?.includes("HttpOnly") && exchanged.headers.get("set-cookie")?.includes("SameSite=Lax"),"exchange sets an HTTP-only browser-flow cookie");
+  check(!exchanged.headers.get("set-cookie")?.includes(sentinel) && (await db.invitation.findFirstOrThrow({where:{email:"invited@example.test"}})).acceptedAt === null,"exchange stores no token and claims nothing");
+  check((await request("/api/invitations/exchange",{method:"POST",headers:{origin:"https://attacker.example.test","Content-Type":"application/json"},body:JSON.stringify({token:sentinel})})).status === 403,"exchange requires same origin");
   const emptySearch = await request("/api/shows/search?q=",{headers:cookie("owner")});
   check(emptySearch.ok && (await emptySearch.json()).shows.length === 0, "empty search must return without a provider request");
   for(const credential of [undefined, "incorrect"]) {
@@ -223,6 +247,7 @@ try {
   check(restartedSettings.account.email === env.ALLOWED_GOOGLE_EMAIL && restartedSettings.calendar.id === env.GOOGLE_CALENDAR_ID,"stored account/calendar win over changed environment after restart");
   check(restartedSettings.preferences.timeZone === "Pacific/Auckland" && restartedSettings.preferences.agendaMonths === 2,"preferences survive an actual server restart");
   check(!serverOutput.includes("never-serialize-") && !serverOutput.includes(env.GOOGLE_CLIENT_SECRET) && !serverOutput.includes(sessions.owner),"server logs must not expose secrets");
+  check(!serverOutput.includes(sentinel),"sentinel invitation token never appears in server logs, on success or failure");
   const logout = await request("/api/auth/signout", { method: "POST", headers: { ...cookie("owner"), "Content-Type": "application/x-www-form-urlencoded" }, body: "json=true" });
   await logout.text();
   check(await db.session.count({ where: { sessionToken: sessions.owner } }) === 1, "logout without CSRF token must not remove the session");

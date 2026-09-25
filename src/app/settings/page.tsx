@@ -21,7 +21,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   ]);
   const calendar = "binding" in active ? active.binding : null;
   return <>
-    <Navigation active="/settings" />
+    <Navigation active="/settings" admin={user.role === "ADMIN"} />
     <section className="hero compact"><p className="eyebrow">Instellingen</p><h1>Je agenda en voorkeuren.</h1><p className="intro">Pas je overzicht aan of controleer de Google-koppeling en je meldingen.</p></section>
     {(params.error || ["expired", "failed"].includes(params.connection ?? "")) && <p role="alert" className="notice error">De Google-koppeling is geannuleerd, geweigerd of verlopen. Je bestaande instellingen zijn behouden. Start de koppeling opnieuw als je wilt doorgaan.</p>}
     <PreferencesPanel preferences={settings.preferences} />

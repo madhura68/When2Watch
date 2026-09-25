@@ -15,3 +15,13 @@ export async function stringField(request: Request, field: string): Promise<stri
   }
   return body[field] as string;
 }
+
+// One Node process: an in-memory window is enough to bound unauthenticated endpoints.
+const shared = globalThis as typeof globalThis & { when2watchRates?: Map<string, number[]> };
+const hits = shared.when2watchRates ??= new Map<string, number[]>();
+export function rateLimit(request: Request, bucket: string, limit = 10, windowMs = 10 * 60_000, now = Date.now()): void {
+  const client = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "direct";
+  const key = `${bucket}:${client}`, recent = (hits.get(key) ?? []).filter(time => time > now - windowMs);
+  if (recent.length >= limit) throw new AppError("RATE_LIMITED", 429, "Te veel pogingen. Probeer het over een paar minuten opnieuw.");
+  recent.push(now); hits.set(key, recent);
+}
