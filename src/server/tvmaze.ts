@@ -83,27 +83,40 @@ export function parseSnapshot(input: unknown, expectedId: number): Snapshot {
   return { show: { ...show, summaryText: summaryText(raw.summary), genres, runtimeMinutes }, episodes };
 }
 
-// The single app process spaces all source requests, including search and cron.
+// The single app process spaces all source requests (search, catalog and cron) at least one second apart.
 const shared = globalThis as typeof globalThis & { w2wSourceRate?: { tail: Promise<void>; last: number } };
 const rate = shared.w2wSourceRate ??= { tail: Promise.resolve(), last: 0 };
+const spacingMs = 1000, maxRetries = 3;
+export function parseUpdates(input: unknown): Map<number, number> {
+  const updates = new Map<number, number>();
+  for (const [key, value] of Object.entries(object(input))) {
+    const id = Number(key);
+    if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(value) || (value as number) < 0) throw invalid();
+    updates.set(id, value as number);
+  }
+  return updates;
+}
 export class TVmaze implements EpisodeSource {
   constructor(private readonly fetcher: typeof fetch = fetch, private readonly pause = (ms: number) => new Promise<void>(r => setTimeout(r,ms))) {}
   private async request(path: string): Promise<unknown> {
     const failed = () => new AppError("SOURCE_UNAVAILABLE",502,"TVmaze is tijdelijk niet bereikbaar. Probeer opnieuw.");
-    for (let attempt=0; attempt<3; attempt++) {
+    for (let attempt=0; attempt<=maxRetries; attempt++) {
       const previous = rate.tail; let release!: () => void;
       rate.tail = new Promise<void>(r => { release=r; });
       await previous;
-      let response: Response;
+      let response: Response | null = null;
       try {
-        await this.pause(Math.max(0,rate.last + 600 - Date.now())); rate.last=Date.now();
+        await this.pause(Math.max(0,rate.last + spacingMs - Date.now())); rate.last=Date.now();
         response = await this.fetcher(`https://api.tvmaze.com${path}`,{cache:"no-store",signal:AbortSignal.timeout(10_000)});
-      } catch { throw failed(); } finally { release(); }
-      if (response.status === 429 && attempt < 2) {
+      } catch { response = null; } finally { release(); }
+      const last = attempt === maxRetries;
+      if (response?.status === 429) {
         const value=response.headers.get("retry-after"), seconds=value===null ? 1 : Number(value);
-        if (!Number.isFinite(seconds) || seconds<0 || seconds>10) throw failed();
+        if (last || !Number.isFinite(seconds) || seconds<0 || seconds>10) throw failed();
         await this.pause(Math.max(1000,seconds*1000)); continue;
       }
+      // Network errors and server errors are retried with growing waits; other client errors are final.
+      if (!response || response.status >= 500) { if (last) throw failed(); await this.pause(1000 * 2 ** attempt); continue; }
       if (!response.ok) throw failed();
       try { return await response.json(); } catch { throw invalid(); }
     }
@@ -119,5 +132,9 @@ export class TVmaze implements EpisodeSource {
   }
   async artwork(id: number): Promise<ShowArtwork> {
     idNumber(id); return parseArtwork(await this.request(`/shows/${id}/images`));
+  }
+  /** TVmaze update index: show ID → last-updated timestamp (week feed, or the full index). */
+  async updates(since: "week" | null): Promise<Map<number, number>> {
+    return parseUpdates(await this.request(since ? `/updates/shows?since=${since}` : "/updates/shows"));
   }
 }

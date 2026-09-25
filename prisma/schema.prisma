@@ -232,14 +232,16 @@ model OAuthClientConfig {
 }
 
 model Installation {
-  id                  String             @id @default("singleton")
-  ownerId             String?            @unique
-  activeAccountId     String?            @unique
-  oauthClientConfigId String?
-  initialCalendarId   String?
-  owner               User?              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  activeAccount       Account?           @relation(fields: [activeAccountId], references: [id], onDelete: Restrict)
-  oauthClient         OAuthClientConfig? @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
+  id                    String             @id @default("singleton")
+  ownerId               String?            @unique
+  activeAccountId       String?            @unique
+  oauthClientConfigId   String?
+  initialCalendarId     String?
+  owner                 User?              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  activeAccount         Account?           @relation(fields: [activeAccountId], references: [id], onDelete: Restrict)
+  oauthClient           OAuthClientConfig? @relation(fields: [oauthClientConfigId], references: [id], onDelete: Restrict)
+  /// Last successful TVmaze update-index check (daily refresh checkpoint).
+  catalogIndexCheckedAt DateTime?
 }
 
 model GoogleConnectionAttempt {

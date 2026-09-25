@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Show } from "@/server/tvmaze";
 import type { Overview } from "@/server/overview";
 import type { SyncResult } from "@/server/sync";
-import { LatestSearch, MIN_SEARCH_LENGTH } from "@/lib/latest-search";
+import { LatestSearch, MIN_SEARCH_LENGTH, SEARCH_DEBOUNCE_MS } from "@/lib/latest-search";
 import { SeriesPoster } from "./series-poster";
 import { sourceStatus, visibleSeries, type SourceFilter, type ChoiceFilter } from "@/lib/series-list";
 
@@ -33,7 +33,7 @@ export function SeriesPanel({data}:{data:Overview}) {
       void search.find(query,result=>{setMatches(result);setSearching(false);setSearched(true);},error=>{
         setSearchError(error instanceof Error?error.message:"Zoeken is niet gelukt. Probeer opnieuw.");setSearching(false);
       });
-    },350);
+    },SEARCH_DEBOUNCE_MS);
     return()=>{clearTimeout(timer);search.cancel();};
   },[query,search]);
   function changeQuery(value:string) {

@@ -23,6 +23,9 @@ ADD COLUMN     "userId" TEXT,
 ALTER COLUMN "episodeId" DROP NOT NULL;
 
 -- AlterTable
+ALTER TABLE "Installation" ADD COLUMN     "catalogIndexCheckedAt" TIMESTAMP(3);
+
+-- AlterTable
 ALTER TABLE "Probe" ADD COLUMN     "bindingId" TEXT;
 
 -- AlterTable
@@ -271,7 +274,6 @@ ALTER TABLE "InvitationFlow" ADD CONSTRAINT "InvitationFlow_invitationId_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "MigrationMap" ADD CONSTRAINT "MigrationMap_runId_fkey" FOREIGN KEY ("runId") REFERENCES "MigrationRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
 
 
 -- IDEA-219: constraints Prisma 6 cannot express. Guarded by tests/migration/catalog-backfill.test.ts
