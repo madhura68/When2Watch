@@ -38,7 +38,7 @@ async function applySnapshot(db: PrismaClient, snapshot: Snapshot, now: Date, ap
   });
 }
 
-async function fetchAndApply(db: PrismaClient, source: CatalogSource, tvmazeId: number, now: Date, appliedVersion?: number | null) {
+async function fetchAndApply(db: PrismaClient, source: Pick<CatalogSource, "snapshot">, tvmazeId: number, now: Date, appliedVersion?: number | null) {
   let snapshot: Snapshot;
   try { snapshot = await source.snapshot(tvmazeId); }
   catch (error) {
@@ -53,16 +53,16 @@ async function fetchAndApply(db: PrismaClient, source: CatalogSource, tvmazeId: 
  * Complete stored catalog version of a show. A snapshot checked within the last hour is reused, so a new
  * follower or a manual sync never forces one fetch per user.
  */
-export function ensureCatalogSnapshot(db: PrismaClient, source: CatalogSource, tvmazeId: number, now = new Date()): Promise<CatalogShow> {
+export function ensureCatalogSnapshot(db: PrismaClient, source: Pick<CatalogSource, "snapshot">, tvmazeId: number, now = new Date(), maxAgeMs = hour): Promise<CatalogShow> {
   return singleFlight(tvmazeId, async () => {
     const existing = await db.catalogShow.findUnique({ where: { tvmazeId } });
-    if (existing?.lastFullCheckAt && +now - +existing.lastFullCheckAt < hour && existing.lastSuccessAt) return existing;
+    if (existing?.lastFullCheckAt && +now - +existing.lastFullCheckAt < maxAgeMs && existing.lastSuccessAt) return existing;
     return fetchAndApply(db, source, tvmazeId, now, existing?.observedSourceUpdatedAt);
   });
 }
 
 /** Artwork at most weekly per show, remembering absence; an error retries after a day and never blocks episodes. */
-async function refreshArtwork(db: PrismaClient | Prisma.TransactionClient, source: CatalogSource, show: CatalogShow, now: Date) {
+export async function refreshCatalogArtwork(db: PrismaClient | Prisma.TransactionClient, source: Pick<CatalogSource, "artwork">, show: CatalogShow, now: Date) {
   if (show.artworkNextCheckAt && show.artworkNextCheckAt > now) return;
   let artwork = { bannerUrl: show.bannerUrl, backgroundUrl: show.backgroundUrl }, delay = 7 * day;
   try { artwork = await source.artwork(show.tvmazeId); } catch { delay = day; }
@@ -81,6 +81,7 @@ export async function refreshFollowedCatalog(db: PrismaClient, source: CatalogSo
   const recent = installation?.catalogIndexCheckedAt && +now - +installation.catalogIndexCheckedAt <= 6 * day;
   const report: RefreshReport = { checked: shows.length, fetched: 0, failed: 0, errors: [], index: recent ? "week" : "full" };
   let index = new Map<number, number>();
+  if (!shows.length) return report;
   try {
     index = await source.updates(recent ? "week" : null);
     await db.installation.updateMany({ where: { id: "singleton" }, data: { catalogIndexCheckedAt: now } });
@@ -95,7 +96,7 @@ export async function refreshFollowedCatalog(db: PrismaClient, source: CatalogSo
       try { current = await fetchAndApply(db, source, show.tvmazeId, now, observed); report.fetched++; }
       catch (error) { report.failed++; report.errors.push({ tvmazeId: show.tvmazeId, message: message(error) }); continue; }
     }
-    await refreshArtwork(db, source, current, now);
+    await refreshCatalogArtwork(db, source, current, now);
   }
   return report;
 }

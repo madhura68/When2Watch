@@ -42,7 +42,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   storage=testDatabase();input=structuredClone(raw);sourceError=false;now=new Date("2026-09-24T07:00:00Z");google=simulatedCalendar();
   await storage.db.user.create({data:{id:"owner",email:"owner@example.test"}});
   await bindCalendar(storage.db,"owner",config.calendarId);
-  service=new SyncService(storage.db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,config,()=>now);
+  service=new SyncService(storage.db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,config,()=>now,{sourceMaxAgeMs:0});
  });
  afterEach(async()=>{await storage?.close();});
  const active=()=>[...google.events.values()].filter(e=>e.status!=="cancelled");
@@ -61,17 +61,17 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  it("defaults new series to following and does not undo a later preference on delayed add",async()=>{
   await service.add("owner",45039);
-  expect(await storage.db.trackedShow.findFirst()).toMatchObject({trying:false});
-  await storage.db.trackedShow.updateMany({data:{trying:true}});
+  expect(await storage.db.userFollow.findFirst()).toMatchObject({trying:false});
+  await storage.db.userFollow.updateMany({data:{trying:true}});
   await service.add("owner",45039,false);
-  expect(await storage.db.trackedShow.findFirst()).toMatchObject({trying:true});
+  expect(await storage.db.userFollow.findFirst()).toMatchObject({trying:true});
  });
  it("keeps following and local episodes usable before a calendar is selected", async () => {
   await storage.db.calendarBinding.deleteMany();
   const result = await service.add("owner", 45039);
   expect(result).toMatchObject({ status: "success", calendarState: "unconfigured" });
-  expect(await storage.db.episode.count()).toBeGreaterThan(0);
-  expect(await storage.db.trackedShow.count()).toBe(1);
+  expect(await storage.db.catalogEpisode.count()).toBeGreaterThan(0);
+  expect(await storage.db.userFollow.count()).toBe(1);
   expect(google.writes).toEqual([]);
  });
  it("resolves current configuration after entering the owner lock", async () => {
@@ -80,7 +80,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   const held = serializeCalendarMutation("owner", async () => { entered(); await gate; }); await ready;
   let current = { ...config, calendarId: "outdated" };
   const waiting = new SyncService(storage.db, new GoogleCalendar(async () => "synthetic-access", google.fetcher), source,
-   async () => { reads++; return current; }, () => now).add("owner", 45039);
+   async () => { reads++; return current; }, () => now, { sourceMaxAgeMs: 0 }).add("owner", 45039);
   expect(reads).toBe(0); current = config; release(); await held;
   expect((await waiting).status).toBe("success"); expect(reads).toBe(1);
  });
@@ -96,8 +96,8 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   expect(google.writes).toEqual([]);
   expect(await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}})).toEqual(linksBefore);
   expect([...google.events.entries()]).toEqual(eventsBefore);
-  expect(await storage.db.trackedShow.findFirst()).toMatchObject({summaryText:"A new local synopsis.",genresJson:'["Comedy"]',runtimeMinutes:52});
-  expect(await storage.db.episode.findFirst({where:{sourceId:3643507}})).toMatchObject({summaryText:"Episode-only details."});
+  expect(await storage.db.catalogShow.findFirst()).toMatchObject({summaryText:"A new local synopsis.",genresJson:'["Comedy"]',runtimeMinutes:52});
+  expect(await storage.db.catalogEpisode.findFirst({where:{sourceId:3643507}})).toMatchObject({summaryText:"Episode-only details."});
   const reopened=storage.reopen();
   try {
    sourceError=true;
@@ -110,16 +110,16 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  it("keeps cached details after source failure and clears them on a valid empty response",async()=>{
   await service.add("owner",45039);
-  const before=await storage.db.trackedShow.findFirst();
+  const before=await storage.db.catalogShow.findFirst();
   expect(before?.summaryText).toContain("Slow Horses");
   sourceError=true;google.writes.length=0;
   expect((await service.sync("owner","manual")).status).toBe("failed");
-  expect((await storage.db.trackedShow.findFirst())?.summaryText).toBe(before?.summaryText);
+  expect((await storage.db.catalogShow.findFirst())?.summaryText).toBe(before?.summaryText);
   sourceError=false;input.summary="";input.genres=[];(input as any).averageRuntime=null;
   input._embedded.episodes.find(e=>e.id===3643507)!.summary="";
   expect((await service.sync("owner","manual")).status).toBe("success");
-  expect(await storage.db.trackedShow.findFirst()).toMatchObject({summaryText:null,genresJson:"[]",runtimeMinutes:null});
-  expect(await storage.db.episode.findFirst({where:{sourceId:3643507}})).toMatchObject({summaryText:null});
+  expect(await storage.db.catalogShow.findFirst()).toMatchObject({summaryText:null,genresJson:"[]",runtimeMinutes:null});
+  expect(await storage.db.catalogEpisode.findFirst({where:{sourceId:3643507}})).toMatchObject({summaryText:null});
   expect(google.writes).toEqual([]);
  });
  it("adds one relation and five eligible dated all-day events; repeat causes zero writes",async()=>{
@@ -132,7 +132,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   google.writes.length=0;
   const second=await service.add("owner",45039);
   expect(second.series[0]).toMatchObject({created:0,updated:0,unchanged:5});
-  expect(await storage.db.trackedShow.count()).toBe(1);expect(google.writes).toEqual([]);
+  expect(await storage.db.userFollow.count()).toBe(1);expect(google.writes).toEqual([]);
  });
  it("updates date, title and description on the same Google identity, even beyond the past boundary",async()=>{
   await service.add("owner",45039); const id=active()[0].id; google.writes.length=0;
@@ -148,12 +148,12 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   expect((await service.sync("owner","manual")).status).toBe("failed");expect(google.writes).toEqual([]);expect(active()).toHaveLength(5);
   sourceError=false;input._embedded.episodes.at(-1)!.airdate="";
   const result=await service.sync("owner","manual");expect(result.series[0].deleted).toBe(1);expect(active()).toHaveLength(4);
-  expect(await storage.db.trackedShow.count()).toBe(1);
+  expect(await storage.db.userFollow.count()).toBe(1);
  });
  it("recovers an uncertain insert after database reopen without duplicating the event",async()=>{
   google.loseNextInsert();expect((await service.add("owner",45039)).status).not.toBe("success");
   const initialIds=active().map(e=>e.id);const reopened=storage.reopen();
-  try { const retry=new SyncService(reopened,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,config,()=>now);
+  try { const retry=new SyncService(reopened,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,config,()=>now,{sourceMaxAgeMs:0});
    expect((await retry.sync("owner","manual")).status).toBe("success");expect(active()).toHaveLength(5);
    expect(active().map(e=>e.id)).toEqual(expect.arrayContaining(initialIds));expect(google.writes.filter(w=>w.method==="POST")).toHaveLength(5);
   }finally{await reopened.$disconnect();}
@@ -187,12 +187,12 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  it("serializes simultaneous additions and retains a followed series after a Calendar failure",async()=>{
   const results=await Promise.all([service.add("owner",45039),service.add("owner",45039)]);
-  expect(results.every(r=>r.status==="success")).toBe(true);expect(await storage.db.trackedShow.count()).toBe(1);expect(active()).toHaveLength(5);
+  expect(results.every(r=>r.status==="success")).toBe(true);expect(await storage.db.userFollow.count()).toBe(1);expect(active()).toHaveLength(5);
  });
  it("keeps series and fetched episodes when no calendar has been confirmed",async()=>{
   await storage.db.calendarBinding.deleteMany();const result=await service.add("owner",45039);
-  expect(result).toMatchObject({status:"success",calendarState:"unconfigured"});expect(google.writes).toEqual([]);expect(await storage.db.trackedShow.count()).toBe(1);
-  expect(await storage.db.episode.count()).toBe(36);
+  expect(result).toMatchObject({status:"success",calendarState:"unconfigured"});expect(google.writes).toEqual([]);expect(await storage.db.userFollow.count()).toBe(1);
+  expect(await storage.db.catalogEpisode.count()).toBe(36);
  });
  it("repairs a changed reminder after a confirmed sync instead of silently adopting it",async()=>{
   await service.add("owner",45039);google.writes.length=0;

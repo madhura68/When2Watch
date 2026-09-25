@@ -35,8 +35,16 @@ export async function PATCH(request: Request) {
   try {
     const user=await requireUser();requireSameOrigin(request,config().origin);
     const {id,trying}=await showInput(request,true);
-    const result=await database().trackedShow.updateMany({where:{userId:user.id,tvmazeId:id},data:{trying}});
+    // Proberen is personal: only this user's own follow changes.
+    const result=await database().userFollow.updateMany({where:{userId:user.id,show:{tvmazeId:id}},data:{trying}});
     if(result.count===0) throw new AppError("NOT_FOUND",404,"Deze serie staat niet in jouw overzicht.");
     return Response.json({showId:String(id),trying},{headers:{"Cache-Control":"private, no-store"}});
+  }catch(error){return errorResponse(error);}
+}
+export async function DELETE(request: Request) {
+  try {
+    const user=await requireUser();requireSameOrigin(request,config().origin);
+    const {id}=await showInput(request,false);
+    return Response.json(await syncService(user.id).unfollow(user.id,id),{headers:{"Cache-Control":"private, no-store"}});
   }catch(error){return errorResponse(error);}
 }

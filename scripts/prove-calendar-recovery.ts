@@ -7,6 +7,7 @@ import { PrismaClient } from "@prisma/client";
 import fixture from "../tests/fixtures/tvmaze/slow-horses.json";
 import { getInstallation } from "../src/server/installation";
 import { getPreferences } from "../src/server/preferences";
+import { getActiveBinding } from "../src/server/calendar-bindings";
 import { GoogleCalendar } from "../src/server/google-calendar";
 import { getGoogleAccessToken } from "../src/server/google-tokens";
 import { SyncService } from "../src/server/sync";
@@ -21,12 +22,12 @@ async function main() {
   let trial:PrismaClient|undefined, cleanup:(()=>Promise<unknown>)|undefined, cleaned=false;
   const evidence:Record<string,unknown>={at:new Date().toISOString(),kind:"simulated-source-and-lost-response-with-real-Google",syntheticEpisodeId:syntheticId};
   try {
-    const installation=await getInstallation(production); assert(installation?.ownerId && installation.activeAccountId);
-    const user=await production.user.findUniqueOrThrow({where:{id:installation.ownerId},select:{id:true,email:true}});
-    const settings={...(await getPreferences(user.id,production)),calendarId:(await production.calendarSettings.findUniqueOrThrow({where:{userId:user.id}})).calendarId};
-    const calendar=await production.calendarSettings.findUniqueOrThrow({where:{userId:user.id}});
-    assert.equal(calendar.calendarId,settings.calendarId);
-    const token=()=>getGoogleAccessToken(production,installation.activeAccountId!);
+    // R2: the owner's own active binding and its account, never a central installation account.
+    const installation=await getInstallation(production); assert(installation?.ownerId);
+    const user=await production.user.findUniqueOrThrow({where:{id:installation.ownerId},select:{id:true,email:true,role:true,accessStatus:true}});
+    const active=await getActiveBinding(production,user.id); assert("binding" in active,"The owner needs an own active calendar binding");
+    const settings={...(await getPreferences(user.id,production)),calendarId:active.binding.calendarId};
+    const token=()=>getGoogleAccessToken(production,active.account.id);
     const writes:{method:string;id:string;httpStatus:number}[]=[];
     let loseFirstInsert=true;
     const fetcher:typeof fetch=async(input,init)=>{
@@ -61,7 +62,9 @@ async function main() {
     trial=new PrismaClient({datasourceUrl:url});
     assert.equal(await trial.user.count(),0,"The trial database must be empty");
     await trial.user.create({data:user});
-    await trial.calendarSettings.create({data:calendar});
+    // Trial rows only reference the owner's identity; tokens stay in the production database.
+    await trial.account.create({data:{id:active.account.id,userId:user.id,type:"oauth",provider:"google",providerAccountId:active.account.providerAccountId}});
+    await trial.calendarBinding.create({data:{userId:user.id,accountId:active.account.id,calendarId:active.binding.calendarId,status:"ACTIVE",provenance:active.binding.provenance}});
     const input=structuredClone(fixture);
     input.name="[PROEF When2Watch] Slow Horses";
     const episode=structuredClone(input._embedded.episodes.at(-1)!);

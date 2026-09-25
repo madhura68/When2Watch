@@ -33,8 +33,9 @@ describe("local Agenda reads", () => {
     storage = testDatabase(); const db = storage.db;
     await db.user.createMany({ data: [{ id: "owner" }, { id: "other" }] });
     for (const [userId, title, tvmazeId] of [["owner", "Zebra", 1], ["owner", "Alpha", 2], ["other", "Private", 3]] as const) {
-      const show = await db.trackedShow.create({ data: { userId, title, tvmazeId, status: "Running", sourceUrl: "https://www.tvmaze.com/shows/1" } });
-      await db.episode.createMany({ data: [
+      const show = await db.catalogShow.create({ data: { title, tvmazeId, status: "Running", sourceUrl: "https://www.tvmaze.com/shows/1", lastSuccessAt: new Date() } });
+      await db.userFollow.create({ data: { userId, catalogShowId: show.id } });
+      await db.catalogEpisode.createMany({ data: [
         { sourceId: 1, title: "Today second", airdate: "2026-09-24", season: 1, number: 2, present: true },
         { sourceId: 2, title: "Today first", airdate: "2026-09-24", season: 1, number: 1, present: true },
         { sourceId: 3, title: "Last included", airdate: "2026-10-23", present: true },
@@ -42,7 +43,7 @@ describe("local Agenda reads", () => {
         { sourceId: 5, title: "Yesterday", airdate: "2026-09-23", present: true },
         { sourceId: 6, title: "Unknown", airdate: null, present: true },
         { sourceId: 7, title: "Removed", airdate: "2026-09-25", present: false },
-      ].map(e => ({ ...e, trackedShowId: show.id, sourceUrl: `https://www.tvmaze.com/episodes/${e.sourceId}` })) });
+      ].map(e => ({ ...e, catalogShowId: show.id, sourceUrl: `https://www.tvmaze.com/episodes/${e.sourceId}` })) });
     }
     vi.stubGlobal("fetch", () => { throw new Error("Agenda must not call a provider"); });
     const result = await agendaOverview("owner", new Date("2026-09-24T12:00:00Z"), db);

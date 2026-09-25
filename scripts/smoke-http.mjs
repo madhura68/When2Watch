@@ -165,12 +165,13 @@ try {
   check(await db.syncRun.count() === 0,"denied cron must perform no sync work");
   const cron = await request("/api/cron/sync",{method:"POST",headers:{authorization:`Bearer ${env.CRON_SECRET}`}});
   check(cron.status === 200 && (await cron.json()).status === "success","authorized empty cron must use the shared service");
-  check(await db.syncRun.count({where:{userId:"owner",trigger:"cron"}}) === 1,"cron must resolve the configured owner on the server");
+  check(await db.syncRun.count({where:{trigger:"cron"}}) === 0,"cron without followers performs no per-user work or source request");
   const ownerAccount = await db.account.findFirstOrThrow({where:{userId:"owner"}});
   await db.calendarBinding.create({data:{userId:"owner",accountId:ownerAccount.id,calendarId:env.GOOGLE_CALENDAR_ID,status:"ACTIVE",provenance:"LEGACY_UNVERIFIED",summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultRemindersJson:"[]",confirmedAt:new Date()}});
   const synopsis = "OWNER_DETAILS Een zorgvuldig opgeslagen omschrijving. ".repeat(15);
-  const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:synopsis,genresJson:'["Drama","Thriller"]',runtimeMinutes:45}});
-  await db.episode.create({data:{trackedShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});
+  const show = await db.catalogShow.create({data:{tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:synopsis,genresJson:'["Drama","Thriller"]',runtimeMinutes:45,lastSuccessAt:new Date()}});
+  await db.userFollow.create({data:{userId:"owner",catalogShowId:show.id}});
+  await db.catalogEpisode.create({data:{catalogShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});
   const ownerShows = await request("/api/shows",{headers:cookie("owner")});
   const ownerData = await ownerShows.json();
   const changeTrying = body => request("/api/shows",{method:"PATCH",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body});
@@ -182,13 +183,14 @@ try {
     check((await changeTrying(invalid)).status === 400,"invalid trying input must be rejected");
   }
   check((await changeTrying(JSON.stringify({showId:"99998",trying:true}))).status === 404,"changing an untracked show must not add it");
-  const foreignShow = await db.trackedShow.create({data:{userId:"other",tvmazeId:99997,title:"Foreign",sourceUrl:"https://www.tvmaze.com/shows/99997",status:"Ended"}});
+  const foreignCatalog = await db.catalogShow.create({data:{tvmazeId:99997,title:"Foreign",sourceUrl:"https://www.tvmaze.com/shows/99997",status:"Ended"}});
+  const foreignShow = await db.userFollow.create({data:{userId:"other",catalogShowId:foreignCatalog.id}});
   check((await changeTrying(JSON.stringify({showId:"99997",trying:true}))).status === 404,"owner cannot change a show belonging to another user");
-  check((await db.trackedShow.findUniqueOrThrow({where:{id:foreignShow.id}})).trying === false,"foreign preference stays unchanged");
+  check((await db.userFollow.findUniqueOrThrow({where:{id:foreignShow.id}})).trying === false,"foreign preference stays unchanged");
   for (const trying of ["true",1,null,{}]) {
     check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"45039",trying})})).status === 400,"POST rejects invalid trying before any provider request");
   }
-  check(await db.syncRun.count() === 1,"preference changes do not start provider synchronization");
+  check(await db.syncRun.count() === 0,"preference changes do not start provider synchronization");
 
   check(ownerShows.ok && ownerData.shows[0].summaryText === synopsis && ownerData.shows[0].runtimeMinutes === 45 && ownerData.shows[0].genres.join(",") === "Drama,Thriller", "owner must receive locally stored series metadata");
   check(ownerData.shows[0].upcoming[0].summaryText.startsWith("PRIVATE_EPISODE"), "owner must receive locally stored episode text");
@@ -206,7 +208,7 @@ try {
   check(detailsPage.includes('class="series-details"') && detailsPage.includes('class="episode-description"') && !/<details[^>]*\sopen(?:[=>\s])/.test(detailsPage), "series and episode disclosures must initially be closed");
   check(detailsPage.includes("&lt;img") && !detailsPage.includes('<img src="https://example.test/should-not-load"'), "stored text must render escaped instead of executable markup");
   const soon = new Date(Date.now()+2*86400_000).toISOString().slice(0,10);
-  await db.episode.create({data:{trackedShowId:show.id,sourceId:999999,title:"SOON_EPISODE",season:6,number:99,airdate:soon,sourceUrl:"https://www.tvmaze.com/episodes/999999",summaryText:"HIDDEN_SPOILER"}});
+  await db.catalogEpisode.create({data:{catalogShowId:show.id,sourceId:999999,title:"SOON_EPISODE",season:6,number:99,airdate:soon,sourceUrl:"https://www.tvmaze.com/episodes/999999",summaryText:"HIDDEN_SPOILER"}});
   for(const path of ["/","/volgen","/settings"]){
     const page = await request(path,{headers:cookie("owner")});const html=await page.text();
     check(page.ok && html.includes('aria-label="Hoofdnavigatie"'),"all private pages need the shared menu");
@@ -224,16 +226,16 @@ try {
   const selectedBackground="https://static.tvmaze.com/uploads/images/original_untouched/631/1577977.jpg";
   const selectedPoster="https://static.tvmaze.com/uploads/images/medium_portrait/637/1592971.jpg";
   const nextArtworkCheck=new Date(Date.now()+7*86400_000);
-  await db.trackedShow.update({where:{id:show.id},data:{bannerUrl:selectedBanner,backgroundUrl:selectedBackground,poster:selectedPoster,bannerNextCheckAt:nextArtworkCheck}});
+  await db.catalogShow.update({where:{id:show.id},data:{bannerUrl:selectedBanner,backgroundUrl:selectedBackground,poster:selectedPoster,artworkNextCheckAt:nextArtworkCheck}});
   const artwork=(await (await request("/api/shows",{headers:cookie("owner")})).json()).shows[0];
   check(artwork.bannerUrl === selectedBanner && artwork.backgroundUrl === selectedBackground && artwork.poster === selectedPoster,"overview must serve all stored artwork choices");
   for(let visit=0;visit<2;visit++) check((await (await request("/",{headers:cookie("owner")})).text()).includes(`src="${selectedBanner}"`),"repeated Agenda reads must render the stored banner");
-  await db.trackedShow.update({where:{id:show.id},data:{bannerUrl:null}});
+  await db.catalogShow.update({where:{id:show.id},data:{bannerUrl:null}});
   check((await (await request("/",{headers:cookie("owner")})).text()).includes(`src="${selectedBackground}"`),"Agenda must render the stored background without a banner");
-  await db.trackedShow.update({where:{id:show.id},data:{backgroundUrl:null}});
+  await db.catalogShow.update({where:{id:show.id},data:{backgroundUrl:null}});
   check((await (await request("/",{headers:cookie("owner")})).text()).includes(`src="${selectedPoster}"`),"Agenda must render the existing poster without landscape artwork");
-  check((await db.trackedShow.findUniqueOrThrow({where:{id:show.id}})).bannerNextCheckAt.getTime() === nextArtworkCheck.getTime(),"page reads must preserve the image cache deadline");
-  check(await db.syncRun.count() === 1,"reading enriched pages must not start a sync");
+  check((await db.catalogShow.findUniqueOrThrow({where:{id:show.id}})).artworkNextCheckAt.getTime() === nextArtworkCheck.getTime(),"page reads must preserve the image cache deadline");
+  check(await db.syncRun.count() === 0,"reading enriched pages must not start a sync");
   check((await request("/api/shows",{method:"POST",headers:{...cookie("owner"),origin,"Content-Type":"application/json"},body:JSON.stringify({showId:"x"})})).status === 400,"invalid show ID must fail before the provider");
   const invalid = await request("/api/probe", { method: "POST", headers: { ...cookie("owner"), origin, "Content-Type": "application/json" }, body: JSON.stringify({ date: "not-a-date" }) });
   check(invalid.status === 400, "invalid date must fail locally");

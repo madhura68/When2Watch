@@ -62,6 +62,17 @@ export function SeriesPanel({data}:{data:Overview}) {
     }catch(error){setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer opnieuw.");}
     finally{router.refresh();setBusy(false);}
   }
+  async function unfollow(showId:number,title:string) {
+    if(!window.confirm(`${title} niet meer volgen? Je eigen agenda-items van deze serie worden verwijderd; anderen merken er niets van.`))return;
+    setBusy(true);setFailed(false);setMessage("Serie verwijderen…");
+    try {
+      const response=await fetch("/api/shows",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({showId:String(showId)})});
+      const body=await response.json();
+      if(!response.ok)throw new Error(body.error??"Verwijderen is niet gelukt. Probeer opnieuw.");
+      setMessage(`Je volgt ${title} niet meer.`);
+    }catch(error){setFailed(true);setMessage(error instanceof Error?error.message:"Verbinding onderbroken. Probeer opnieuw.");}
+    finally{router.refresh();setBusy(false);}
+  }
   return <>
     {data.needsReauth&&<section className="notice error"><p>De Google-toegang moet opnieuw worden gekoppeld. Je series blijven bewaard.</p><a href="/settings#google">Google-toegang herstellen</a></section>}
     <section className="calendar-summary"><div><strong>{data.calendar?.summary??"Bevestig je agenda"}</strong><p className="muted small">{data.calendar?"Hele-dagafspraken · oorspronkelijke uitzenddatum":"Ga naar Instellingen om je When2Watch-agenda te controleren."}</p></div><a href="/settings">Instellingen</a></section>
@@ -101,7 +112,7 @@ export function SeriesPanel({data}:{data:Overview}) {
     {shown.map(show=><section className="card followed-show" key={show.id}>
       <div className="show-identity">
       <div className="show-heading"><SeriesPoster src={show.poster}/><div className="show-info"><span className="tag">{sourceStatus(show.status)}</span><h2>{show.title}</h2><p className="muted small">{[show.year,show.platform,show.country].filter(Boolean).join(" · ")}</p></div><a href={show.sourceUrl} target="_blank" rel="noreferrer">TVmaze ↗</a></div>
-      <div className="show-preference"><label htmlFor={`trying-${show.id}`}>Jouw keuze voor {show.title}</label><select id={`trying-${show.id}`} value={show.trying?"trying":"following"} disabled={busy} onChange={e=>void changeTrying(show.id,e.target.value==="trying")}><option value="following">Volgen</option><option value="trying">Proberen</option></select></div>
+      <div className="show-preference"><label htmlFor={`trying-${show.id}`}>Jouw keuze voor {show.title}</label><select id={`trying-${show.id}`} value={show.trying?"trying":"following"} disabled={busy} onChange={e=>void changeTrying(show.id,e.target.value==="trying")}><option value="following">Volgen</option><option value="trying">Proberen</option></select></div><button className="secondary" disabled={busy} onClick={()=>void unfollow(show.id,show.title)}>Niet meer volgen</button>
       {show.error&&<p className="notice error">{show.error}</p>}
       </div>
       <div className="show-content">
