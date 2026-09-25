@@ -1,6 +1,6 @@
 # IDEA-219 P1 — preflight (T-17)
 
-Status 25 september 2026: **bron, host en SQLite-opslagtypen vastgesteld; echte Google-proef grotendeels geslaagd, paginering en niet-app-agenda nog te herhalen** (zie §5b).
+Status 25 september 2026: **bron, host en SQLite-opslagtypen vastgesteld; echte beperkte Google-proef PASSED** (zie §5b).
 
 ## 1. Bron
 
@@ -74,10 +74,10 @@ Opslagtypen: **alle gevulde DateTime-kolommen zijn INTEGER (Unix-milliseconden)*
 | Hernoemen | 200, zelfde agenda-ID in de readback. |
 | Tokenrefresh | Geslaagd; lezen daarna 200; scope ongewijzigd smal. |
 | Verloren aanmaakantwoord | POST-antwoord weggegooid; precies één nieuwe agenda met de nonce teruggevonden en overgenomen; 1 POST verzonden. |
-| Paginering | **Niet bewezen**: de lijst had toen 1 agenda op 1 pagina. Het script eist nu ≥ 2 agenda's over ≥ 2 pagina's en draait de stap pas na de aanmaakstappen. |
-| Bestaande niet-app-agenda | **Niet bewezen**: het opgegeven ID stond niet in de agendalijst van het proefaccount (lijst en events beide 404). Opnieuw uitvoeren met een agenda van dat account zelf (bijv. `primary`). |
+| Paginering | Eerste run niet bewezen (1 agenda). Herhaald 18:59 UTC met paginagrootte 1: **3 agenda's over 3 pagina's** volledig gelezen. |
+| Bestaande niet-app-agenda | Eerste run ongeldig (ID niet van het proefaccount). Herhaald 18:59 UTC op de eigen `primary`: agendalijst **200**, events lezen **404**. Met de smalle scopes is een niet door de app gemaakte agenda wel zichtbaar maar niet te lezen of te beschrijven. |
 
-Tussenstand: **7 van 9 stappen echt bewezen, 2 opnieuw te doen.** Nog niet beproefd: `include_granted_scopes=true` en de overgang van een bestaande grant met `calendar.events` naar de smalle scopes (spec §6.2); dat hoort bij P9 en vereist dezelfde productieclient-vraag.
+Uitkomst: **PASSED — alle 9 stappen met echte Google-antwoorden bewezen.** Gevolg voor P9: een bestaande handmatig aangemaakte agenda (zoals de huidige productieagenda) werkt niet met alleen `calendar.app.created`; de legacy-overgang uit spec §6.2 (pauzeren, expliciet nieuwe app-agenda kiezen) is dus nodig, niet optioneel. Google antwoordt daarbij 404, niet 403. Nog niet beproefd: `include_granted_scopes=true` en de overgang van een bestaande grant met `calendar.events` naar de smalle scopes (spec §6.2); dat hoort bij P9 en vereist dezelfde productieclient-vraag.
 
 ## 6. Meetplan downtime (uitvoering in P3-repetitie)
 
