@@ -4,8 +4,16 @@ Status: **R2 is technisch compleet en de repetitie is geslaagd; de openstelling 
 de praktijkproef met twee accounts, de iPhone/iPad-proef, de controle op werkelijk ontvangen meldingen en de
 sentinelproef in de proxylogs. Dit document noemt geen onuitgevoerde proef PASSED.
 
-Branch `claude/idea-219-r2`. Lokaal: vitest 248/248 op PostgreSQL 17, typecheck, build, HTTP-smoke 187 asserties,
-Docker-build (runtime en tools). Geen productiesecrets in tests of CI.
+Branch `claude/idea-219-r2`, WIP-PR #7 (alleen voor CI; niet mergen). Lokaal: vitest 250/250 op PostgreSQL 17,
+typecheck, build, HTTP-smoke 187 asserties, Docker-build (runtime en tools). Forgejo-CI groen op `1067cbd`, met
+tests, build, typecheck, HTTP en beide images. Geen productiesecrets in tests of CI.
+
+Onafhankelijke review van de hele branch: geen BLOCKER of MAJOR. Vier MINOR-punten, alle vier opgelost in
+`1067cbd`:
+- Een verwijdering blijft hangend als de purge faalt. De gebruiker kan dan niet worden heractiveerd; de retentie maakt de verwijdering af.
+- Afspraken van een serie die werd gestopt terwijl de agenda gepauzeerd was, worden bij de eerste bruikbare sync verwijderd.
+- In het runbook: een herstel dat als migrator eigendom krijgt, de vlag `--authorized-readback`, en een stop bij `needsReconcile`.
+- `verify-catalog` draait niet meer na de openstelling.
 
 ## Acceptatiematrix (specificatie A1–A12)
 
