@@ -1,15 +1,17 @@
 # When2Watch op max2
 
-Eén Next.js-proces, één container `when2watch-web-1`, SQLite onder `/srv/apps/when2watch/data`. De app heeft geen hostpoort; de bestaande proxyroute blijft gelden. Beheer via `ssh janpeter@192.168.0.158`. Alleen deze app herstarten.
+Eén Next.js-proces, één container `when2watch-web-1`, eigen PostgreSQL 17-container `when2watch-db-1` (data onder `/srv/apps/when2watch/postgres`, alleen op het interne compose-netwerk). Geen van beide heeft een hostpoort; de bestaande proxyroute blijft gelden. Releases vóór IDEA-219 R1 (t/m `fb7a690`) gebruikten SQLite onder `/srv/apps/when2watch/data`; die bron blijft na de omschakeling bewaard. Beheer via `ssh janpeter@192.168.0.158`. Alleen deze app herstarten.
 
 ## Release en herstel
 
-1. Bouw een nieuwe release onder `/srv/apps/when2watch/releases/<commit>` met de bestaande private `.env` (symlink); gebruik `RELEASE_TAG=<commit> docker compose -p when2watch build web`. De bron komt uit `git archive` van de beoordeelde commit.
-2. Maak met SQLite's backup-API een consistente kopie onder `db-backups`, mode 0600; lees de kopie terug met `PRAGMA integrity_check`. Bewaar de vorige image, `current` en configuratie.
-3. Start alleen de nieuwe webcontainer. `scripts/start.sh` past vastgelegde migraties toe. Controleer container-health, HTTPS en bestaande agenda-/seriekoppelingen; wijs `current` naar de bewezen release.
-4. Bij mislukking vóór externe agendawrites: oude release/image terugstarten. De episode-migratie is alleen toevoegend, waardoor de oude app de bestaande auth-/proeftabellen kan blijven gebruiken. Zet een databasebackup niet blind terug nadat Google-writes hebben plaatsgevonden; bewaar eerst de huidige database. Nieuwe mappingrecords bevatten de herstelidentiteit van die writes.
+1. Bouw een nieuwe release onder `/srv/apps/when2watch/releases/<commit>` uit `git archive` van de beoordeelde commit, met de private `.env`, `.env.db` en `.env.migrate` (symlinks, 0600); `chmod 0644 deploy/postgres-init.sh`. `RELEASE_TAG=<commit> docker compose -p when2watch build web`.
+2. Maak vóór iedere schemawijziging een `pg_dump -Fc` (0600) en bewaar de vorige image, `current` en configuratie.
+3. Migraties zijn een aparte stap met de DDL-rol: `docker compose -p when2watch --profile migrate run --rm migrate`. `scripts/start.sh` voert geen DDL uit; het weigert een niet-PostgreSQL-DSN of een ongemigreerd schema. Start daarna alleen de nieuwe webcontainer en controleer health, HTTPS en bestaande agenda-/seriekoppelingen; wijs `current` naar de bewezen release.
+4. Bij mislukking vóór externe agendawrites: oude release/image terugstarten. Zet een databasebackup niet blind terug nadat Google-writes hebben plaatsgevonden; bewaar eerst de huidige database. Nieuwe mappingrecords bevatten de herstelidentiteit van die writes.
 
-Secrets staan uitsluitend in `.env` (0600), nooit in een commandoargument, document of log. De container draait als UID 1000; app- en datamappen zijn 0700. Maak geen tweede appproces tegen dezelfde database: de gedeelde gebruikerslock is procesgebonden.
+De eenmalige overstap van SQLite naar PostgreSQL volgt [het R1-cutover-runbook](../docs/runbooks/idea-219-r1-cutover.md); de repetitie is `deploy/rehearse-r1.sh`.
+
+Secrets staan uitsluitend in `.env` (0600), nooit in een commandoargument, document of log. De container draait als UID 1000; app-, data- en PostgreSQL-mappen zijn 0700. De runtime gebruikt de rol `when2watch_app` (alleen DML); `when2watch_migrator` alleen voor migraties en import. Maak geen tweede appproces tegen dezelfde database: de gedeelde gebruikerslock is procesgebonden.
 
 ## Dagelijkse synchronisatie
 
@@ -21,7 +23,7 @@ Max2 gebruikt `Europe/Amsterdam`. De dagelijkse regel van gebruiker `janpeter` i
 5 6 * * * /bin/sh /srv/apps/when2watch/current/deploy/when2watch-sync.sh >> /srv/apps/when2watch/cron.log 2>&1 # When2Watch daily
 ```
 
-Voeg de regel samen met de actuele crontab; bewaar een herstelkopie en controleer dat bestaande regels behouden blijven. De 06:05-run valt vóór het gewenste meldingsmoment 09:00. Logregels bevatten tijd, HTTP-status, run-ID en actietellingen. De SQLite-tabel `SyncRun` bewaart hetzelfde resultaat met trigger `cron`. Een handmatig gestart script bewijst de scheduler niet.
+Voeg de regel samen met de actuele crontab; bewaar een herstelkopie en controleer dat bestaande regels behouden blijven. De 06:05-run valt vóór het gewenste meldingsmoment 09:00. Logregels bevatten tijd, HTTP-status, run-ID en actietellingen. De tabel `SyncRun` bewaart hetzelfde resultaat met trigger `cron`. Een handmatig gestart script bewijst de scheduler niet.
 
 ## Gebruik en storingen
 

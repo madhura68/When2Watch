@@ -1,8 +1,8 @@
 // Operator-only proof. Bundle for Node, execute inside the authorized app
-// container. No HTTP route exposes this script. Uses an isolated temporary DB.
+// container. No HTTP route exposes this script. Uses a separately provisioned,
+// empty PostgreSQL trial database (W2W_TRIAL_DATABASE_URL), never the production DB.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import fixture from "../tests/fixtures/tvmaze/slow-horses.json";
 import { getInstallation } from "../src/server/installation";
@@ -12,11 +12,12 @@ import { getGoogleAccessToken } from "../src/server/google-tokens";
 import { SyncService } from "../src/server/sync";
 import { parseSnapshot } from "../src/server/tvmaze";
 import { localDate, nextDate } from "../src/lib/dates";
+import { isolatedProbeDatabase } from "./google-probe-guards";
 
 async function main() {
   assert(process.argv.includes("--authorized-recovery-probe"),"Explicit operator invocation required");
-  const production=new PrismaClient(), path=`/tmp/when2watch-recovery-${randomUUID()}.db`;
-  const url=`file:${path}`, syntheticId=2147483600;
+  const url=isolatedProbeDatabase(process.env.W2W_TRIAL_DATABASE_URL,process.env.DATABASE_URL);
+  const production=new PrismaClient(), syntheticId=2147483600;
   let trial:PrismaClient|undefined, cleanup:(()=>Promise<unknown>)|undefined, cleaned=false;
   const evidence:Record<string,unknown>={at:new Date().toISOString(),kind:"simulated-source-and-lost-response-with-real-Google",syntheticEpisodeId:syntheticId};
   try {
@@ -58,6 +59,7 @@ async function main() {
       env:{...process.env,DATABASE_URL:url,RUST_LOG:"info"},stdio:"pipe",
     });
     trial=new PrismaClient({datasourceUrl:url});
+    assert.equal(await trial.user.count(),0,"The trial database must be empty");
     await trial.user.create({data:user});
     await trial.calendarSettings.create({data:calendar});
     const input=structuredClone(fixture);
@@ -93,8 +95,10 @@ async function main() {
     console.log(JSON.stringify(evidence,null,2));
   }finally{
     if(cleanup&&!cleaned){
-      try{await cleanup();}catch{console.error(JSON.stringify({cleanup:"failed",database:path,syntheticEpisodeId:syntheticId}));}
+      try{await cleanup();}catch{console.error(JSON.stringify({cleanup:"failed",database:"trial",syntheticEpisodeId:syntheticId}));}
     }
+    // Remote cleanup is proven above; the trial rows of this own user are removed afterwards.
+    if(cleaned)await trial?.user.deleteMany({});
     await trial?.$disconnect();await production.$disconnect();
   }
 }

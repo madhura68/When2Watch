@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createServer } from "node:net";
 import { PrismaClient } from "@prisma/client";
 
 // Real Next HTTP + database sessions; no Google requests or production data.
-const dir = await mkdtemp(join(tmpdir(), "when2watch-http-"));
+// The database is a fresh PostgreSQL database on a disposable local test server only.
+const localHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "postgres"]);
+const testServer = new URL(process.env.W2W_TEST_DATABASE_URL ?? "missing:");
+if (!/^postgres(ql)?:$/.test(testServer.protocol) || !localHosts.has(testServer.hostname) || process.env.W2W_TEST_DATABASE_URL === process.env.DATABASE_URL) {
+  throw new Error("Refusing to run: set W2W_TEST_DATABASE_URL to a disposable local PostgreSQL server; production DSNs are never used.");
+}
+const databaseName = `w2w_test_http_${randomBytes(6).toString("hex")}`;
+const databaseUrl = new URL(testServer); databaseUrl.pathname = `/${databaseName}`;
+const execSql = (sql) => execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "db", "execute", "--stdin", "--schema", "prisma/schema.prisma"],
+  { input: sql, env: { ...process.env, DATABASE_URL: testServer.toString() }, stdio: ["pipe", "pipe", "pipe"] });
+execSql(`CREATE DATABASE "${databaseName}"`);
 const socket = createServer();
 await new Promise((resolve) => socket.listen(0, "127.0.0.1", resolve));
 const port = socket.address().port;
@@ -16,7 +23,7 @@ await new Promise((resolve) => socket.close(resolve));
 const origin = "https://when2watch.example.test";
 const env = {
   ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1", RUST_LOG: "info",
-  DATABASE_URL: `file:${join(dir, "test.db")}`, NEXTAUTH_URL: origin,
+  DATABASE_URL: databaseUrl.toString(), NEXTAUTH_URL: origin,
   NEXTAUTH_SECRET: randomBytes(32).toString("hex"),
   GOOGLE_CLIENT_ID: "http-test.apps.googleusercontent.com", GOOGLE_CLIENT_SECRET: "synthetic-client-secret",
   GOOGLE_CALENDAR_ID: "chosen@example.test", ALLOWED_GOOGLE_EMAIL: "owner@example.test",
@@ -210,7 +217,7 @@ try {
   const logout = await request("/api/auth/signout", { method: "POST", headers: { ...cookie("owner"), "Content-Type": "application/x-www-form-urlencoded" }, body: "json=true" });
   await logout.text();
   check(await db.session.count({ where: { sessionToken: sessions.owner } }) === 1, "logout without CSRF token must not remove the session");
-  console.log(`HTTP smoke: ${assertions} assertions passed; real Next/SQLite, synthetic sessions, no Google calls.`);
+  console.log(`HTTP smoke: ${assertions} assertions passed; real Next/PostgreSQL, synthetic sessions, no Google calls.`);
 } catch (error) {
   console.error(error.message);
   // No request headers or real credentials exist in this isolated smoke process.
@@ -222,5 +229,5 @@ try {
     await new Promise((resolve) => server.once("exit", resolve));
   }
   await db.$disconnect();
-  await rm(dir, { recursive: true, force: true });
+  execSql(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
 }

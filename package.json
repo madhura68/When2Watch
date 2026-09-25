@@ -14,7 +14,12 @@
     "test": "vitest run",
     "test:http": "node scripts/smoke-http.mjs",
     "db:generate": "prisma generate",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "test:db:up": "docker run -d --rm --name w2w-test-pg -e POSTGRES_PASSWORD=w2w-local-test -p 127.0.0.1:55432:5432 postgres:17",
+    "test:db:down": "docker stop w2w-test-pg",
+    "migrate:export": "tsx scripts/migration/sqlite-export.ts",
+    "migrate:import": "tsx scripts/migration/import-postgres.ts",
+    "migrate:verify": "tsx scripts/migration/verify-import.ts"
   },
   "dependencies": {
     "@next-auth/prisma-adapter": "1.0.7",

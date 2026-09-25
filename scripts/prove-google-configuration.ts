@@ -13,7 +13,7 @@ import { googleTokenRefresher } from "../src/server/google-tokens";
 import { calendarScopes } from "../src/server/auth-policy";
 import { nextDate } from "../src/lib/dates";
 import { AppError } from "../src/server/errors";
-import { probeAttemptReady, probeAuthFailure } from "./google-probe-guards";
+import { isolatedProbeDatabase, probeAttemptReady, probeAuthFailure } from "./google-probe-guards";
 
 if (!process.argv.includes("--authorized-configuration-probe")) throw Error("Explicit --authorized-configuration-probe is required.");
 const configPath = process.env.W2W_GOOGLE_PROBE_CONFIG;
@@ -32,8 +32,9 @@ if (clients.length === 2 && clients[0].clientId === clients[1].clientId) throw E
 const privateDir = join(dirname(configPath), "google-probe-state");
 mkdirSync(privateDir, { recursive: true, mode: 0o700 });
 if ((statSync(privateDir).mode & 0o077) !== 0) throw Error("The private probe directory must have mode 0700.");
-const statePath = join(privateDir, "state.json"), dbPath = join(privateDir, "probe.db");
-if (existsSync(dbPath) && !existsSync(statePath)) throw Error("Refusing an existing database without probe state.");
+const statePath = join(privateDir, "state.json");
+// A separate local PostgreSQL probe database (name contains "probe"), never the production DSN.
+const probeUrl = isolatedProbeDatabase(process.env.W2W_PROBE_DATABASE_URL, process.env.DATABASE_URL);
 const origin = "http://localhost:3401", creationScope = "https://www.googleapis.com/auth/calendar.app.created";
 const sessionCookie = "w2w-probe.session-token";
 type Connection = Pick<Account, "providerAccountId" | "access_token" | "refresh_token" | "expires_at" | "scope"> & { client: number };
@@ -45,14 +46,16 @@ type State = {
   event?: { source: string; target: string; date: string; targetConfirmed?: boolean; sourceDeleted?: boolean; targetDeleted?: boolean };
   observations: Record<string, unknown>[];
 };
-const state: State = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : {
+const freshState = !existsSync(statePath);
+const state: State = !freshState ? JSON.parse(readFileSync(statePath, "utf8")) : {
   secret: randomBytes(32).toString("hex"), csrf: randomBytes(32).toString("hex"), connections: {}, calendars: {}, observations: [],
 };
 function save() { writeFileSync(`${statePath}.tmp`, JSON.stringify(state), { mode: 0o600 }); renameSync(`${statePath}.tmp`, statePath); }
 function observe(kind: string, detail: Record<string, unknown> = {}) { state.observations.push({ at: new Date().toISOString(), kind, ...detail }); save(); }
 save();
-execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], { env: { ...process.env, DATABASE_URL: `file:${dbPath}`, RUST_LOG: "info" }, stdio: "pipe" });
-const db = new PrismaClient({ datasourceUrl: `file:${dbPath}` });
+execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], { env: { ...process.env, DATABASE_URL: probeUrl, RUST_LOG: "info" }, stdio: "pipe" });
+const db = new PrismaClient({ datasourceUrl: probeUrl });
+if (freshState && await db.user.count() > 0) throw Error("Refusing an existing probe database without probe state.");
 process.env.NEXTAUTH_URL = origin;
 const NextAuth = (NextAuthModule as unknown as { default?: typeof NextAuthModule }).default ?? NextAuthModule;
 const GoogleProvider = (GoogleModule as unknown as { default?: typeof GoogleModule }).default ?? GoogleModule;

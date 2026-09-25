@@ -12,10 +12,22 @@ jobs:
     name: Tests, build and HTTP checks
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        # Pinned to the PostgreSQL major chosen in the IDEA-219 preflight (max2 runs 17).
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: w2w-ci-only
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
     env:
       NEXT_TELEMETRY_DISABLED: '1'
       RUST_LOG: info
-      DATABASE_URL: file:/tmp/when2watch-ci.db
+      # Disposable CI service; every test and the HTTP smoke create their own w2w_test_* database.
+      W2W_TEST_DATABASE_URL: postgresql://postgres:w2w-ci-only@postgres:5432/postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,16 +41,20 @@ jobs:
         run: npm ci
       - name: Generate Prisma client
         run: npm run db:generate
+      - name: Wait for PostgreSQL
+        run: node -e "const n=require('net');let i=0;(function t(){const s=n.connect(5432,'postgres',()=>{s.end();process.exit(0)}).on('error',()=>{if(++i>60)process.exit(1);setTimeout(t,1000)})})()"
       - name: Unit and database tests
-        # Each database test starts Prisma migrations. Bound file parallelism
-        # on shared runners; concurrency inside the tests stays enabled. Real
-        # migration startup exceeded 10s in CI; retain a bounded 30s watchdog.
+        # Global setup runs one real migrate deploy into a template database;
+        # tests clone it. Bound file parallelism on shared runners and keep the
+        # 30s watchdog for database startup.
         run: npm test -- --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000
       - name: Production build
         run: npm run build
       - name: Typecheck including generated Next types
         run: npm run typecheck
-      - name: HTTP checks with temporary SQLite and synthetic sessions
+      - name: HTTP checks with a temporary PostgreSQL database and synthetic sessions
         run: npm run test:http
       - name: Production Docker image
         run: docker build -t when2watch:ci .
+      - name: Operator tools image (migration and readback)
+        run: docker build --target tools -t when2watch-tools:ci .

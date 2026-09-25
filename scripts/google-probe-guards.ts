@@ -18,3 +18,18 @@ export function probeAuthFailure(metadata: unknown): string {
   ];
   return reasons.find(([pattern])=>pattern.test(message))?.[1] ?? "unknown";
 }
+
+// Operator probes write only to an explicit, separately provisioned PostgreSQL database.
+export function isolatedProbeDatabase(raw: string | undefined, productionRaw: string | undefined): string {
+  if (!raw) throw Error("Set an explicit PostgreSQL probe database URL.");
+  const url = new URL(raw);
+  if (!/^postgres(ql)?:$/.test(url.protocol)) throw Error("The probe database must be PostgreSQL.");
+  if (productionRaw) {
+    const production = new URL(productionRaw);
+    if (production.hostname === url.hostname && (production.port || "5432") === (url.port || "5432") && production.pathname === url.pathname) {
+      throw Error("Refusing the production database as probe database.");
+    }
+  }
+  if (!/(probe|trial)/.test(url.pathname.slice(1))) throw Error("The probe database name must contain probe or trial.");
+  return raw;
+}
