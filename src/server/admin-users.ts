@@ -30,6 +30,8 @@ export async function blockUser(db: PrismaClient, adminId: string, userId: strin
 export async function reactivateUser(db: PrismaClient, adminId: string, userId: string) {
   await adminFor(db, adminId);
   return serializeCalendarMutation(userId, () => db.$transaction(async tx => {
+    // A user whose own deletion is pending never returns.
+    if (await tx.deletionTombstone.count({ where: { userId } })) throw new AppError("NOT_BLOCKED", 409, "Dit account wordt verwijderd en kan niet worden heractiveerd.");
     // Only a blocked user returns; an old UNCLAIMED profile needs an invitation.
     const updated = await tx.user.updateMany({ where: { id: userId, accessStatus: "BLOCKED" }, data: { accessStatus: "ACTIVE" } });
     if (!updated.count) throw new AppError("NOT_BLOCKED", 409, "Alleen een geblokkeerde gebruiker kan worden heractiveerd.");

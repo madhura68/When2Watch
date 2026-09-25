@@ -26,7 +26,7 @@ export type ScheduledReport = { status: "success" | "partial" | "failed"; users:
  */
 export async function runScheduledSync(db: PrismaClient, source: CatalogSource, syncFor: (userId: string) => SyncService, now = new Date()): Promise<ScheduledReport> {
   const catalog = await refreshFollowedCatalog(db, source, now);
-  const users = await db.user.findMany({ where: { accessStatus: "ACTIVE", follows: { some: {} } }, select: { id: true }, orderBy: { id: "asc" } });
+  const users = await db.user.findMany({ where: { accessStatus: "ACTIVE", OR: [{ follows: { some: {} } }, { eventLinks: { some: { status: { not: "deleted" } } } }] }, select: { id: true }, orderBy: { id: "asc" } });
   const report: ScheduledReport = { status: "success", users: users.length, succeeded: 0, partial: 0, failed: 0, busy: 0,
     catalog: { index: catalog.index, checked: catalog.checked, fetched: catalog.fetched, failed: catalog.failed } };
   for (const { id } of users) {

@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PrismaClient } from "@prisma/client";
+import { AppError } from "@/server/errors";
 import { deleteOwnAccount, exportOwnData, freshLoginMs } from "@/server/privacy";
 import { serializeCalendarMutation } from "@/server/calendar-mutations";
+import { reactivateUser } from "@/server/admin-users";
+import { runRetention } from "@/server/retention";
 import { run as journalTool } from "../scripts/restore-privacy";
 import { testDatabase } from "./database";
 import { activeUser, installation } from "./fixtures/users";
@@ -83,10 +86,27 @@ describe("deleting the own account", () => {
   it("deletes nothing and restores access when the journal cannot be written", async () => {
     const storage = testDatabase(); cleanups.push(() => storage.close()); const db = storage.db;
     await seed(db); const journal = await withJournal(db);
-    chmodSync(journal, 0o400);
-    await expect(deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal, now: clock })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
+    // A failing disk write (independent of file modes, which root ignores in CI).
+    const failingWrite = () => { throw new AppError("JOURNAL_UNAVAILABLE", 503, "write failed"); };
+    await expect(deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal, now: clock, append: failingWrite })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
     expect(await db.user.findUniqueOrThrow({ where: { id: "a" } })).toMatchObject({ accessStatus: "ACTIVE" });
     expect(await db.userFollow.count({ where: { userId: "a" } })).toBe(1); expect(await db.deletionTombstone.count()).toBe(0);
+  });
+
+  it("keeps a journalled deletion pending when the purge fails: no reactivation, and the daily retention completes it", async () => {
+    const storage = testDatabase(); cleanups.push(() => storage.close()); const db = storage.db;
+    await seed(db); const journal = await withJournal(db);
+    let transactions = 0;
+    const flaky = new Proxy(db, { get: (target, key) => key === "$transaction"
+      ? (...args: unknown[]) => { if (++transactions === 2) throw Error("database gone"); return (target.$transaction as (...a: unknown[]) => unknown)(...args); }
+      : Reflect.get(target, key) });
+    await expect(deleteOwnAccount(flaky, "a", "session-a", "VERWIJDEREN", { journal, now: clock })).rejects.toThrow("database gone");
+    expect(await db.user.findUniqueOrThrow({ where: { id: "a" } })).toMatchObject({ accessStatus: "BLOCKED" });
+    expect(readFileSync(journal, "utf8")).toContain('"userId":"a"');
+    await expect(reactivateUser(db, "b", "a")).rejects.toMatchObject({ status: 409 });
+    expect(await runRetention(db, now)).toMatchObject({ pendingDeletions: 1 });
+    expect(await db.user.findUnique({ where: { id: "a" } })).toBeNull();
+    expect(await db.userFollow.count({ where: { userId: "b" } })).toBe(1);
   });
 
   it("blocks, drains in-flight work, journals, then removes all personal rows; B and the shared catalogue stay", async () => {

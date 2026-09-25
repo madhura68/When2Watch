@@ -83,22 +83,43 @@ export class SyncService {
     const account = binding?.accountId ? await this.db.account.findUnique({ where: { id: binding.accountId } }) : null;
     let removed = 0;
     // With a paused binding a 404 may only mean "no access": keep those links as history instead of calling them deleted.
+    // Paused: the follow goes now; its items are removed by the first sync on a usable binding (removeUnfollowed).
     if (binding && account && bindingUsable(binding, account) === "ok") {
-      const links = await this.db.calendarEventLink.findMany({ where: { userId, bindingId: binding.id, status: { not: "deleted" }, catalogEpisode: { catalogShowId: follow.catalogShowId } }, include: { catalogEpisode: true } });
-      for (const link of links) {
-        await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleting" } });
-        const event = await this.read(link.eventId);
-        if (event) {
-          this.assertOwned(event, userId, tvmazeId, link.catalogEpisode!.sourceId);
-          await this.google.remove(this.settings.calendarId, event.id, event.etag!);
-          if (await this.read(event.id)) throw new AppError("DELETE_UNCONFIRMED", 502, "De verwijdering is nog niet bevestigd. Probeer opnieuw.");
-        }
-        await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleted" } });
-        removed++;
-      }
+      removed = await this.removeLinks(userId, tvmazeId, await this.db.calendarEventLink.findMany({ where: { userId, bindingId: binding.id, status: { not: "deleted" },
+        catalogEpisode: { catalogShowId: follow.catalogShowId } }, include: { catalogEpisode: true } }));
     }
     await this.db.userFollow.delete({ where: { id: follow.id } });
     return { removed };
+  }
+
+  private async removeLinks(userId: string, tvmazeId: number, links: (CalendarEventLink & { catalogEpisode: CatalogEpisode | null })[]) {
+    let removed = 0;
+    for (const link of links) {
+      await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleting" } });
+      const event = await this.read(link.eventId);
+      if (event) {
+        this.assertOwned(event, userId, tvmazeId, link.catalogEpisode!.sourceId);
+        await this.google.remove(this.settings.calendarId, event.id, event.etag!);
+        if (await this.read(event.id)) throw new AppError("DELETE_UNCONFIRMED", 502, "De verwijdering is nog niet bevestigd. Probeer opnieuw.");
+      }
+      await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleted" } });
+      removed++;
+    }
+    return removed;
+  }
+
+  /** Items on the usable binding of shows the user no longer follows (e.g. unfollowed while paused). */
+  private async removeUnfollowed(userId: string, binding: CalendarBinding, series: SeriesResult[]) {
+    const followed = (await this.db.userFollow.findMany({ where: { userId }, select: { catalogShowId: true } })).map(f => f.catalogShowId);
+    const orphans = await this.db.calendarEventLink.findMany({ where: { userId, bindingId: binding.id, status: { not: "deleted" }, catalogEpisode: { catalogShowId: { notIn: followed } } },
+      include: { catalogEpisode: { include: { show: true } } } });
+    const byShow = new Map<number, typeof orphans>();
+    for (const link of orphans) byShow.set(link.catalogEpisode!.show.tvmazeId, [...(byShow.get(link.catalogEpisode!.show.tvmazeId) ?? []), link]);
+    for (const [tvmazeId, links] of byShow) {
+      const result: SeriesResult = { showId: tvmazeId, title: links[0].catalogEpisode!.show.title, created: 0, updated: 0, deleted: 0, unchanged: 0, failed: 0, errors: [] };
+      series.push(result);
+      try { result.deleted = await this.removeLinks(userId, tvmazeId, links); } catch (error) { result.failed++; result.errors.push(failure(error)); }
+    }
   }
 
   private async activeBinding(userId: string): Promise<CalendarBinding | null> {
@@ -151,6 +172,7 @@ export class SyncService {
         ? { lastError: result.errors.join("\n") }
         : { lastError: null, lastSuccessAt: this.now() } });
     }
+    if (binding) await this.removeUnfollowed(userId, binding, series);
     const failed = series.reduce((n,s) => n+s.failed,0), succeeded = series.reduce((n,s) => n+s.created+s.updated+s.deleted+s.unchanged,0);
     const result: SyncResult = { id: run.id, status: failed ? (succeeded ? "partial" : "failed") : "success", ...(paused ? { calendarState: "paused" as const } : !binding ? { calendarState: "unconfigured" as const } : {}), startedAt: started.toISOString(), finishedAt: this.now().toISOString(), series };
     await this.db.syncRun.update({ where: { id: run.id }, data: { status: result.status, finishedAt: new Date(result.finishedAt), resultJson: JSON.stringify(result) } });

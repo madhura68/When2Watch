@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { enforceCapacity } from "./search-cache";
+import { purgeUser } from "./privacy";
 
 const day = 86_400_000;
 /** Retention periods of the specification (§ privacy). Backups (30 days) are rotated by the operator runbook. */
@@ -12,7 +13,13 @@ export const retention = { syncDiagnosticsDays: 30, auditDays: 90, terminalInvit
  */
 export async function runRetention(db: PrismaClient, now = new Date()) {
   const before = (days: number) => new Date(now.getTime() - days * day), inviteCutoff = before(retention.terminalInvitationDays);
+  // Complete own-account deletions whose purge failed after journalling (tombstone present, user still there).
+  let pendingDeletions = 0;
+  for (const { userId, deletedAt } of await db.deletionTombstone.findMany({ where: { userId: { in: (await db.user.findMany({ select: { id: true } })).map(u => u.id) } } })) {
+    await db.$transaction(tx => purgeUser(tx, userId, deletedAt)); pendingDeletions++;
+  }
   const counts = {
+    pendingDeletions,
     searchCache: (await db.searchCache.deleteMany({ where: { expiresAt: { lte: now } } })).count,
     syncRuns: (await db.syncRun.deleteMany({ where: { startedAt: { lt: before(retention.syncDiagnosticsDays) }, status: { not: "running" } } })).count,
     audit: (await db.auditEvent.deleteMany({ where: { at: { lt: before(retention.auditDays) } } })).count,

@@ -28,7 +28,7 @@ it("prunes each kind at its own period and keeps recovery intentions, app-owners
   await db.session.createMany({ data: [{ userId: "a", sessionToken: "gone", expires: daysAgo(1) }, { userId: "a", sessionToken: "live", expires: daysAgo(-1) }] });
   await db.deletionTombstone.createMany({ data: [{ userId: "deleted-long-ago", deletedAt: daysAgo(32) }, { userId: "deleted-recently", deletedAt: daysAgo(20) }] });
 
-  expect(await runRetention(db, now)).toEqual({ searchCache: 1, syncRuns: 1, audit: 1, invitations: 2, invitationFlows: 0, attemptTokens: 1, attempts: 1,
+  expect(await runRetention(db, now)).toEqual({ pendingDeletions: 0, searchCache: 1, syncRuns: 1, audit: 1, invitations: 2, invitationFlows: 0, attemptTokens: 1, attempts: 1,
     failedCreations: 2, sessions: 1, tombstones: 1 });
   expect((await db.syncRun.findMany({ select: { status: true } })).map(r => r.status).sort()).toEqual(["running", "success"]);
   expect((await db.invitation.findMany({ select: { tokenHash: true } })).map(r => r.tokenHash).sort()).toEqual(["h3", "h4"]);

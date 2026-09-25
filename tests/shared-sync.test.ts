@@ -57,6 +57,19 @@ describe("two users sharing one series", () => {
     await expect(services("b").unfollow("b", 999)).rejects.toMatchObject({ status: 404 });
   });
 
+  it("removes the items of a show unfollowed while paused as soon as the binding is usable again", async () => {
+    const { db, services, live } = await twoFollowers();
+    await services("a").add("a", 45039);
+    await db.account.update({ where: { id: "acc-a" }, data: { needsReauth: true } });
+    expect(await services("a").unfollow("a", 45039)).toEqual({ removed: 0 });
+    expect(live("a")).toHaveLength(5);
+    await db.account.update({ where: { id: "acc-a" }, data: { needsReauth: false } });
+    const result = await services("a").sync("a", "manual");
+    expect(result.series).toEqual([expect.objectContaining({ showId: 45039, deleted: 5, failed: 0 })]);
+    expect(live("a")).toHaveLength(0);
+    expect(await runScheduledSync(db, { snapshot: async () => { throw Error("unused"); }, updates: async () => new Map(), artwork: async () => ({ bannerUrl: null, backgroundUrl: null }) }, services, now)).toMatchObject({ users: 0 });
+  });
+
   it("never duplicates after a lost POST and restart, per user", async () => {
     const { db, services, live, calendars } = await twoFollowers();
     calendars.b.loseNextInsert();

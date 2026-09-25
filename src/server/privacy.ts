@@ -71,7 +71,7 @@ export function readJournal(path: string, journalId: string | null | undefined) 
   return deleted;
 }
 
-function appendDeletion(path: string, journalId: string | null, userId: string, at: Date) {
+export function appendDeletion(path: string, journalId: string | null, userId: string, at: Date) {
   readJournal(path, journalId);
   let fd: number | undefined;
   try {
@@ -108,9 +108,9 @@ export async function purgeUser(tx: Tx, userId: string, deletedAt: Date) {
 /**
  * Deletes the signed-in user's own account after a fresh login and typed confirmation. Order: block and
  * revoke sessions, drain in-flight Calendar work, journal durably, then delete. A journal failure deletes
- * nothing and restores the previous access. Items in Google Calendar stay where they are.
+ * nothing and restores the previous access; a failed purge stays pending and is completed by retention. Items in Google Calendar stay where they are.
  */
-export async function deleteOwnAccount(db: PrismaClient, userId: string, sessionToken: string, confirmation: unknown, options: { journal?: string; now?: () => Date } = {}) {
+export async function deleteOwnAccount(db: PrismaClient, userId: string, sessionToken: string, confirmation: unknown, options: { journal?: string; now?: () => Date; append?: typeof appendDeletion } = {}) {
   const now = options.now ?? (() => new Date());
   const user = await accessFor(db, userId);
   if (confirmation !== deletionConfirmation) throw new AppError("CONFIRMATION_REQUIRED", 400, `Typ ${deletionConfirmation} om je account te verwijderen.`);
@@ -130,8 +130,14 @@ export async function deleteOwnAccount(db: PrismaClient, userId: string, session
   });
   return serializeCalendarMutation(userId, async () => {
     const at = now();
-    try { appendDeletion(path, journalId, userId, at); }
-    catch (error) { await db.user.update({ where: { id: userId }, data: { accessStatus: "ACTIVE" } }); throw error; }
+    // The DB tombstone marks the deletion as pending: the user cannot be reactivated, and a failed purge is
+    // completed by the daily retention run.
+    await db.deletionTombstone.upsert({ where: { userId }, create: { userId, deletedAt: at }, update: {} });
+    try { (options.append ?? appendDeletion)(path, journalId, userId, at); }
+    catch (error) {
+      await db.deletionTombstone.delete({ where: { userId } });
+      await db.user.update({ where: { id: userId }, data: { accessStatus: "ACTIVE" } }); throw error;
+    }
     await db.$transaction(async tx => {
       await purgeUser(tx, userId, at);
       await tx.auditEvent.create({ data: { action: "user.deleted-self", at } });

@@ -42,7 +42,7 @@ De repetitie van de hele pijplijn duurde enkele seconden.
 
 1. `$T -e W2W_BACKFILL_RUN_ID=<nieuw uuid> -e W2W_BACKFILL_SOURCE_CHECKSUM=$SUM when2watch-tools:<sha> npx tsx scripts/migration/backfill-catalog.ts`
    → `backfilled`, `sessionsRevoked` ≥ 0. Een retry met dezelfde run-ID geeft `already-completed`.
-2. `… verify-catalog.ts` (zelfde run-ID) → `passed:true`, `problems:{}`; anders afbreken (§7a).
+2. `… verify-catalog.ts` (zelfde run-ID) → `passed:true`, `problems:{}` en `counts.needsReconcile` 0; anders afbreken (§7a). Een serie met `needsReconcile` krijgt geen agendawrites meer. De vlag wordt niet automatisch gewist: beslis eerst met JP na een broncontrole en dry-run.
 3. `… scripts/migration/encrypt-credentials.ts` → `SEALED`. Een retry geeft alleen `alreadySealed`.
 4. `… scripts/restore-privacy.ts init` → `INITIALISED`. **Bij een retry nooit opnieuw aanmaken of leegmaken**: bestaat
    het journaal al, dan geeft `check` `VALID`.
@@ -52,10 +52,10 @@ De repetitie van de hele pijplijn duurde enkele seconden.
 1. Controlecontainer zonder proxy:
    `docker run -d --name w2w-r2-check --network when2watch_database --read-only --tmpfs /tmp --user 1000:1000 -v /srv/apps/when2watch/journal:/journal --env-file .env when2watch:<sha>`.
    De startcontrole (`scripts/ready-r2.mjs`) weigert zonder voltooide backfill, verzegelde secrets en journaal (exit 66). Vereist: `/api/health` 200.
-2. Herstelbewijs met 0 verwijderingen: `pg_dump` → `CREATE DATABASE when2watch_restore` → `pg_restore --no-owner`, dan
+2. Herstelbewijs met 0 verwijderingen: `docker exec when2watch-db-1 pg_dump -U when2watch_migrator -d when2watch -Fc -f /tmp/r2.dump` → `psql -U postgres -c "CREATE DATABASE when2watch_restore OWNER when2watch_migrator"` → `pg_restore -U when2watch_migrator -d when2watch_restore --no-owner /tmp/r2.dump` (als migrator, anders kan `apply` de tabellen niet wijzigen), dan
    `$T -e DATABASE_URL=<migrator-DSN>/when2watch_restore … restore-privacy.ts apply` → `journalled:0`, en `verify-catalog` → passed.
    Daarna `DROP DATABASE when2watch_restore`.
-3. Readback-dry-run (alleen GET naar Google): `scripts/migration/readback.ts --user=<eigenaar-id>` via een tools-container
+3. Readback-dry-run (alleen GET naar Google): `scripts/migration/readback.ts --authorized-readback --user=<eigenaar-id>` via een tools-container
    met egress en databasenetwerk, zoals in R1 §3.2. Die container heeft `W2W_CREDENTIAL_KEYS` nodig. Alle eigen links worden teruggelezen, zonder writes.
 4. `docker rm -f w2w-r2-check`.
 
@@ -98,4 +98,4 @@ journaal; zonder dat journaal geen vrijgave. Daarna eerst een remote readback, d
 ## 8. Reguliere backup
 
 Dagelijkse `pg_dump -Fc` buiten het appvolume, maximaal 30 dagen bewaard. Het journaal en de sleutel horen in een
-aparte host-backup. Een herstel in een aparte database bewijs je periodiek met `apply` en `verify-catalog`, zoals in de repetitie.
+aparte host-backup. Een herstel in een aparte database bewijs je periodiek met `restore-privacy.ts apply` en daarna een start van de controlecontainer (startcontrole + health). `verify-catalog` geldt alleen direct na de backfill: later zijn er actieve genodigden en nieuwe follows.
