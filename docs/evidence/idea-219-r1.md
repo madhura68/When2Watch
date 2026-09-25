@@ -1,6 +1,6 @@
 # IDEA-219 R1 — bewijs providerwissel (T-18/T-19)
 
-Status 25 september 2026: **code, CI, onafhankelijke review en repetitie op een privékopie geslaagd. De geautoriseerde productie-omschakeling is nog open.**
+Status 25 september 2026: **R1 staat in productie op PostgreSQL 17 (release `8b87838`). Import en eerste sync zonder verschillen of duplicaten. Wacht nog op eigenaar-acceptatie in de UI.**
 
 ## Gates
 
@@ -48,8 +48,24 @@ Geheimen (tokens, clientsecret) zijn alleen in het geheugen vergeleken; het rapp
 
 Tijdens de repetitie gevonden en hersteld: `pg_isready` via de socket slaagt al tijdens de init-server (nu `-h 127.0.0.1`, ook in compose); het init-script moet leesbaar zijn voor uid 999; de tools-image bouwt als `node`.
 
+## Productie-omschakeling — 25 september 2026 (JP: "doe de merge en start de omschakeling")
+
+PR #5 gemerged als `8b87838` (inhoud gelijk aan `cb35f1a`; laatste code-CI groen op `d0473fe`, daarna alleen documentatie; Actions daarna door JP gepauzeerd). Repetitie op `8b87838` vooraf opnieuw: viermaal 0 verschillen, egress geblokkeerd.
+
+| Stap (UTC) | Resultaat |
+|---|---|
+| Voorbereiding | Release-map, `.env.db`/`.env.migrate` (0600, nieuwe wachtwoorden), `DATABASE_URL` app-rol aan private `.env` toegevoegd (backup in `config-backups`). `when2watch-db-1` (postgres:17) alleen op `when2watch_database`, geen hostpoort; baseline gemigreerd met de migrator-rol. |
+| Drain | Cron-regel verwijderd (backup `config-backups/crontab.before-8b87838.*`). Lopende sync 0, onzekere eventlinks 0, verzonden agenda-aanmaak 0, open OAuth-flows 0. |
+| 19:18:30 writer dicht | `when2watch-web-1` (fb7a690) gestopt. |
+| Snapshot | `db-backups/pre-8b87838-20260925T191830Z.db` (0600), integrity ok, 0 FK-fouten; sha gelijk aan de preflightbackup (`c02bc1f8…`). |
+| Import + verify | Run `e0291d62-f2da-4571-8087-4544bdd1a53e`: export 13 ms, import 151 ms, verify 24 ms; **passed, 0 verschillen**; 1 user, 22 series, 469 afleveringen, 23 eventlinks, 28 syncruns. |
+| Achter onderhoud | Nieuwe app zonder proxy: health 200; verify opnieuw 0 verschillen. Readback (alleen GET, token in geheugen): **23 links, 23 unchanged**, 0 remoteChanged/missing/foreign/pending/otherCalendar. |
+| ± 19:19 open | `when2watch-web-1` = `when2watch:8b87838`, healthy; `current` → release `8b87838`; HTTPS health 200, `/api/shows` zonder sessie 401; cron-regel terug. Schrijfvrije periode ± 1 minuut. |
+| 19:19:26 eerste sync | Via het cronscript (trigger `cron`): **success; created 0, updated 0, deleted 0, unchanged 21, failed 0** over 22 series. Alle 23 eventlinks met gelijke ID, event-ID en status; 0 nieuwe links. |
+| Opruimen | Privémanifest, bronkopie en migratieconfig verwijderd; alleen het tellingenrapport en de pre-backup blijven. SQLite-bron en vorige release/image blijven bewaard voor herstel. |
+
 ## Niet bewezen / open
 
 - **Afbreken vóór nieuwe writes** is niet live uitgevoerd (zou de productiecontainer stoppen). Wel aangetoond: de bron wordt alleen read-only geopend en bleef bytegelijk; de terugweg staat in het [cutover-runbook](../runbooks/idea-219-r1-cutover.md#5-afbreken-en-herstel).
-- **Readback-dry-run tegen echte Google** hoort bij de cutover (vereist egress); in CI getest met gesimuleerde Google (alleen GET, geen DB-writes).
-- **Productie-omschakeling**, eigenaar-acceptatie en eerste sync zonder migratieduplicaten: wachten op JP's uitrolopdracht. R2 (T-20 e.v.) begint pas daarna.
+- **Eigenaar-acceptatie:** JP logt in en bevestigt dezelfde series, Agenda, voorkeuren en Google-koppeling. Daarna is R1 geaccepteerd en kan R2 (T-20 e.v.) starten.
+- **Afbreken vóór nieuwe writes** bleef ongebruikt; de terugweg (fb7a690 + ongewijzigde SQLite) blijft beschikbaar tot er PostgreSQL-writes zijn — die zijn er inmiddels (sync), dus herstel loopt nu via DB-plan §7.
