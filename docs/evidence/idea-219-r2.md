@@ -87,3 +87,20 @@ en de startcontrole weigerde de start terecht ("catalog backfill has not complet
 3. iPhone/iPad-PWA (A11) en een werkelijk ontvangen melding in de nieuwe agenda (product-DoD).
 4. Sentinelproef in proxy-, Next- en foutlogs vóór openstelling (zie runbook §5).
 5. Een expliciete opdracht voor merge en uitrol.
+
+## Productie-omschakeling R2 (26 september 2026, release 5dd8b3f)
+
+Uitgevoerd volgens `docs/runbooks/idea-219-r2-cutover.md` in opdracht van JP ("voer de R2-omschakeling nu uit"). CI was groen op `5dd8b3f`. Tijden in UTC.
+
+| Stap | Resultaat |
+|---|---|
+| §0 | Release-map en images gebouwd (36 s). Sleutel en journaalpad in de private `.env`. Kopie van de sleutel apart in `keys/`. Journaalmap 0700. |
+| §1 | Crontab bewaard en regel verwijderd. Drain: 0 runs, 0 open links, 0 aanmaakpogingen, 0 koppelpogingen. `when2watch-web-1` gestopt om 22:42:37Z. |
+| §2 | `pre-r2-5dd8b3f-*.dump` (144 703 bytes, sha256 in `migration/`). Vooraf: 1 user, 25 series, 834 afleveringen, 28 links, 2 sessies. Expand-migratie toegepast. |
+| §3 | Egress geblokkeerd. Backfill: 25 catalogusseries, 834 afleveringen, 25 follows, 1 binding, 28 links, 1 probe, 0 needsReconcile, 2 sessies ingetrokken. Verify geslaagd, 0 problemen. Versleuteld: 1 account en 1 clientsecret; daarna 0 plaintext. Journaal `VALID`, 0 entries. |
+| Na §3 | 1 admin, 25 follows, 0 links zonder eigenaar, 0 sessies. Eigenaarsbinding `LEGACY_UNVERIFIED/ACTIVE`, dus sync gepauzeerd tot de overstap. |
+| §4 | Controlecontainer: startcontrole geslaagd, health 200, `/api/shows` 401. Herstel in aparte database: apply 0/0, verify geslaagd; opgeruimd. Readback: 28/28 ongewijzigd, 0 ontbrekend, vreemd of gewijzigd. |
+| §5 | Sentinel (post-body, cookie, query, OAuth-callback, kapotte JSON): 0 treffers in de web-logs en 0 in de Caddy-accesslog op max2, die de When2Watch-site niet logt. **Open:** de edge-proxy 192.168.0.154 is niet gecontroleerd (buiten SSH-mandaat). |
+| §6 | Web op `when2watch:5dd8b3f` healthy; `current` → `releases/5dd8b3f`; HTTPS-health 200. Cron teruggezet. Handmatige dagelijkse run: 200 success, catalogus 25/25 opgehaald (eerste volledige run), sync `paused`, retentie 0, 0 open links. |
+
+Nog door JP: opnieuw inloggen, agendatoegang geven en een nieuwe When2Watch-agenda aanmaken en daarnaar overstappen. Daarna een eerste sync en een werkelijk ontvangen melding. Verder de privacygegevens (`W2W_PRIVACY_CONTROLLER`/`_CONTACT`), de twee-accountproef, iPhone/iPad en de edge-proxy-logs.
