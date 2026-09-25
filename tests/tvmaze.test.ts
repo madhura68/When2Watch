@@ -182,3 +182,15 @@ describe("TVmaze source client limits", () => {
     await expect(bad.updates("week")).rejects.toMatchObject({ code: "INVALID_SOURCE" });
   });
 });
+
+describe("request counter", () => {
+  it("counts every outgoing TVmaze request by kind, retries included", async () => {
+    const { sourceRequestCounts } = await import("@/server/tvmaze");
+    let calls = 0;
+    const client = new TVmaze((async (url: string) => { calls++; return calls === 1 ? new Response("", { status: 503 }) : Response.json([]); }) as typeof fetch, async () => {});
+    const before = sourceRequestCounts();
+    await client.search("slow horses");
+    const after = sourceRequestCounts();
+    expect(after.total - before.total).toBe(2); expect(after.search - before.search).toBe(2); expect(after.show - before.show).toBe(0);
+  });
+});

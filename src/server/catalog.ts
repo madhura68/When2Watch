@@ -23,7 +23,9 @@ const showData = (snapshot: Snapshot) => {
 };
 
 /** Applies a complete, validated snapshot in one transaction; only then are missing episodes marked absent. */
-async function applySnapshot(db: PrismaClient, snapshot: Snapshot, now: Date, appliedVersion?: number | null) {
+async function applySnapshot(db: PrismaClient, snapshot: Snapshot, now: Date, observedVersion?: number | null) {
+  // The snapshot's own version counts as applied, so the next daily index check does not refetch it.
+  const appliedVersion = Math.max(observedVersion ?? 0, snapshot.sourceUpdatedAt ?? 0) || null;
   return db.$transaction(async tx => {
     const show = await tx.catalogShow.upsert({ where: { tvmazeId: snapshot.show.id },
       create: { tvmazeId: snapshot.show.id, ...showData(snapshot), lastAttemptAt: now, lastSuccessAt: now, lastFullCheckAt: now, appliedSourceUpdatedAt: appliedVersion ?? null },

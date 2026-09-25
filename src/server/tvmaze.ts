@@ -5,7 +5,8 @@ import { summaryText } from "./summary-text";
 export type Show = { id: number; name: string; url: string; year: string | null; poster: string | null; platform: string | null; country: string | null; status: string };
 export type ShowDetails = { summaryText: string | null; genres: string[]; runtimeMinutes: number | null };
 export type SourceEpisode = { id: number; name: string | null; season: number | null; number: number | null; airdate: string | null; url: string; summaryText: string | null };
-export type Snapshot = { show: Show & ShowDetails; episodes: SourceEpisode[] };
+/** sourceUpdatedAt: TVmaze's own version of this snapshot (the `updated` field), comparable with the update index. */
+export type Snapshot = { show: Show & ShowDetails; episodes: SourceEpisode[]; sourceUpdatedAt?: number | null };
 export type ShowArtwork = { bannerUrl: string | null; backgroundUrl: string | null };
 export interface ArtworkSource { artwork(id: number): Promise<ShowArtwork> }
 export interface EpisodeSource { snapshot(id: number): Promise<Snapshot>; artwork?: ArtworkSource["artwork"] }
@@ -80,12 +81,21 @@ export function parseSnapshot(input: unknown, expectedId: number): Snapshot {
   }
   const genres = Array.isArray(raw.genres) ? [...new Set(raw.genres.filter((g): g is string => typeof g === "string").map(g => g.trim()).filter(Boolean))] : [];
   const runtimeMinutes = [raw.averageRuntime, raw.runtime].find(value => typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 2147483647) ?? null;
-  return { show: { ...show, summaryText: summaryText(raw.summary), genres, runtimeMinutes }, episodes };
+  const sourceUpdatedAt = Number.isSafeInteger(raw.updated) && raw.updated > 0 ? raw.updated as number : null;
+  return { show: { ...show, summaryText: summaryText(raw.summary), genres, runtimeMinutes }, episodes, sourceUpdatedAt };
 }
 
 // The single app process spaces all source requests (search, catalog and cron) at least one second apart.
-const shared = globalThis as typeof globalThis & { w2wSourceRate?: { tail: Promise<void>; last: number } };
+const shared = globalThis as typeof globalThis & { w2wSourceRate?: { tail: Promise<void>; last: number }; w2wSourceCounts?: SourceCounts };
 const rate = shared.w2wSourceRate ??= { tail: Promise.resolve(), last: 0 };
+/** Outgoing TVmaze requests (including retries) since this process started; Google traffic is never counted here. */
+export type SourceCounts = { since: string; total: number; search: number; show: number; updates: number; other: number };
+const counts = shared.w2wSourceCounts ??= { since: new Date().toISOString(), total: 0, search: 0, show: 0, updates: 0, other: 0 };
+export const sourceRequestCounts = (): SourceCounts => ({ ...counts });
+function countRequest(path: string) {
+  counts.total++;
+  counts[path.startsWith("/search/") ? "search" : path.startsWith("/updates/") ? "updates" : path.startsWith("/shows/") ? "show" : "other"]++;
+}
 const spacingMs = 1000, maxRetries = 3;
 export function parseUpdates(input: unknown): Map<number, number> {
   const updates = new Map<number, number>();
@@ -107,6 +117,7 @@ export class TVmaze implements EpisodeSource {
       let response: Response | null = null;
       try {
         await this.pause(Math.max(0,rate.last + spacingMs - Date.now())); rate.last=Date.now();
+        countRequest(path);
         response = await this.fetcher(`https://api.tvmaze.com${path}`,{cache:"no-store",signal:AbortSignal.timeout(10_000)});
       } catch { response = null; } finally { release(); }
       const last = attempt === maxRetries;

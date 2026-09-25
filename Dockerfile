@@ -29,6 +29,7 @@ COPY --from=build --chown=node:node /app/next.config.ts ./next.config.ts
 COPY --from=build --chown=node:node /app/scripts/start.sh ./scripts/start.sh
 COPY --from=build --chown=node:node /app/scripts/migrate.sh ./scripts/migrate.sh
 COPY --from=build --chown=node:node /app/scripts/cron-client.mjs ./scripts/cron-client.mjs
+COPY --from=build --chown=node:node /app/scripts/ready-r2.mjs ./scripts/ready-r2.mjs
 USER node
 EXPOSE 3000
 CMD ["sh", "scripts/start.sh"]

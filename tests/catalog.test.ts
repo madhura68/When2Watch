@@ -9,14 +9,15 @@ let storage: ReturnType<typeof testDatabase>;
 afterEach(async () => { await storage?.close(); });
 const day = 86_400_000, now = new Date("2026-09-26T06:05:00Z");
 
-function fakeSource(options: { index?: Map<number, number>; fail?: Set<number>; artwork?: ShowArtwork | Error } = {}) {
+function fakeSource(options: { index?: Map<number, number>; fail?: Set<number>; artwork?: ShowArtwork | Error; version?: number } = {}) {
   const calls: string[] = [];
   let input = structuredClone(raw) as typeof raw;
   const source: CatalogSource = {
     async snapshot(id): Promise<Snapshot> {
       calls.push(`snapshot:${id}`); await new Promise(r => setTimeout(r, 10));
       if (options.fail?.has(id)) throw new Error("TVmaze unavailable");
-      return parseSnapshot({ ...input, id }, id);
+      // The snapshot's own version (TVmaze `updated`); unset here, so only the index decides what is applied.
+      return parseSnapshot({ ...input, id, updated: options.version ?? null }, id);
     },
     async updates(since) { calls.push(`updates:${since ?? "all"}`); return options.index ?? new Map(); },
     async artwork() { calls.push("artwork"); if (options.artwork instanceof Error) throw options.artwork; return options.artwork ?? { bannerUrl: null, backgroundUrl: null }; },

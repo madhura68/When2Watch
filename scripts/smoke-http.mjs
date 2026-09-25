@@ -146,13 +146,17 @@ try {
   check(replace.status === 403,"only an admin may replace the OAuth client");
   await db.user.update({where:{id:"other"},data:{accessStatus:"UNCLAIMED"}});
   // P6: invitations and user administration.
-  for (const path of ["/api/admin/users","/api/admin/invitations"]) {
+  for (const path of ["/api/admin/users","/api/admin/invitations","/api/admin/stats"]) {
     check((await request(path)).status === 401 && (await request(path,{headers:cookie("other")})).status === 401,"admin endpoints reject anonymous and unclaimed sessions");
     check((await request(path,{headers:cookie("owner")})).ok,"admin can read user administration");
   }
   await db.user.update({where:{id:"other"},data:{accessStatus:"ACTIVE"}});
   check((await request("/api/admin/users",{headers:cookie("other")})).status === 403,"ordinary user gets no admin endpoint");
   check((await request("/beheer/gebruikers",{headers:cookie("other")})).status === 307,"ordinary user is redirected away from the admin page");
+  check((await request("/api/admin/stats",{headers:cookie("other")})).status === 403,"ordinary user gets no follower counts");
+  check((await request("/beheer/series",{headers:cookie("other")})).status === 307,"ordinary user is redirected away from the statistics page");
+  const stats = await request("/api/admin/stats",{headers:cookie("owner")}), statsText = await stats.text();
+  check(stats.headers.get("cache-control")?.includes("no-store") && !/"userId"|@example\.test/.test(statsText) && typeof JSON.parse(statsText).tvmazeRequests.total === "number","admin statistics carry counts only");
   await db.user.update({where:{id:"other"},data:{accessStatus:"UNCLAIMED"}});
   const invitationPage = await request("/uitnodiging");
   const invitationHtml = await invitationPage.text();
