@@ -184,7 +184,8 @@ model Episode {
 
 model CalendarEventLink {
   id                   String           @id @default(cuid())
-  episodeId            String
+  // Legacy per-user episode; catalog-based links (R2) have none.
+  episodeId            String?
   calendarId           String
   eventId              String
   // Explicit ownership (R2). Nullable during expand; the backfill fills every row.
@@ -196,7 +197,7 @@ model CalendarEventLink {
   confirmedDesiredHash String?
   confirmedRemoteHash  String?
   lastDate             String?
-  episode              Episode          @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episode              Episode?         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   user                 User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   binding              CalendarBinding? @relation(fields: [bindingId, userId], references: [id, userId], onDelete: Restrict)
   catalogEpisode       CatalogEpisode?  @relation(fields: [catalogEpisodeId], references: [id], onDelete: Restrict)
@@ -362,17 +363,23 @@ model UserConnection {
 /// A user's calendar. At most one ACTIVE per user (partial unique index in SQL);
 /// only LEGACY_UNRESOLVED may lack an account (CHECK in SQL).
 model CalendarBinding {
-  id         String              @id @default(cuid())
-  userId     String
-  accountId  String?
-  calendarId String
-  status     BindingStatus
-  provenance BindingProvenance
-  createdAt  DateTime            @default(now())
-  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account    Account?            @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
-  links      CalendarEventLink[]
-  probes     Probe[]
+  id                   String              @id @default(cuid())
+  userId               String
+  accountId            String?
+  calendarId           String
+  status               BindingStatus
+  provenance           BindingProvenance
+  createdAt            DateTime            @default(now())
+  // Last confirmed Google metadata; the calendar ID, never the name, is the identity.
+  summary              String?
+  timeZone             String?
+  accessRole           String?
+  defaultRemindersJson String?
+  confirmedAt          DateTime?
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account              Account?            @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
+  links                CalendarEventLink[]
+  probes               Probe[]
 
   @@unique([id, userId])
   @@unique([userId, calendarId])

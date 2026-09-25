@@ -38,7 +38,7 @@ it("separates remote edits, source changes, missing events, foreign markers and 
   const { db, google, readOnly } = await migratedOwner();
   const [a, b, c, d, e] = await db.calendarEventLink.findMany({ orderBy: { id: "asc" }, include: { episode: true } });
   google.events.set(a.eventId, { ...google.events.get(a.eventId), summary: "edited in Google" });
-  await db.episode.update({ where: { id: b.episodeId }, data: { title: "Renamed by TVmaze" } });
+  await db.episode.update({ where: { id: b.episodeId! }, data: { title: "Renamed by TVmaze" } });
   google.events.set(c.eventId, { id: c.eventId, status: "cancelled" });
   const other = google.events.get(d.eventId);
   google.events.set(d.eventId, { ...other, extendedProperties: { private: { ...other.extendedProperties.private, userId: "someone-else" } } });

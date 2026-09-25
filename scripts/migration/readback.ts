@@ -35,7 +35,8 @@ export async function readbackOwnEvents(db: PrismaClient, google: GoogleCalendar
     report.links++;
     if (link.status === "deleted") { report.deleted++; continue; }
     if (link.status !== "synced") { report.pending++; continue; }
-    const { episode } = link, show = episode.show;
+    // R1 tool: only legacy episode links exist here (the relation filter above excludes catalog-only links).
+    const episode = link.episode!, show = episode.show;
     let event;
     try { event = await google.event(calendarId, link.eventId); }
     catch (error) { if (error instanceof AppError && [404, 410].includes(error.status)) { report.missing++; continue; } throw error; }

@@ -38,6 +38,7 @@ async function legacyAB(options: { conflictingDate?: boolean } = {}) {
     { id: "link-owner", episodeId: "ep-owner-1", calendarId: "owner-cal", eventId: "same-event", status: "synced", desiredJson: "{\"a\":1}", confirmedDesiredHash: "dh-o", confirmedRemoteHash: "rh-o", lastDate: "2026-09-30" },
     { id: "link-b", episodeId: "ep-b-1", calendarId: "b-cal", eventId: "same-event", status: "prepared", desiredJson: "{\"b\":2}", lastDate: "2026-09-30" },
   ] });
+  await db.session.create({ data: { userId: "owner", sessionToken: "old-owner-session", expires: at("2026-12-01T00:00:00Z") } });
   await db.probe.createMany({ data: [
     { id: "probe-owner", userId: "owner", calendarId: "owner-cal", eventId: "probe-event", date: "2026-09-24", status: "confirmed", requestJson: "{}" },
     { id: "probe-b", userId: "b", calendarId: "b-cal", eventId: "probe-event", date: "2026-09-24", status: "prepared", requestJson: "{}" },
@@ -66,7 +67,7 @@ describe("catalog backfill", () => {
     ]);
     const owner = await db.calendarBinding.findUniqueOrThrow({ where: { userId_calendarId: { userId: "owner", calendarId: "owner-cal" } } });
     const b = await db.calendarBinding.findUniqueOrThrow({ where: { userId_calendarId: { userId: "b", calendarId: "b-cal" } } });
-    expect(owner).toMatchObject({ status: "ACTIVE", provenance: "APP_CREATED", accountId: "acc-owner" });
+    expect(owner).toMatchObject({ status: "ACTIVE", provenance: "APP_CREATED", accountId: "acc-owner", summary: "When2Watch", timeZone: "Europe/Amsterdam" });
     expect(b).toMatchObject({ status: "LEGACY_UNRESOLVED", provenance: "LEGACY_UNVERIFIED", accountId: null });
     expect(await db.userConnection.findMany()).toMatchObject([{ userId: "owner", accountId: "acc-owner" }]);
 
@@ -83,6 +84,8 @@ describe("catalog backfill", () => {
     ]);
     expect(await verifyCatalog(db, run.runId)).toMatchObject({ passed: true });
     expect(await db.trackedShow.count()).toBe(3);
+    // R2 activation signs everyone out; old single-owner sessions are not reused.
+    expect(await db.session.count()).toBe(0);
   });
 
   it("marks conflicting snapshots for reconciliation instead of mixing or dropping data", async () => {

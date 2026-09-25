@@ -19,7 +19,8 @@ DROP INDEX "Probe_eventId_key";
 -- AlterTable
 ALTER TABLE "CalendarEventLink" ADD COLUMN     "bindingId" TEXT,
 ADD COLUMN     "catalogEpisodeId" TEXT,
-ADD COLUMN     "userId" TEXT;
+ADD COLUMN     "userId" TEXT,
+ALTER COLUMN "episodeId" DROP NOT NULL;
 
 -- AlterTable
 ALTER TABLE "Probe" ADD COLUMN     "bindingId" TEXT;
@@ -104,6 +105,11 @@ CREATE TABLE "CalendarBinding" (
     "status" "BindingStatus" NOT NULL,
     "provenance" "BindingProvenance" NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "summary" TEXT,
+    "timeZone" TEXT,
+    "accessRole" TEXT,
+    "defaultRemindersJson" TEXT,
+    "confirmedAt" TIMESTAMP(3),
 
     CONSTRAINT "CalendarBinding_pkey" PRIMARY KEY ("id")
 );
@@ -267,6 +273,7 @@ ALTER TABLE "InvitationFlow" ADD CONSTRAINT "InvitationFlow_invitationId_fkey" F
 ALTER TABLE "MigrationMap" ADD CONSTRAINT "MigrationMap_runId_fkey" FOREIGN KEY ("runId") REFERENCES "MigrationRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 
+
 -- IDEA-219: constraints Prisma 6 cannot express. Guarded by tests/migration/catalog-backfill.test.ts
 -- (pg_catalog invariants after the whole `migrate deploy` chain); later migrations must keep them.
 -- At most one active calendar per user.
@@ -276,3 +283,5 @@ ALTER TABLE "CalendarBinding" ADD CONSTRAINT "CalendarBinding_account_required" 
 -- A composite FK is skipped when one column is NULL (MATCH SIMPLE): ownership columns are all-or-nothing.
 ALTER TABLE "CalendarEventLink" ADD CONSTRAINT "CalendarEventLink_ownership_complete" CHECK (
   ("bindingId" IS NULL AND "catalogEpisodeId" IS NULL) OR ("userId" IS NOT NULL AND "bindingId" IS NOT NULL AND "catalogEpisodeId" IS NOT NULL));
+-- Every link is anchored either to a legacy episode or to a shared catalog episode.
+ALTER TABLE "CalendarEventLink" ADD CONSTRAINT "CalendarEventLink_has_episode" CHECK ("episodeId" IS NOT NULL OR "catalogEpisodeId" IS NOT NULL);

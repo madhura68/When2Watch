@@ -86,6 +86,8 @@ export function planBackfill(source: LegacySource, newId: () => string = randomU
   const bindings: Prisma.CalendarBindingCreateManyInput[] = [], bindingOf = new Map<string, string>();
   const creationProof = (userId: string, calendarId: string) => source.creations.find(c => c.ownerId === userId && c.calendarId === calendarId
     && provenCreation.includes(c.status) && accountOwner.get(c.accountId) === userId);
+  const metadata = new Map(source.calendarSettings.map(c => [`${c.userId}\n${c.calendarId}`, { summary: c.summary, timeZone: c.timeZone,
+    accessRole: c.accessRole, defaultRemindersJson: c.defaultRemindersJson, confirmedAt: c.confirmedAt }]));
   const addBinding = (userId: string, calendarId: string, active: boolean) => {
     const key = `${userId}\n${calendarId}`;
     if (bindingOf.has(key)) return;
@@ -94,7 +96,7 @@ export function planBackfill(source: LegacySource, newId: () => string = randomU
     const accountId = active ? activeAccountId : proof?.accountId ?? null;
     const status: BindingStatus = active ? "ACTIVE" : accountId ? "INACTIVE" : "LEGACY_UNRESOLVED";
     const id = newId(); bindingOf.set(key, id);
-    bindings.push({ id, userId, calendarId, accountId, status, provenance });
+    bindings.push({ id, userId, calendarId, accountId, status, provenance, ...metadata.get(key) });
   };
   const ownerCalendar = ownerId ? source.calendarSettings.find(s => s.userId === ownerId)?.calendarId ?? installation?.initialCalendarId ?? null : null;
   if (ownerCalendar) {
@@ -103,13 +105,15 @@ export function planBackfill(source: LegacySource, newId: () => string = randomU
   }
   for (const settings of source.calendarSettings) addBinding(settings.userId, settings.calendarId, false);
   const showOwner = new Map(source.shows.map(s => [s.id, s.userId])), episodeOwner = new Map(source.episodes.map(e => [e.id, showOwner.get(e.trackedShowId)!]));
-  for (const link of source.links) addBinding(episodeOwner.get(link.episodeId)!, link.calendarId, false);
+  for (const link of source.links) {
+    if (!link.episodeId || !episodeOwner.has(link.episodeId)) throw new Refused("A calendar link has no owning series.");
+    addBinding(episodeOwner.get(link.episodeId)!, link.calendarId, false);
+  }
   for (const probe of source.probes) addBinding(probe.userId, probe.calendarId, false);
 
   const linkUpdates = source.links.map(link => {
-    const userId = episodeOwner.get(link.episodeId);
-    if (!userId) throw new Refused("A calendar link has no owning series.");
-    return { id: link.id, userId, bindingId: bindingOf.get(`${userId}\n${link.calendarId}`)!, catalogEpisodeId: catalogEpisodeOf.get(link.episodeId)! };
+    const userId = episodeOwner.get(link.episodeId!)!;
+    return { id: link.id, userId, bindingId: bindingOf.get(`${userId}\n${link.calendarId}`)!, catalogEpisodeId: catalogEpisodeOf.get(link.episodeId!)! };
   });
   const seen = new Set<string>();
   for (const update of linkUpdates) {
@@ -144,6 +148,9 @@ export async function backfillCatalog(db: PrismaClient, { runId, sourceChecksum 
     for (const link of plan.linkUpdates) await tx.calendarEventLink.update({ where: { id: link.id }, data: { userId: link.userId, bindingId: link.bindingId, catalogEpisodeId: link.catalogEpisodeId } });
     for (const probe of plan.probeUpdates) await tx.probe.update({ where: { id: probe.id }, data: { bindingId: probe.bindingId } });
     await tx.migrationMap.createMany({ data: plan.maps.map(map => ({ runId, ...map })) });
+    // Activating R2 signs everyone out: sessions were issued under the single-owner rules.
+    const sessionsRevoked = (await tx.session.deleteMany({})).count;
+    Object.assign(plan.report, { sessionsRevoked });
     await tx.migrationRun.update({ where: { id: runId }, data: { completedAt: new Date(), reportJson: JSON.stringify(plan.report) } });
     return { status: "backfilled" as const, report: plan.report };
   }, { isolationLevel: "Serializable", maxWait: 10_000, timeout: 600_000 });

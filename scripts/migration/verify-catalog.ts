@@ -34,6 +34,7 @@ export async function verifyCatalog(db: PrismaClient, runId: string) {
   }
   const bindingById = new Map(bindings.map(b => [b.id, b])), episodeById = new Map(episodes.map(e => [e.id, e]));
   for (const link of links) {
+    if (!link.episodeId) continue; // catalog-native links are created by R2 sync, not by the backfill
     const owner = showById.get(episodeById.get(link.episodeId)?.trackedShowId ?? "")?.userId, binding = bindingById.get(link.bindingId ?? "");
     if (!owner || link.userId !== owner) flag("linkOwner");
     if (!binding || binding.userId !== owner || binding.calendarId !== link.calendarId) flag("linkBinding");
