@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { importLegacyInstallation, ownerInstallation, publicInstallation } from "@/server/installation";
+import { importLegacyInstallation, userSettings } from "@/server/installation";
 import { legacySqliteDatabase, testDatabase } from "./database";
 
 const legacy = { allowedEmail: "owner@example.test", clientId: "old-client", clientSecret: "never-expose-secret", calendarId: "chosen@example.test" };
@@ -17,6 +17,8 @@ it("imports the exact existing owner once and keeps stored identity and choices 
   const db = await existingOwner();
   const result = await importLegacyInstallation(db, legacy);
   expect(result).toMatchObject({ ownerId: "owner", activeAccountId: "account", initialCalendarId: legacy.calendarId });
+  expect(await db.user.findUniqueOrThrow({ where: { id: "owner" }, select: { role: true, accessStatus: true } })).toEqual({ role: "ADMIN", accessStatus: "ACTIVE" });
+  expect(await db.userConnection.findUnique({ where: { userId: "owner" } })).toMatchObject({ accountId: "account" });
   const account = await db.account.findUniqueOrThrow({ where: { id: "account" } });
   expect(account.oauthClientConfigId).toBe(result!.oauthClientConfigId);
   expect(account.refresh_token).toBe("never-expose-refresh");
@@ -42,13 +44,12 @@ it("does not claim an empty database from an environment email", async () => {
   expect(await storage.db.user.count()).toBe(0);
 });
 
-it("authorizes by internal owner and returns settings without secrets or tokens", async () => {
+it("returns a user's own settings without secrets or tokens", async () => {
   const db = await existingOwner(); await importLegacyInstallation(db, legacy);
-  await expect(ownerInstallation(db, "intruder")).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  // The login identity may be renamed; settings show the connected Calendar account's own profile.
   await db.user.update({ where: { id: "owner" }, data: { email: "renamed@example.test" } });
-  expect((await ownerInstallation(db, "owner")).activeAccountId).toBe("account");
-  const response = await publicInstallation(db, "owner");
-  expect(response).toMatchObject({ account: { email: "renamed@example.test" }, calendarReady: false, calendarPermission: false });
+  const response = await userSettings(db, "owner");
+  expect(response).toMatchObject({ account: { email: legacy.allowedEmail }, isAdmin: true, calendarReady: false, calendarPermission: false });
   expect(JSON.stringify(response)).not.toContain("never-expose");
   expect(JSON.stringify(response)).not.toContain("clientSecret");
 });

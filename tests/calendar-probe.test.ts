@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { CalendarProbeService } from "@/server/calendar-probe";
 import { testDatabase } from "./database";
+import { bindCalendar } from "./fixtures/users";
 
 const calendarId = "chosen@group.calendar.google.com";
 const chosen = { calendarId, timeZone: "Europe/Amsterdam" };
@@ -68,7 +69,8 @@ describe("Calendar trial using real SQLite and simulated Google HTTP", () => {
   });
   beforeEach(async () => {
     await database.db.probe.deleteMany();
-    await database.db.calendarSettings.deleteMany();
+    await database.db.calendarBinding.deleteMany();
+    await bindCalendar(database.db, "owner", calendarId);
     google = simulatedGoogle();
     service = new CalendarProbeService(database.db, new GoogleCalendar(async () => "test-access", google.fetcher), chosen, () => now);
   });
@@ -84,7 +86,8 @@ describe("Calendar trial using real SQLite and simulated Google HTTP", () => {
     expect(google.writes).toEqual([]);
   });
 
-  it("requires explicit calendar verification before creating an event", async () => {
+  it("requires the user's own active calendar before creating an event", async () => {
+    await database.db.calendarBinding.deleteMany();
     await expect(service.create("owner", "2026-09-24")).rejects.toMatchObject({ code: "CALENDAR_NOT_CONFIRMED" });
     expect(google.writes).toEqual([]);
   });

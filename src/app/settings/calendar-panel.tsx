@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CalendarInfo } from "@/server/google-calendar";
-import type { publicInstallation } from "@/server/installation";
+import type { userSettings } from "@/server/installation";
 
-type Settings = Awaited<ReturnType<typeof publicInstallation>>;
+type Settings = Awaited<ReturnType<typeof userSettings>>;
 export function CalendarPanel({ settings }: { settings: Settings }) {
   const router = useRouter(), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const [calendars, setCalendars] = useState<CalendarInfo[]>([]), [id, setId] = useState(settings.calendar?.id ?? settings.initialCalendarId ?? "");

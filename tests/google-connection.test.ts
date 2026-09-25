@@ -50,7 +50,8 @@ it("never borrows an old-client refresh token and activates a replacement only a
   await service.confirm("owner", session, fresh.id);
   expect(refreshes).toEqual(["new-client.apps.googleusercontent.com:new-secret:new-refresh"]);
   const active = await db.installation.findUniqueOrThrow({ where: { id: "singleton" } });
-  expect(active.ownerId).toBe("owner"); expect(active.activeAccountId).toBe("account");
+  expect(active.ownerId).toBe("owner");
+  expect(await db.userConnection.findUnique({ where: { userId: "owner" } })).toMatchObject({ accountId: "account" });
   expect(active.oauthClientConfigId).not.toBe(old.oauthClientConfigId);
   expect((await db.account.findUniqueOrThrow({ where: { id: "account" } })).oauthClientConfigId).toBe(active.oauthClientConfigId);
 });

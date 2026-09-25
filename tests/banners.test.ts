@@ -6,6 +6,7 @@ import { GoogleCalendar } from "@/server/google-calendar";
 import { overview } from "@/server/overview";
 import { agendaOverview } from "@/server/agenda";
 import { legacySqliteDatabase, testDatabase } from "./database";
+import { bindCalendar } from "./fixtures/users";
 import { simulatedCalendar } from "./simulated-calendar";
 import raw from "./fixtures/tvmaze/slow-horses.json";
 
@@ -72,7 +73,7 @@ it("retains the previous banner and background on a source error and retries no 
 });
 it("does not let banner failure block following/Calendar sync or let new banners alter events",async()=>{
   const {db}=await setup();const google=simulatedCalendar();const config={calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam"};
-  await db.calendarSettings.create({data:{userId:"owner",...config,summary:"When2Watch",accessRole:"owner",defaultRemindersJson:"[]"}});
+  await bindCalendar(db,"owner",config.calendarId);
   let now=start;
   const artwork=vi.fn(async():Promise<ShowArtwork>=>{throw Error("source unavailable");});
   const source={snapshot:async()=>parseSnapshot(raw,45039),artwork};

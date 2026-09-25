@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 async function handler(request: NextRequest, context: { params: Promise<{ nextauth: string[] }> }) {
   try {
     const db = database(), installation = await getInstallation(db), { nextauth } = await context.params;
-    if (!installation?.ownerId) throw new AppError("SETUP_REQUIRED", 503, "Richt eerst de eigenaar van deze installatie in.");
+    if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Richt eerst de Google-koppeling van deze installatie in.");
     const action = nextauth[0], callback = action === "callback";
     const work = async () => {
       const attemptId = ["signin", "callback"].includes(action) ? request.cookies.get(connectionCookie)?.value : undefined;
@@ -38,7 +38,10 @@ async function handler(request: NextRequest, context: { params: Promise<{ nextau
       }
       return response;
     };
-    return ["signin", "callback"].includes(action) ? await serializeCalendarMutation(installation.ownerId, work) : await work();
+    // A Calendar connection runs under its own user's mutation lock; plain logins need none.
+    const attemptId = ["signin", "callback"].includes(action) ? request.cookies.get(connectionCookie)?.value : undefined;
+    const attemptOwner = attemptId ? (await db.googleConnectionAttempt.findUnique({ where: { id: attemptId }, select: { ownerId: true } }))?.ownerId : null;
+    return attemptOwner ? await serializeCalendarMutation(attemptOwner, work) : await work();
   } catch (error) { return errorResponse(error); }
 }
 

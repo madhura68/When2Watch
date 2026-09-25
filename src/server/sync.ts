@@ -68,7 +68,8 @@ export class SyncService {
     const cutoff = cutoffDate.toISOString().slice(0, 10);
     const run = await this.db.syncRun.create({ data: { userId, trigger, startedAt: started } });
     const series: SeriesResult[] = [];
-    const choice = await this.db.calendarSettings.findUnique({ where: { userId } });
+    const active = await this.db.calendarBinding.findFirst({ where: { userId, status: "ACTIVE" }, select: { calendarId: true } });
+    const choice = active && active.calendarId === this.settings.calendarId ? active : null;
     for (const show of shows) {
       const result: SeriesResult = { showId: show.tvmazeId, title: show.title, created: 0, updated: 0, deleted: 0, unchanged: 0, failed: 0, errors: [] };
       series.push(result);

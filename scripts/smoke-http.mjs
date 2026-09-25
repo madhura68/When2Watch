@@ -124,6 +124,14 @@ try {
   check((await db.googleConnectionAttempt.findUniqueOrThrow({where:{id:pending.id}})).status === "cancelled","cancellation persists");
   check((await db.installation.findUniqueOrThrow({where:{id:"singleton"}})).ownerId === "owner","legacy owner imported without changing identity");
   check(await db.oAuthClientConfig.count() === 1,"legacy client import is idempotent across requests");
+  for (const path of ["/api/shows","/api/settings/google","/api/settings/preferences"]) {
+    check((await request(path,{headers:cookie("owner")})).headers.get("cache-control")?.includes("no-store"),"private API responses must not be cached between users");
+  }
+  // An ACTIVE non-admin cannot replace the central OAuth client.
+  await db.user.update({where:{id:"other"},data:{accessStatus:"ACTIVE"}});
+  const replace = await request("/api/settings/google",{method:"POST",headers:{...cookie("other"),origin,"Content-Type":"application/json"},body:JSON.stringify({action:"begin",mode:"replace-client",clientId:"x.apps.googleusercontent.com",clientSecret:"y"})});
+  check(replace.status === 403,"only an admin may replace the OAuth client");
+  await db.user.update({where:{id:"other"},data:{accessStatus:"UNCLAIMED"}});
   const emptySearch = await request("/api/shows/search?q=",{headers:cookie("owner")});
   check(emptySearch.ok && (await emptySearch.json()).shows.length === 0, "empty search must return without a provider request");
   for(const credential of [undefined, "incorrect"]) {
@@ -134,7 +142,8 @@ try {
   const cron = await request("/api/cron/sync",{method:"POST",headers:{authorization:`Bearer ${env.CRON_SECRET}`}});
   check(cron.status === 200 && (await cron.json()).status === "success","authorized empty cron must use the shared service");
   check(await db.syncRun.count({where:{userId:"owner",trigger:"cron"}}) === 1,"cron must resolve the configured owner on the server");
-  await db.calendarSettings.create({data:{userId:"owner",calendarId:env.GOOGLE_CALENDAR_ID,summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultRemindersJson:"[]"}});
+  const ownerAccount = await db.account.findFirstOrThrow({where:{userId:"owner"}});
+  await db.calendarBinding.create({data:{userId:"owner",accountId:ownerAccount.id,calendarId:env.GOOGLE_CALENDAR_ID,status:"ACTIVE",provenance:"LEGACY_UNVERIFIED",summary:"When2Watch",timeZone:"Europe/Amsterdam",accessRole:"owner",defaultRemindersJson:"[]",confirmedAt:new Date()}});
   const synopsis = "OWNER_DETAILS Een zorgvuldig opgeslagen omschrijving. ".repeat(15);
   const show = await db.trackedShow.create({data:{userId:"owner",tvmazeId:45039,title:"Slow Horses",sourceUrl:"https://www.tvmaze.com/shows/45039",status:"Running",summaryText:synopsis,genresJson:'["Drama","Thriller"]',runtimeMinutes:45}});
   await db.episode.create({data:{trackedShowId:show.id,sourceId:3643507,title:"Resurrection",season:6,number:3,airdate:"2099-09-30",sourceUrl:"https://www.tvmaze.com/episodes/3643507",summaryText:'PRIVATE_EPISODE <img src="https://example.test/should-not-load" onerror="alert(1)"> & tekst'}});

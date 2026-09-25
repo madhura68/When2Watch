@@ -1,13 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { isAllowedGoogleSignIn, requireIdentity } from "@/server/auth-policy";
 import { getGoogleAccessToken, saveGoogleTokens } from "@/server/google-tokens";
 import { testDatabase } from "./database";
 
 const email = "owner@example.com";
 const scope = "openid email profile https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events";
 const account = { provider: "google", providerAccountId: "google-owner", type: "oauth" as const, scope };
-const profile = { email, email_verified: true };
 
 describe("Google account adapter", () => {
   it("persists the optional refresh-token lifetime returned by Google", async () => {
@@ -27,30 +25,6 @@ describe("Google account adapter", () => {
         refresh_token: "test-refresh", refresh_token_expires_in: 604_800,
       });
     } finally { await database.close(); }
-  });
-});
-
-describe("Google authorization boundary", () => {
-  it("accepts only the verified allowlisted Google identity independently of Calendar scopes", () => {
-    expect(isAllowedGoogleSignIn(account, profile, account.providerAccountId)).toBe(true);
-    expect(isAllowedGoogleSignIn(account, { ...profile, email: "renamed@example.com" }, account.providerAccountId)).toBe(true);
-    expect(isAllowedGoogleSignIn(account, { ...profile, email_verified: false }, account.providerAccountId)).toBe(false);
-    expect(isAllowedGoogleSignIn({ ...account, provider: "other" }, profile, account.providerAccountId)).toBe(false);
-    expect(isAllowedGoogleSignIn(account, profile, "")).toBe(false);
-    expect(isAllowedGoogleSignIn({ ...account, providerAccountId: "different-subject" }, profile, account.providerAccountId)).toBe(false);
-  });
-
-  it("permits partial Calendar consent but still requires a verified Google identity", () => {
-    expect(isAllowedGoogleSignIn({ ...account, scope: "openid email profile" }, profile, account.providerAccountId)).toBe(true);
-    expect(isAllowedGoogleSignIn({ ...account, scope: scope.replace(" https://www.googleapis.com/auth/calendar.events", "") }, profile, account.providerAccountId)).toBe(true);
-    expect(isAllowedGoogleSignIn(account, { email }, account.providerAccountId)).toBe(false);
-  });
-
-  it("requires a server session for every private operation", () => {
-    expect(() => requireIdentity(null, "u1")).toThrow();
-    expect(() => requireIdentity({ user: { id: "u2", email: "intruder@example.com" } }, "u1")).toThrow();
-    expect(() => requireIdentity({ user: { email } }, "u1")).toThrow();
-    expect(requireIdentity({ user: { id: "u1", email } }, "u1")).toEqual({ id: "u1", email });
   });
 });
 

@@ -51,7 +51,8 @@ it("persists creation intent before POST and returns the same calendar after dou
   finally { await reopened.$disconnect(); }
   expect(posts).toBe(1);
   await service.select("owner", calendar.id);
-  expect(await db.calendarSettings.findUnique({ where: { userId: "owner" } })).toMatchObject({ calendarId: calendar.id, timeZone: calendar.timeZone });
+  // Created by this user and account, and read back: proven app ownership.
+  expect(await db.calendarBinding.findUnique({ where: { userId_calendarId: { userId: "owner", calendarId: calendar.id } } })).toMatchObject({ status: "ACTIVE", accountId: "account", provenance: "APP_CREATED", timeZone: calendar.timeZone });
   expect((await db.calendarCreationAttempt.findUniqueOrThrow({ where: { id: input.requestId } })).status).toBe("selected");
 });
 
@@ -72,7 +73,7 @@ it("does not repeat an uncertain calendar POST, even under a new request ID, and
 
 it("cannot replace an existing destination through the first-choice endpoint", async () => {
   const { db, service } = await fixture(async () => Response.json(calendar));
-  await db.calendarSettings.create({ data: { userId: "owner", calendarId: "existing", summary: "Existing", timeZone: "UTC", accessRole: "owner", defaultRemindersJson: "[]" } });
+  await db.calendarBinding.create({ data: { userId: "owner", accountId: "account", calendarId: "existing", status: "ACTIVE", provenance: "LEGACY_UNVERIFIED" } });
   await expect(service.select("owner", calendar.id)).rejects.toMatchObject({ code: "CALENDAR_TRANSITION_REQUIRED" });
-  expect((await db.calendarSettings.findUniqueOrThrow({ where: { userId: "owner" } })).calendarId).toBe("existing");
+  expect((await db.calendarBinding.findFirstOrThrow({ where: { userId: "owner", status: "ACTIVE" } })).calendarId).toBe("existing");
 });

@@ -5,6 +5,7 @@ import { SyncService } from "@/server/sync";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { AppError } from "@/server/errors";
 import { legacySqliteDatabase, testDatabase } from "./database";
+import { bindCalendar } from "./fixtures/users";
 import { simulatedCalendar } from "./simulated-calendar";
 import { overview } from "@/server/overview";
 import { serializeCalendarMutation } from "@/server/calendar-mutations";
@@ -40,7 +41,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  beforeEach(async()=>{
   storage=testDatabase();input=structuredClone(raw);sourceError=false;now=new Date("2026-09-24T07:00:00Z");google=simulatedCalendar();
   await storage.db.user.create({data:{id:"owner",email:"owner@example.test"}});
-  await storage.db.calendarSettings.create({data:{userId:"owner",...config,summary:"When2Watch",accessRole:"owner",defaultRemindersJson:"[]"}});
+  await bindCalendar(storage.db,"owner",config.calendarId);
   service=new SyncService(storage.db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,config,()=>now);
  });
  afterEach(async()=>{await storage?.close();});
@@ -66,7 +67,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   expect(await storage.db.trackedShow.findFirst()).toMatchObject({trying:true});
  });
  it("keeps following and local episodes usable before a calendar is selected", async () => {
-  await storage.db.calendarSettings.deleteMany();
+  await storage.db.calendarBinding.deleteMany();
   const result = await service.add("owner", 45039);
   expect(result).toMatchObject({ status: "success", calendarState: "unconfigured" });
   expect(await storage.db.episode.count()).toBeGreaterThan(0);
@@ -189,7 +190,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   expect(results.every(r=>r.status==="success")).toBe(true);expect(await storage.db.trackedShow.count()).toBe(1);expect(active()).toHaveLength(5);
  });
  it("keeps series and fetched episodes when no calendar has been confirmed",async()=>{
-  await storage.db.calendarSettings.deleteMany();const result=await service.add("owner",45039);
+  await storage.db.calendarBinding.deleteMany();const result=await service.add("owner",45039);
   expect(result).toMatchObject({status:"success",calendarState:"unconfigured"});expect(google.writes).toEqual([]);expect(await storage.db.trackedShow.count()).toBe(1);
   expect(await storage.db.episode.count()).toBe(36);
  });

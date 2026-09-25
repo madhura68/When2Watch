@@ -1,4 +1,4 @@
-import { requireUser } from "@/server/auth";
+import { requireUser } from "@/server/user-access";
 import { config } from "@/server/config";
 import { AppError, errorResponse } from "@/server/errors";
 import { requireSameOrigin } from "@/server/http-guards";
@@ -10,6 +10,6 @@ export async function POST(request: Request) {
     const user = await requireUser(); requireSameOrigin(request, config().origin);
     const input = await request.json().catch(() => null);
     if (!input || typeof input !== "object" || Object.keys(input).length !== 1 || typeof input.calendarId !== "string") throw new AppError("INVALID_INPUT", 400, "Kies de volledige agenda-ID.");
-    return Response.json({ calendar: await calendarSettingsService().select(user.id, input.calendarId) });
+    return Response.json({ calendar: await calendarSettingsService().select(user.id, input.calendarId) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return errorResponse(error); }
 }

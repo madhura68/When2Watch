@@ -4,6 +4,7 @@ import { SyncService } from "@/server/sync";
 import { parseSnapshot } from "@/server/tvmaze";
 import { readbackNeedsAttention, readbackOwnEvents, readOnlyFetch } from "../../scripts/migration/readback";
 import { testDatabase } from "../database";
+import { bindCalendar } from "../fixtures/users";
 import { simulatedCalendar } from "../simulated-calendar";
 import raw from "../fixtures/tvmaze/slow-horses.json";
 
@@ -14,7 +15,7 @@ const config = { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam"
 async function migratedOwner() {
   storage = testDatabase(); const db = storage.db, google = simulatedCalendar();
   await db.user.create({ data: { id: "owner", email: "owner@example.test" } });
-  await db.calendarSettings.create({ data: { userId: "owner", ...config, summary: "When2Watch", accessRole: "owner", defaultRemindersJson: "[]" } });
+  await bindCalendar(db, "owner", config.calendarId);
   const calendar = new GoogleCalendar(async () => "synthetic-access", google.fetcher);
   expect((await new SyncService(db, calendar, { snapshot: async () => parseSnapshot(raw, 45039) }, config, () => now).add("owner", 45039)).status).toBe("success");
   google.writes.length = 0;

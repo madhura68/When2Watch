@@ -1,4 +1,5 @@
-import { signedInUser, oauthReady } from "@/server/auth";
+import { oauthReady } from "@/server/auth";
+import { currentUser } from "@/server/user-access";
 import { AuthButton } from "./auth-buttons";
 import { redirect } from "next/navigation";
 import { agendaOverview } from "@/server/agenda";
@@ -8,7 +9,7 @@ import { Navigation } from "./navigation";
 export const dynamic = "force-dynamic";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const user=await signedInUser();
+  const user=await currentUser();
   if (user) {
     const data = await agendaOverview(user.id);
     if (!data.calendar && data.showCount === 0) redirect("/settings");

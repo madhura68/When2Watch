@@ -3,6 +3,7 @@ import { agendaWindow } from "@/lib/agenda-range";
 import { agendaOverview } from "@/server/agenda";
 import { savePreferences } from "@/server/preferences";
 import { testDatabase } from "./database";
+import { bindCalendar } from "./fixtures/users";
 import { SyncService } from "@/server/sync";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { parseSnapshot } from "@/server/tvmaze";
@@ -57,7 +58,7 @@ describe("local Agenda reads", () => {
     storage = testDatabase(); const db = storage.db, google = simulatedCalendar();
     await db.user.create({ data: { id: "owner" } });
     const config = { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam" };
-    await db.calendarSettings.create({ data: { userId: "owner", ...config, summary: "Test", accessRole: "owner", defaultRemindersJson: "[]" } });
+    await bindCalendar(db, "owner", config.calendarId);
     const now = new Date("2026-09-24T07:00:00Z"); let sourceCalls = 0;
     const service = new SyncService(db, new GoogleCalendar(async () => "synthetic-access", google.fetcher), { snapshot: async () => { sourceCalls++; return parseSnapshot(raw, 45039); } }, config, () => now);
     expect((await service.add("owner", 45039)).status).toBe("success");

@@ -4,6 +4,7 @@ import { AppError } from "./errors";
 import { hasCalendarScopes, calendarCreationScope } from "./auth-policy";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { getPreferences } from "./preferences";
+import { connectionAccount, getActiveBinding } from "./calendar-bindings";
 
 export type LegacyInstallation = { allowedEmail: string; clientId: string; clientSecret: string; calendarId?: string };
 export function legacyInstallation(): LegacyInstallation | null {
@@ -28,6 +29,9 @@ export async function importLegacyInstallation(db: PrismaClient, legacy: LegacyI
     return db.$transaction(async tx => {
       const client = await tx.oAuthClientConfig.create({ data: { clientId: legacy.clientId, clientSecret: legacy.clientSecret } });
       await tx.account.update({ where: { id: account.id }, data: { oauthClientConfigId: client.id, profileEmail: owner.email, profileName: owner.name } });
+      // The proven existing owner becomes the only initial admin, with its own Calendar account.
+      await tx.user.update({ where: { id: owner.id }, data: { role: "ADMIN", accessStatus: "ACTIVE" } });
+      await tx.userConnection.create({ data: { userId: owner.id, accountId: account.id } });
       return tx.installation.create({ data: { id: "singleton", ownerId: owner.id, activeAccountId: account.id,
         oauthClientConfigId: client.id, initialCalendarId: owner.calendar ? null : legacy.calendarId || null } });
     });
@@ -38,29 +42,24 @@ export async function getInstallation(db: PrismaClient = database()) {
   return await db.installation.findUnique({ where: { id: "singleton" } }) ?? importLegacyInstallation(db, legacyInstallation());
 }
 
-export async function ownerInstallation(db: PrismaClient, userId: string) {
-  const installation = await getInstallation(db);
-  if (!installation || installation.ownerId !== userId || !installation.activeAccountId || !installation.oauthClientConfigId) {
-    throw new AppError("UNAUTHORIZED", 401, "Log in als eigenaar van deze installatie.");
-  }
-  return { ...installation, ownerId: userId, activeAccountId: installation.activeAccountId, oauthClientConfigId: installation.oauthClientConfigId };
-}
-
-export async function publicInstallation(db: PrismaClient, userId: string) {
-  const installation = await ownerInstallation(db, userId);
-  const [account, owner, calendar, preferences, attempts, creation] = await Promise.all([
-    db.account.findUniqueOrThrow({ where: { id: installation.activeAccountId } }),
-    db.user.findUniqueOrThrow({ where: { id: userId } }),
-    db.calendarSettings.findUnique({ where: { userId } }), getPreferences(userId, db),
+/** Settings view of one user: own login profile, own Calendar account and own active calendar. No secrets. */
+export async function userSettings(db: PrismaClient, userId: string) {
+  const [user, account, active, preferences, attempts, creation, installation] = await Promise.all([
+    db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true, name: true, role: true } }),
+    connectionAccount(db, userId), getActiveBinding(db, userId), getPreferences(userId, db),
     db.googleConnectionAttempt.findMany({ where: { ownerId: userId, status: { in: ["pending", "completed"] }, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: "desc" }, take: 1, select: { id: true, mode: true, status: true, profileEmail: true } }),
     db.calendarCreationAttempt.findFirst({ where: { ownerId: userId, status: { in: ["sending", "uncertain", "created", "ready"] } }, orderBy: { createdAt: "desc" },
       select: { id: true, name: true, timeZone: true, status: true, calendarId: true } }),
+    db.installation.findUnique({ where: { id: "singleton" }, select: { ownerId: true, initialCalendarId: true } }),
   ]);
-  return { account: { email: owner.email, name: owner.name }, preferences,
-    calendarPermission: hasCalendarScopes(account.scope), canCreateCalendar: !!account.scope?.split(/\s+/).includes(calendarCreationScope),
-    needsReauth: account.needsReauth || !account.refresh_token, calendarReady: !!calendar,
-    initialCalendarId: installation.initialCalendarId,
-    calendar: calendar ? { id: calendar.calendarId, name: calendar.summary, timeZone: calendar.timeZone, confirmedAt: calendar.confirmedAt.toISOString() } : null,
+  const binding = "binding" in active ? active.binding : null;
+  return { account: { email: account?.profileEmail ?? user.email, name: account?.profileName ?? user.name }, isAdmin: user.role === "ADMIN", preferences,
+    calendarPermission: hasCalendarScopes(account?.scope), canCreateCalendar: !!account?.scope?.split(/\s+/).includes(calendarCreationScope),
+    needsReauth: !account || account.needsReauth || !account.refresh_token, calendarReady: !!binding,
+    calendar: binding ? { id: binding.calendarId, name: binding.summary ?? binding.calendarId, timeZone: binding.timeZone ?? preferences.timeZone,
+      confirmedAt: (binding.confirmedAt ?? binding.createdAt).toISOString() } : null,
+    // Bootstrap hint from the legacy configuration, shown only to the installation owner until a calendar is chosen.
+    initialCalendarId: !binding && installation?.ownerId === userId ? installation.initialCalendarId : null,
     connectionAttempt: attempts[0] ?? null, calendarCreation: creation };
 }

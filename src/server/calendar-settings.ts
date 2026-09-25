@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { GoogleCalendar, type CalendarInfo } from "./google-calendar";
-import { ownerInstallation } from "./installation";
+import { bindingMetadata, connectionAccount, getActiveBinding } from "./calendar-bindings";
+import { accessFor } from "./user-access";
 import { AppError } from "./errors";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { calendarCreationScope, hasCalendarScopes } from "./auth-policy";
@@ -14,13 +15,13 @@ export class CalendarSettingsService {
   constructor(private readonly db: PrismaClient, private readonly google: (accountId: string) => GoogleCalendar) {}
 
   private async connection(userId: string, create = false) {
-    const installation = await ownerInstallation(this.db, userId);
-    const account = await this.db.account.findUniqueOrThrow({ where: { id: installation.activeAccountId } });
-    if (account.userId !== userId || account.needsReauth || !account.refresh_token || !hasCalendarScopes(account.scope) ||
+    await accessFor(this.db, userId);
+    const account = await connectionAccount(this.db, userId);
+    if (!account || account.userId !== userId || account.needsReauth || !account.refresh_token || !hasCalendarScopes(account.scope) ||
         (create && !account.scope?.split(/\s+/).includes(calendarCreationScope))) {
       throw new AppError("RECONNECT_GOOGLE", 409, create ? "Geef Google toestemming om een agenda aan te maken." : "Geef Google de benodigde agendatoestemmingen.");
     }
-    return { installation, google: this.google(account.id) };
+    return { account, google: this.google(account.id) };
   }
 
   list(userId: string) {
@@ -32,13 +33,18 @@ export class CalendarSettingsService {
       throw new AppError("INVALID_INPUT", 400, "Kies een agenda uit de lijst met haar volledige ID.");
     }
     return serializeCalendarMutation(userId, async () => {
-      const { google } = await this.connection(userId);
-      const current = await this.db.calendarSettings.findUnique({ where: { userId } });
-      if (current && current.calendarId !== calendarId) throw new AppError("CALENDAR_TRANSITION_REQUIRED", 409, "Gebruik de agendawissel om bestaande afspraken veilig over te zetten.");
+      const { account, google } = await this.connection(userId);
+      const current = await getActiveBinding(this.db, userId);
+      if ("binding" in current && current.binding.calendarId !== calendarId) throw new AppError("CALENDAR_TRANSITION_REQUIRED", 409, "Gebruik de agendawissel om bestaande afspraken veilig over te zetten.");
       const calendar = await google.calendar(calendarId);
+      // Only a completed creation by this user and account proves app ownership; a name never does.
+      const proven = await this.db.calendarCreationAttempt.findFirst({ where: { ownerId: userId, accountId: account.id, calendarId: calendar.id, status: { in: ["created", "ready", "selected"] } } });
       await this.db.$transaction(async tx => {
-        await tx.calendarSettings.upsert({ where: { userId }, create: { userId, ...calendarData(calendar) }, update: calendarData(calendar) });
-        await tx.installation.update({ where: { id: "singleton" }, data: { initialCalendarId: null } });
+        const data = { accountId: account.id, status: "ACTIVE" as const, ...bindingMetadata(calendar) };
+        const existing = await tx.calendarBinding.findUnique({ where: { userId_calendarId: { userId, calendarId: calendar.id } } });
+        const provenance = proven || existing?.provenance === "APP_CREATED" ? "APP_CREATED" as const : "LEGACY_UNVERIFIED" as const;
+        await tx.calendarBinding.upsert({ where: { userId_calendarId: { userId, calendarId: calendar.id } },
+          create: { userId, calendarId: calendar.id, provenance, ...data }, update: { provenance, ...data } });
         await tx.calendarCreationAttempt.updateMany({ where: { ownerId: userId, status: { in: unresolved } }, data: { status: "selected" } });
       });
       return calendar;
@@ -51,10 +57,10 @@ export class CalendarSettingsService {
       throw new AppError("INVALID_INPUT", 400, "Geef een agendanaam en een geldige tijdzone op.");
     }
     return serializeCalendarMutation(userId, async () => {
-      const { installation, google } = await this.connection(userId, true);
+      const { account, google } = await this.connection(userId, true);
       const previous = await this.db.calendarCreationAttempt.findUnique({ where: { id: input.requestId } });
       if (previous) {
-        if (previous.ownerId !== userId || previous.accountId !== installation.activeAccountId || previous.name !== input.name.trim() || previous.timeZone !== input.timeZone) {
+        if (previous.ownerId !== userId || previous.accountId !== account.id || previous.name !== input.name.trim() || previous.timeZone !== input.timeZone) {
           throw new AppError("INVALID_INPUT", 409, "Deze aanvraag hoort bij een andere keuze. Vernieuw eerst de instellingen.");
         }
         if (!["ready", "selected"].includes(previous.status) || !previous.calendarId) throw uncertain();
@@ -63,7 +69,7 @@ export class CalendarSettingsService {
       if (await this.db.calendarCreationAttempt.count({ where: { ownerId: userId, status: { in: unresolved } } })) {
         throw new AppError("CALENDAR_CREATION_PENDING", 409, "Er staat al een agenda-aanvraag open. Vernieuw de lijst en kies eerst de bedoelde agenda.");
       }
-      await this.db.calendarCreationAttempt.create({ data: { id: input.requestId, ownerId: userId, accountId: installation.activeAccountId, name: input.name.trim(), timeZone: input.timeZone } });
+      await this.db.calendarCreationAttempt.create({ data: { id: input.requestId, ownerId: userId, accountId: account.id, name: input.name.trim(), timeZone: input.timeZone } });
       let id: string;
       try {
         id = (await google.createCalendar(input.name.trim(), input.timeZone)).id;
@@ -80,9 +86,4 @@ export class CalendarSettingsService {
       return calendar;
     });
   }
-}
-
-export function calendarData(calendar: CalendarInfo) {
-  return { calendarId: calendar.id, summary: calendar.summary, timeZone: calendar.timeZone, accessRole: calendar.accessRole,
-    defaultRemindersJson: JSON.stringify(calendar.defaultReminders), confirmedAt: new Date() };
 }

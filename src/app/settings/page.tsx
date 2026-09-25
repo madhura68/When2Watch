@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
-import { signedInUser } from "@/server/auth";
+import { currentUser } from "@/server/user-access";
 import { config } from "@/server/config";
 import { database } from "@/server/db";
-import { publicInstallation } from "@/server/installation";
+import { userSettings } from "@/server/installation";
+import { getActiveBinding } from "@/server/calendar-bindings";
 import { localDate, nextDate } from "@/lib/dates";
 import { TrialPanel } from "./trial-panel";
 import { Navigation } from "../navigation";
@@ -12,12 +13,13 @@ import { CalendarPanel } from "./calendar-panel";
 
 export const dynamic = "force-dynamic";
 export default async function Settings({ searchParams }: { searchParams: Promise<{ error?: string; connection?: string }> }) {
-  const user = await signedInUser(); if (!user) redirect("/");
+  const user = await currentUser(); if (!user) redirect("/");
   const db = database();
-  const [settings, calendar, probes, params] = await Promise.all([
-    publicInstallation(db, user.id), db.calendarSettings.findUnique({ where: { userId: user.id } }),
+  const [settings, active, probes, params] = await Promise.all([
+    userSettings(db, user.id), getActiveBinding(db, user.id),
     db.probe.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10 }), searchParams,
   ]);
+  const calendar = "binding" in active ? active.binding : null;
   return <>
     <Navigation active="/settings" />
     <section className="hero compact"><p className="eyebrow">Instellingen</p><h1>Je agenda en voorkeuren.</h1><p className="intro">Pas je overzicht aan of controleer de Google-koppeling en je meldingen.</p></section>
@@ -25,6 +27,6 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     <PreferencesPanel preferences={settings.preferences} />
     <GooglePanel settings={settings} callbackUrl={`${config().origin}/api/auth/callback/google`} />
     <CalendarPanel settings={settings} />
-    {calendar && <TrialPanel key={settings.preferences.timeZone} calendarId={calendar.calendarId} calendar={{ name: calendar.summary, timeZone: calendar.timeZone, confirmedAt: calendar.confirmedAt.toISOString(), reminders: calendar.defaultRemindersJson }} tomorrow={nextDate(localDate(new Date(), settings.preferences.timeZone))} probes={probes.map(probe => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />}
+    {calendar && <TrialPanel key={settings.preferences.timeZone} calendarId={calendar.calendarId} calendar={{ name: calendar.summary ?? calendar.calendarId, timeZone: calendar.timeZone ?? settings.preferences.timeZone, confirmedAt: (calendar.confirmedAt ?? calendar.createdAt).toISOString(), reminders: calendar.defaultRemindersJson ?? "[]" }} tomorrow={nextDate(localDate(new Date(), settings.preferences.timeZone))} probes={probes.map(probe => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />}
   </>;
 }
