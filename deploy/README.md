@@ -6,8 +6,64 @@ Eén Next.js-proces, één container `when2watch-web-1`, eigen PostgreSQL 17-con
 
 1. Bouw een nieuwe release onder `/srv/apps/when2watch/releases/<commit>` uit `git archive` van de beoordeelde commit, met de private `.env`, `.env.db` en `.env.migrate` (symlinks, 0600); `chmod 0644 deploy/postgres-init.sh`. `RELEASE_TAG=<commit> docker compose -p when2watch build web`.
 2. Maak vóór iedere schemawijziging een `pg_dump -Fc` (0600) en bewaar de vorige image, `current` en configuratie.
-3. Migraties zijn een aparte stap met de DDL-rol: `docker compose -p when2watch --profile migrate run --rm migrate`. `scripts/start.sh` voert geen DDL uit; het weigert een niet-PostgreSQL-DSN of een ongemigreerd schema. Start daarna alleen de nieuwe webcontainer en controleer health, HTTPS en bestaande agenda-/seriekoppelingen; wijs `current` naar de bewezen release.
-4. Bij mislukking vóór externe agendawrites: oude release/image terugstarten. Zet een databasebackup niet blind terug nadat Google-writes hebben plaatsgevonden; bewaar eerst de huidige database. Nieuwe mappingrecords bevatten de herstelidentiteit van die writes.
+3. Migraties zijn een aparte stap met de DDL-rol: `docker compose -p when2watch --profile migrate run --rm migrate`. `scripts/start.sh` voert geen DDL uit; het weigert een niet-PostgreSQL-DSN of een ongemigreerd schema. Start daarna alleen de nieuwe webcontainer en controleer health, HTTPS en bestaande agenda-/seriekoppelingen; wijs `current` naar de bewezen release. Pak daarna `compose.yaml` van de vorige release in (zie "Eén los `compose.yaml` per project").
+4. Bij mislukking vóór externe agendawrites: oude release/image terugstarten. Pak eerst `compose.yaml` uit in die release; een oude release heeft geen los `compose.yaml`. Zet een databasebackup niet blind terug nadat Google-writes hebben plaatsgevonden; bewaar eerst de huidige database. Nieuwe mappingrecords bevatten de herstelidentiteit van die writes.
+
+### Eén los `compose.yaml` per project
+
+Alleen de release waar `current` naar wijst heeft een los `compose.yaml`. In elke andere release zit het in `release-compose.tar`, met de hash in `release-compose.SHA256SUMS` (beide 0600). Reden: elk los `compose.yaml` draagt `name: when2watch`. Een `docker compose down` of `up` vanuit een oude releasemap raakt daardoor de draaiende stack (max2 ISS-15).
+
+**Inpakken**, na het omzetten van `current`, voor de release die niet meer actief is:
+
+```sh
+APP=/srv/apps/when2watch
+REL=<commit van de vorige release>
+( set -e
+  cd "$APP/releases/$REL"
+  D=$PWD
+  [ "$(readlink -f "$APP/current")" != "$D" ] || { echo "stop: $REL is de actieve release"; exit 1; }
+  [ -f compose.yaml ] || { echo "stop: geen compose.yaml in $REL"; exit 1; }
+  [ ! -e release-compose.tar ] || { echo "stop: release-compose.tar bestaat al in $REL"; exit 1; }
+  umask 077
+  sha256sum compose.yaml > release-compose.SHA256SUMS
+  tar --format=posix --numeric-owner -cpf release-compose.tar compose.yaml
+  X=$(mktemp -d)
+  tar -xpf release-compose.tar -C "$X"
+  if ( cd "$X" && sha256sum -c "$D/release-compose.SHA256SUMS" > /dev/null ); then
+    rm compose.yaml
+    echo "ingepakt: $REL"
+  else
+    rm release-compose.tar release-compose.SHA256SUMS
+    echo "stop: de tar wijkt af; compose.yaml blijft staan"
+  fi
+  rm -r "$X"
+  [ ! -e compose.yaml ]
+)
+```
+
+**Uitpakken**, vóór het starten van een oude release:
+
+```sh
+APP=/srv/apps/when2watch
+REL=<commit van de doelrelease>
+( set -e
+  cd "$APP/releases/$REL"
+  [ ! -e compose.yaml ] || { echo "stop: compose.yaml bestaat al in $REL"; exit 1; }
+  tar -xpf release-compose.tar compose.yaml
+  if ! sha256sum -c release-compose.SHA256SUMS > /dev/null; then
+    rm compose.yaml
+    echo "stop: compose.yaml uit de tar wijkt af van de vastgelegde hash"
+    exit 1
+  fi
+  docker compose -f compose.yaml config -q
+  rm -f release-compose.tar release-compose.SHA256SUMS release-compose.MANIFEST.txt
+  echo "uitgepakt: $REL"
+)
+```
+
+Na het terugdraaien wijst `current` naar de doelrelease. Pak dan `compose.yaml` in van de release die niet meer actief is.
+
+Beide blokken weigeren als de uitgangssituatie niet klopt: inpakken van de actieve release, tweemaal inpakken, of uitpakken terwijl `compose.yaml` er al staat. Wijkt de tar af van de vastgelegde hash, dan blijft het bestaande bestand staan. De naam `release-compose.tar` valt buiten de zoekpatronen van de compose-collision-scanner; een naam als `compose.yaml.tar` zou wel gevonden worden. Beproefd op max2 in een tijdelijke map: [bewijs](../docs/evidence/2026-09-28-release-compose-proef.md).
 
 De eenmalige overstap van SQLite naar PostgreSQL volgt [het R1-cutover-runbook](../docs/runbooks/idea-219-r1-cutover.md); de repetitie is `deploy/rehearse-r1.sh`.
 
