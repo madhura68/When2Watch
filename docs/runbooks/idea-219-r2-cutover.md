@@ -72,6 +72,8 @@ treffer, of logt de proxy bodies of cookies, dan wordt niet opengesteld; eerst d
 ## 6. Openen en eigenaarsagenda
 
 1. `RELEASE_TAG=<sha> docker compose -p when2watch up -d web` (met journaalvolume); wijs `current` naar de release.
+   Pak daarna `compose.yaml` van de vorige release in ([deploy/README.md](../../deploy/README.md), "Eén los
+   `compose.yaml` per project").
 2. HTTPS-health 200. JP logt opnieuw in en ziet dezelfde series, voorkeuren en `/beheer/series`.
 3. **Overgang van de eigenaarsagenda** (gekozen vóór uitvoering):
    - In Instellingen verschijnt "gepauzeerd: niet door When2Watch aangemaakt".
@@ -87,8 +89,10 @@ treffer, of logt de proxy bodies of cookies, dan wordt niet opengesteld; eerst d
 ## 7. Afbreken en herstel
 
 **a. Vóór openen:** verwijder de check- en webcontainers. Herstel `pre-r2-<sha>-<ts>.dump` in een schone database
-(of drop de R2-tabellen niet handmatig; herstel altijd de hele dump) en start de R1-release
-(`RELEASE_TAG=8b87838 docker compose -p when2watch up -d web`). Zet de cron terug. Het journaal is dan nog leeg en mag
+(of drop de R2-tabellen niet handmatig; herstel altijd de hele dump). Pak eerst `compose.yaml` uit in
+`releases/8b87838` ([deploy/README.md](../../deploy/README.md), "Eén los `compose.yaml` per project"); een oude
+release heeft geen los `compose.yaml`. Start daarna de R1-release vanuit die map
+(`cd releases/8b87838 && RELEASE_TAG=8b87838 docker compose -p when2watch up -d web`). Zet de cron terug. Het journaal is dan nog leeg en mag
 blijven staan.
 
 **b. Na openen:** niet terug naar R1. R1 kent geen verwijderjournaal, dus een verwijderde gebruiker zou terugkomen.

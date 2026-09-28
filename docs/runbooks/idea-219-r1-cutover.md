@@ -40,7 +40,7 @@ Bewezen vooraf: repetitie op een privékopie zonder egress ([bewijs](../evidence
 
 ## 4. Openen
 
-1. `RELEASE_TAG=<sha> docker compose -p when2watch up -d web`; wijs `current` naar de release.
+1. `RELEASE_TAG=<sha> docker compose -p when2watch up -d web`; wijs `current` naar de release. Pak daarna `compose.yaml` van de vorige release in ([deploy/README.md](../../deploy/README.md), "Eén los `compose.yaml` per project").
 2. HTTPS-health 200; JP logt in en ziet dezelfde series, Agenda, voorkeuren en Google-koppeling.
 3. Cron terugzetten (zelfde regel). Eerste sync (handmatig door JP of 06:05-cron): `SyncRun` succesvol; bestaande `CalendarEventLink`-ID's en event-ID's ongewijzigd, `created` alleen voor echte nieuwe afleveringen.
 4. Leg bewijs vast in `docs/evidence/idea-219-r1.md` (release, image, run-ID, tijden, verify-rapport; geen waarden).
@@ -48,7 +48,7 @@ Bewezen vooraf: repetitie op een privékopie zonder egress ([bewijs](../evidence
 
 ## 5. Afbreken en herstel
 
-**a. Vóór openen (geen nieuwe writes op PostgreSQL):** stop/verwijder `w2w-r1-check` en de nieuwe web-container; start de vorige release: `cd releases/fb7a690 && RELEASE_TAG=fb7a690 docker compose -p when2watch up -d web` (de oude compose kent de db-service niet; die mag blijven draaien of worden gestopt). Cron terug. De SQLite-bron is nooit geschreven: controleer dat de sha256 gelijk is aan de definitieve backup. Mislukte doeldata privé bewaren voor diagnose.
+**a. Vóór openen (geen nieuwe writes op PostgreSQL):** stop/verwijder `w2w-r1-check` en de nieuwe web-container. Pak eerst `compose.yaml` uit in `releases/fb7a690` ([deploy/README.md](../../deploy/README.md), "Eén los `compose.yaml` per project"); een oude release heeft geen los `compose.yaml`. Start daarna de vorige release: `cd releases/fb7a690 && RELEASE_TAG=fb7a690 docker compose -p when2watch up -d web` (de oude compose kent de db-service niet; die mag blijven draaien of worden gestopt). Cron terug. De SQLite-bron is nooit geschreven: controleer dat de sha256 gelijk is aan de definitieve backup. Mislukte doeldata privé bewaren voor diagnose.
 
 **b. Na openen of na Google-writes:** niet automatisch terug naar de SQLite-snapshot. Web en cron stoppen, `pg_dump -Fc` maken, verschillen inventariseren en een herstelrelease kiezen die met het huidige schema werkt (DB-plan §7). Na elk herstel eerst remote readback (`readback.ts`) vóór de scheduler.
 
