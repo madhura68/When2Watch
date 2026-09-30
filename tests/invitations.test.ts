@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { testDatabase } from "./database";
 import { activeUser, installation } from "./fixtures/users";
 
@@ -12,8 +12,16 @@ const { signInAllowed } = await import("@/server/user-access");
 // The real NextAuth 4.24.15 handler that runs after callbacks.signIn (core/routes/callback.js).
 const { default: callbackHandler } = createRequire(import.meta.url)("../node_modules/next-auth/core/lib/callback-handler.js") as { default: (params: unknown) => Promise<{ user: { id: string }; session: { userId: string } | null; isNewUser: boolean }> };
 
-afterEach(async () => { await storage?.close(); vi.unstubAllEnvs(); });
 const now = new Date("2026-09-26T10:00:00Z");
+beforeEach(() => {
+  // Keep OAuth's default clock aligned with fixtures without freezing database timers.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
+});
+afterEach(async () => {
+  try { await storage?.close(); }
+  finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+});
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 const google = (sub: string) => ({ provider: "google", providerAccountId: sub, type: "oauth" as const, access_token: "never-store", refresh_token: "never-store", scope: "openid email profile" });
 const profile = (email: string, verified = true) => ({ sub: "x", email, email_verified: verified, name: "Invited" });
@@ -75,7 +83,8 @@ describe("creating and exchanging invitations", () => {
   });
 });
 
-describe("accepting through the real NextAuth callback order", () => {
+describe.each([now, new Date("2036-09-26T10:00:00Z")])("accepting through the real NextAuth callback order at %s", (now) => {
+  beforeEach(() => { vi.setSystemTime(now); });
   it("activates exactly the invited verified Google identity and lets NextAuth create only the session", async () => {
     const db = await setup();
     const { token, invitation } = await createInvitation(db, "admin", "invited@example.test", now);
@@ -126,5 +135,51 @@ describe("accepting through the real NextAuth callback order", () => {
     const db = await setup();
     expect((await oauthCallback(undefined, "sub-stranger", "stranger@example.test")).allowed).toBe(false);
     expect(await db.user.count({ where: { email: "stranger@example.test" } })).toBe(0);
+  });
+});
+
+describe("invitation expiry boundaries", () => {
+  it.each([
+    ["2026-09-29T09:59:59.999Z", true],
+    ["2026-09-29T10:00:00.000Z", false],
+  ] as const)("exchanges at %s only while the 72-hour invitation is valid", async (time, valid) => {
+    const db = await setup();
+    const { token, invitation } = await createInvitation(db, "admin", "boundary@example.test", now);
+    vi.setSystemTime(new Date(time));
+    if (valid) {
+      await expect(exchangeInvitation(db, token)).resolves.toMatchObject({ flowId: expect.any(String) });
+    } else {
+      await expect(exchangeInvitation(db, token)).rejects.toMatchObject({ code: "INVITATION_INVALID", status: 400 });
+    }
+    expect(await db.invitationFlow.count()).toBe(valid ? 1 : 0);
+    expect((await db.invitation.findUniqueOrThrow({ where: { id: invitation.id } })).acceptedAt).toBeNull();
+    expect(await db.user.count({ where: { email: "boundary@example.test" } })).toBe(0);
+  });
+
+  it.each([
+    ["invitation just before expiry", "2026-09-29T09:59:00Z", "2026-09-29T09:59:59.999Z", true],
+    ["invitation exactly at expiry", "2026-09-29T09:59:00Z", "2026-09-29T10:00:00.000Z", false],
+    ["browser flow just before expiry", "2026-09-26T10:00:00Z", "2026-09-26T10:14:59.999Z", true],
+    ["browser flow exactly at expiry", "2026-09-26T10:00:00Z", "2026-09-26T10:15:00.000Z", false],
+  ] as const)("checks %s through the OAuth callback", async (_label, exchangeTime, acceptanceTime, valid) => {
+    const db = await setup();
+    const { token, invitation } = await createInvitation(db, "admin", "boundary@example.test", now);
+    vi.setSystemTime(new Date(exchangeTime));
+    const cookie = invitationCookieValue(await exchangeInvitation(db, token));
+    vi.setSystemTime(new Date(acceptanceTime));
+    const { allowed, result } = await oauthCallback(cookie, "sub-boundary", "boundary@example.test");
+    expect(allowed).toBe(valid);
+    expect(await db.user.count({ where: { email: "boundary@example.test", accessStatus: "ACTIVE" } })).toBe(valid ? 1 : 0);
+    expect(await db.account.count({ where: { providerAccountId: "sub-boundary" } })).toBe(valid ? 1 : 0);
+    const stored = await db.invitation.findUniqueOrThrow({ where: { id: invitation.id } });
+    if (valid) {
+      expect(stored.acceptedAt).toEqual(new Date(acceptanceTime));
+      expect(result?.session).toMatchObject({ userId: result?.user.id });
+    } else {
+      expect(stored.acceptedAt).toBeNull();
+      expect(result).toBeNull();
+      expect(await db.user.count({ where: { email: "boundary@example.test" } })).toBe(0);
+      expect(await db.session.count()).toBe(0);
+    }
   });
 });
