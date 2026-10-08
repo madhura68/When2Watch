@@ -25,8 +25,8 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const calendar = "binding" in active ? active.binding : null;
   return <>
     <Navigation active="/settings" admin={user.role === "ADMIN"} />
-    <section className="hero compact"><p className="eyebrow">Instellingen</p><h1>Je agenda en voorkeuren.</h1><p className="intro">Pas je overzicht aan of controleer de Google-koppeling en je meldingen.</p></section>
-    {(params.error || ["expired", "failed"].includes(params.connection ?? "")) && <p role="alert" className="notice error">De Google-koppeling is geannuleerd, geweigerd of verlopen. Je bestaande instellingen zijn behouden. Start de koppeling opnieuw als je wilt doorgaan.</p>}
+    <section className="hero compact"><p className="eyebrow">Settings</p><h1>Your calendar and preferences.</h1><p className="intro">Adjust your overview or check the Google connection and your notifications.</p></section>
+    {(params.error || ["expired", "failed"].includes(params.connection ?? "")) && <p role="alert" className="notice error">The Google connection was canceled, denied, or expired. Your existing settings have been preserved. Start the connection again to continue.</p>}
     <PreferencesPanel preferences={settings.preferences} invalidTimeZone={normalizeTimeZone(settings.preferences.timeZone) === null} />
     <GooglePanel settings={settings} callbackUrl={`${config().origin}/api/auth/callback/google`} />
     <CalendarPanel settings={settings} />

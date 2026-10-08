@@ -11,16 +11,16 @@ export default async function AdminSeries() {
   const { shows, tvmazeRequests } = await adminStats(database(), user.id);
   return <>
     <Navigation active="/admin/series" admin />
-    <section className="hero compact"><p className="eyebrow">Beheer</p><h1>Series en volgers.</h1>
-      <p className="intro">Per serie het aantal actieve gebruikers dat haar volgt of probeert. Wie dat zijn, zie je hier niet.</p></section>
+    <section className="hero compact"><p className="eyebrow">Admin</p><h1>Series and followers.</h1>
+      <p className="intro">For each series, the number of active users following or trying it. You cannot see who they are here.</p></section>
     <section className="card">
-      {shows.length ? <table><thead><tr><th>Serie</th><th>Volgers</th></tr></thead>
+      {shows.length ? <table><thead><tr><th>Series</th><th>Followers</th></tr></thead>
         <tbody>{shows.map(show => <tr key={show.tvmazeId}><td>{show.title}</td><td>{show.followers}</td></tr>)}</tbody></table>
-        : <p>Nog niemand volgt een serie.</p>}
+        : <p>No one follows a series yet.</p>}
     </section>
-    <section className="card"><h2>TVmaze-verkeer</h2>
-      <p>Sinds {new Date(tvmazeRequests.since).toLocaleString("nl-NL", { timeZone: "Europe/Amsterdam" })}: {tvmazeRequests.total} aanvragen
-        (zoeken {tvmazeRequests.search}, serie {tvmazeRequests.show}, updates {tvmazeRequests.updates}{tvmazeRequests.other ? `, overig ${tvmazeRequests.other}` : ""}). Google-verkeer telt hier niet mee.</p>
+    <section className="card"><h2>TVmaze traffic</h2>
+      <p>Since {new Date(tvmazeRequests.since).toLocaleString("en-GB", { timeZone: "Europe/Amsterdam", hourCycle: "h23" })}: {tvmazeRequests.total} requests
+        (search {tvmazeRequests.search}, series {tvmazeRequests.show}, updates {tvmazeRequests.updates}{tvmazeRequests.other ? `, other ${tvmazeRequests.other}` : ""}). Google traffic is not included here.</p>
     </section>
   </>;
 }

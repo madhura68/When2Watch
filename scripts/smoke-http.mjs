@@ -25,6 +25,7 @@ const env = {
   ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1", RUST_LOG: "info",
   DATABASE_URL: databaseUrl.toString(), NEXTAUTH_URL: origin,
   NEXTAUTH_SECRET: randomBytes(32).toString("hex"),
+  W2W_PRIVACY_CONTROLLER: "Example Operator", W2W_PRIVACY_CONTACT: "privacy@example.test",
   GOOGLE_CLIENT_ID: "http-test.apps.googleusercontent.com", GOOGLE_CLIENT_SECRET: "synthetic-client-secret",
   GOOGLE_CALENDAR_ID: "chosen@example.test", ALLOWED_GOOGLE_EMAIL: "owner@example.test",
   CRON_SECRET: randomBytes(32).toString("hex"),
@@ -63,6 +64,12 @@ try {
   const publicPage = await request("/");
   check(publicPage.status === 200, "login page must render");
   const publicText = await publicPage.text();
+  check(publicText.includes('lang="en"') && publicText.includes("Access is by invitation for now"), "landing page must be English and invite-only");
+  check(/<meta name="robots" content="index, follow"\s*\/?>/.test(publicText), "public landing may be indexed");
+  const publicPrivacy = await (await request("/privacy")).text();
+  check(publicPrivacy.includes("Example Operator") && publicPrivacy.includes("privacy@example.test") && publicPrivacy.includes("Limited Use"), "public privacy policy must state operator, contact and Google policy");
+  check(/<meta name="robots" content="index, follow"\s*\/?>/.test(publicPrivacy), "public privacy may be indexed");
+  check((await (await request("/?error=AccessDenied")).text()).includes("Google account you were invited with"), "sign-in errors must use neutral invitation guidance");
   const manifestResponse = await request("/manifest.webmanifest");
   check(manifestResponse.ok && manifestResponse.headers.get("content-type")?.includes("manifest+json"), "PWA manifest must be publicly available without login");
   const manifest = await manifestResponse.json();
@@ -225,7 +232,7 @@ try {
   const detailsPage = await (await request("/following",{headers:cookie("owner")})).text();
   const excerpt=detailsPage.match(/<p class="series-synopsis">([\s\S]*?)<\/p>/)?.[1];
   check(excerpt && excerpt.length <= 400 && excerpt.endsWith("…") && synopsis.startsWith(excerpt.slice(0,-1)) && /\s/.test(synopsis[excerpt.length-1]), "long synopsis must end at a word boundary within 400 characters");
-  check(detailsPage.includes("Lees verder op TVmaze"), "truncated synopsis must link to its source");
+  check(detailsPage.includes("Read more on TVmaze"), "truncated synopsis must link to its source");
   check(detailsPage.includes('class="series-details"') && detailsPage.includes('class="episode-description"') && !/<details[^>]*\sopen(?:[=>\s])/.test(detailsPage), "series and episode disclosures must initially be closed");
   check(detailsPage.includes("&lt;img") && !detailsPage.includes('<img src="https://example.test/should-not-load"'), "stored text must render escaped instead of executable markup");
   const soon = new Date(Date.now()+2*86400_000).toISOString().slice(0,10);
@@ -235,6 +242,7 @@ try {
     check(page.ok && html.includes('aria-label="Main navigation"'),"all private pages need the shared menu");
     const active=html.match(/<a[^>]*aria-current="page"[^>]*>/)?.[0];
     check(active?.includes(`href="${path}"`),"menu must identify the active route");
+    if(path==="/settings") check(/<meta name="robots" content="noindex[^"]*"/.test(html), "private settings must not be indexed");
     if(path==="/") {
       check(html.includes("SOON_EPISODE") && !html.includes("PRIVATE_EPISODE"),"Agenda must show the in-window episode and exclude distant episodes");
       check(html.includes("/images/when2watch-banner.svg"),"Agenda must show the generic banner");

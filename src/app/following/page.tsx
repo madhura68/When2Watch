@@ -11,7 +11,7 @@ export default async function Following() {
   const user = await currentUser(); if (!user) redirect("/");
   return <div className="following-page">
     <Navigation active="/following" admin={user.role === "ADMIN"} />
-    <section className="hero compact"><p className="eyebrow">Je series, in je agenda</p><h1>Blijf je favorieten volgen.</h1><p className="intro">Zoek een serie en kies de juiste match. Nieuwe afleveringen komen vanzelf in je agenda.</p></section>
+    <section className="hero compact"><p className="eyebrow">Your series, in your calendar</p><h1>Keep following your favorites.</h1><p className="intro">Search for a series and choose the right match. New episodes will appear in your calendar automatically.</p></section>
     <SeriesPanel data={await overview(user.id, database(), new Date(), config().origin)} />
   </div>;
 }

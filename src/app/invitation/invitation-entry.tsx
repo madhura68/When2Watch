@@ -20,6 +20,6 @@ export function InvitationEntry() {
     if (!response?.ok) return setState("invalid");
     await signIn("google", { callbackUrl: "/settings" });
   }
-  if (state === "invalid") return <p role="alert" className="notice error">Deze uitnodiging is niet (meer) geldig. Vraag de beheerder om een nieuwe link.</p>;
-  return <button className="primary" disabled={state !== "ready"} onClick={() => void accept()}>{state === "busy" ? "Even geduld…" : "Uitnodiging accepteren met Google"}</button>;
+  if (state === "invalid") return <p role="alert" className="notice error">This invitation is no longer valid. Ask the administrator for a new link.</p>;
+  return <button className="primary" disabled={state !== "ready"} onClick={() => void accept()}>{state === "busy" ? "Please wait…" : "Accept invitation with Google"}</button>;
 }

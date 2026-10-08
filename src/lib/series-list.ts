@@ -8,5 +8,5 @@ export const sourceStatus = (status:string) => Object.hasOwn(labels,status) ? la
 export function visibleSeries<T extends Series>(series: readonly T[], source:SourceFilter, choice:ChoiceFilter):T[] {
   return series.filter(show=>(source === "all" || (source === "unknown" ? rank(show.status) === 3 : show.status === source)) &&
     (choice === "all" || show.trying === (choice === "trying")))
-    .sort((a,b)=>rank(a.status)-rank(b.status) || a.title.localeCompare(b.title,"nl") || a.id-b.id);
+    .sort((a,b)=>rank(a.status)-rank(b.status) || a.title.localeCompare(b.title,"en") || a.id-b.id);
 }

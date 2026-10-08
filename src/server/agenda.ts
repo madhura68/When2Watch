@@ -11,7 +11,7 @@ export async function agendaOverview(userId: string, origin: string, now = new D
   const episodes = data.shows.flatMap(show => show.upcoming
     .filter(episode => episode.date >= window.from && episode.date < window.untilExclusive)
     .map(episode => ({ ...episode, show: { id: show.id, title: show.title, sourceUrl: show.sourceUrl, platform: show.platform, bannerUrl: show.bannerUrl, backgroundUrl: show.backgroundUrl, poster: show.poster, error: show.error } })))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.show.title.localeCompare(b.show.title, "nl") || (a.season ?? Infinity) - (b.season ?? Infinity) || (a.number ?? Infinity) - (b.number ?? Infinity) || a.id - b.id || a.show.id - b.show.id);
+    .sort((a, b) => a.date.localeCompare(b.date) || a.show.title.localeCompare(b.show.title, "en") || (a.season ?? Infinity) - (b.season ?? Infinity) || (a.number ?? Infinity) - (b.number ?? Infinity) || a.id - b.id || a.show.id - b.show.id);
   const groups: { date: string; episodes: typeof episodes }[] = [];
   for (const episode of episodes) {
     const last = groups.at(-1);
