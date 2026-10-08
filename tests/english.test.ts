@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { expect, it } from "vitest";
 // Reuse Next's bundled parser: actual JSX/string nodes, excluding comments and technical attributes.
 const { parser } = createRequire(import.meta.url)("next/dist/compiled/babel/bundle.js");
-const words = /\b(instellingen|volgen|proberen|melding|opnieuw|bevestig|verwijder|uitnodiging|beheer|gegevens|probeer|niet|geen|je|jouw|het|een|kies|aflevering|serie|klaar)\b/gi;
+const words = /\b(instellingen|volgen|proberen|melding|opnieuw|bevestig|verwijder|uitnodiging|beheer|gegevens|probeer|niet|geen|je|jouw|het|een|kies|aflevering|serie|klaar|van)\b/gi;
 const technical = new Set(["className", "id", "htmlFor", "href", "key"]);
 function files(dir: string): string[] { return readdirSync(dir, {withFileTypes:true}).flatMap(e => e.isDirectory() ? files(join(dir,e.name)) : /\.tsx?$/.test(e.name) ? [join(dir,e.name)] : []); }
 it("keeps Dutch wording out of application messages and JSX copy",()=>{

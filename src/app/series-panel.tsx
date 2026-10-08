@@ -101,7 +101,7 @@ export function SeriesPanel({data}:{data:Overview}) {
       {searched&&matches.length>0&&<p className="muted small">Cannot find your series? Try a different spelling or the original title.</p>}
     </section>
     <div aria-live="polite" aria-atomic="true">{message&&<p className={`notice ${failed?"error":"success"}`}>{message}</p>}</div>
-    <div className="section-heading"><h2>Your series <span className="muted">{shown.length} van {data.shows.length}</span></h2><button disabled={busy||!data.shows.length} onClick={()=>void action()}>{busy?"Working…":"Sync now"}</button></div>
+    <div className="section-heading"><h2>Your series <span className="muted">{shown.length} of {data.shows.length}</span></h2><button disabled={busy||!data.shows.length} onClick={()=>void action()}>{busy?"Working…":"Sync now"}</button></div>
     {data.shows.length>0&&<div className="series-filters">
       <div><label htmlFor="source-filter">Series status</label><select id="source-filter" value={sourceFilter} onChange={e=>setSourceFilter(e.target.value as SourceFilter)}><option value="all">All statuses</option><option value="Running">Running</option><option value="To Be Determined">Renewal undecided</option><option value="Ended">Ended</option><option value="unknown">Status unknown</option></select></div>
       <div><label htmlFor="choice-filter">Your choice</label><select id="choice-filter" value={choiceFilter} onChange={e=>setChoiceFilter(e.target.value as ChoiceFilter)}><option value="all">All choices</option><option value="following">Follow</option><option value="trying">Try</option></select></div>
