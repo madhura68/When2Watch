@@ -1,7 +1,7 @@
 ---
 title: "IDEA-241 — Specificatie stap 1: Engels, afspraakmodel, landing, privacy en proefevent"
 status: draft
-version: "0.2"
+version: "0.3"
 date: "2026-10-08"
 idea: IDEA-241
 source_commit: 1554c6a
@@ -12,7 +12,7 @@ last_updated: 2026-10-08
 
 **Product:** When2Watch (`cmud1npa000rykh7rlhlhojd3`). **Idee:** IDEA-241 (`cmuy9t8sp009ho07rcdqym802`). **Bron:** [grills/idea-241-verkenning](../grills/IDEA-241-verkenning.md) revisie 3, besluiten 1 t/m 14 van 8 oktober 2026, plus JP's besluit van 8 oktober over de twee afwijkingen in §2. **Codebasis:** `origin/main` op `1554c6a` (IDEA-219 R2 in productie sinds 26 september 2026). Dit is een ontwerp ter beoordeling, geen uitvoeringsplan en geen uitvoeringsopdracht.
 
-Versie 0.2 verwerkt JP's akkoord op de twee afwijkingen uit versie 0.1 en voegt het Review record toe.
+Versie 0.2 verwerkt JP's akkoord op de twee afwijkingen uit versie 0.1 en voegt het Review record toe. Versie 0.3 verwerkt ronde 1 van de review-loop (codex en claude, beide NO-GO): canonieke vergelijking van tijdgebonden afspraken, expliciete PATCH-contracten bij vormwissel, datumadministratie voor tijdgebonden items, dezelfde builder-invoer in het overzicht, een correcte beschrijving van de syncregel, en de aangescherpte voorwaarden voor publicatie.
 
 ## 1. Doel en eerste bruikbare resultaat
 
@@ -30,7 +30,7 @@ JP heeft op 8 oktober 2026 beide onderstaande afwijkingen van de grill goedgekeu
 
 | Besluit | Invulling | Reden |
 | --- | --- | --- |
-| 6 (bevriezen vóór vandaag) | **Het bestaande syncvenster van 7 dagen blijft ongewijzigd.** De sync maakt, wijzigt en verwijdert alleen afspraken van afleveringen met een datum vanaf de lokale datum min 7 dagen (`src/server/sync.ts:131-133`, `:209-212`, `:233`). Oudere afspraken worden nu al niet aangeraakt. Er komt geen aparte "vanaf vandaag"-regel; besluit 6 wordt gelezen als "buiten het venster wordt niets herschreven". | De grill ging uit van "alle gedateerde afleveringen worden geschreven"; dat klopte niet (R2-omschakeling: 28 links op 834 afleveringen). Het venster begrenst het PATCH-volume al tot hoogstens één week verleden plus toekomst, is getest (`tests/sync.test.ts:180-187`) en vangt datumverschuivingen binnen een week op. Een extra regel voegt complexiteit toe zonder faalpad. |
+| 6 (bevriezen vóór vandaag) | **De bestaande syncregel met het venster van 7 dagen blijft ongewijzigd.** Per aflevering komt reconciliatie alleen in aanmerking als één van deze signalen binnen het venster (lokale datum min 7 dagen en later) valt: de huidige afleveringsdatum, de datum vóór de catalogusverversing, de opgeslagen `lastDate` van de koppeling, de datum van een gevonden eigen agenda-item, of een nog openstaande koppelstatus (`src/server/sync.ts:131-133`, `:209-212`). Een afspraak wordt alleen nieuw aangemaakt als de afleveringsdatum zelf in het venster ligt (`:233`); een bestaand item kan wel naar een datum vóór het venster worden gecorrigeerd (`tests/sync.test.ts:137-145`). Buiten die regel wordt per aflevering niets aangeraakt. Ontvolgen is een aparte route en verwijdert alle eigen items van de serie zonder datumfilter (`sync.ts:84-92`, `:112-124`); dat is bestaand R2-gedrag en wijkt af van de grill-tekst "eerdere afspraken blijven staan". Dat punt is geen stap-1-werk en staat als open vraag in §15. Er komt geen aparte "vanaf vandaag"-regel. | De grill ging uit van "alle gedateerde afleveringen worden geschreven"; dat klopte niet (R2-omschakeling: 28 links op 834 afleveringen). Het venster begrenst het PATCH-volume al tot hoogstens één week verleden plus toekomst, is getest (`tests/sync.test.ts:180-187`) en vangt datumverschuivingen binnen een week op. Een extra regel voegt complexiteit toe zonder faalpad. |
 | 10/11 (TMDB-vermelding) | De TMDB-notice en de JustWatch-vermelding op landingpagina en privacypagina komen pas in stap 3, wanneer die data werkelijk wordt gebruikt. Stap 1 vermeldt alleen TVmaze. | Een bronvermelding voor een bron die nog niet wordt gebruikt is onjuist in een privacybeleid. De pagina's krijgen in stap 1 wel een vaste plek (bronnenblok) waar stap 3 de regels toevoegt. |
 
 Aanvullingen binnen de besluiten:
@@ -45,7 +45,7 @@ Aanvullingen binnen de besluiten:
 
 ### 3.1 Omvang
 
-Alle gebruikersgerichte tekst wordt Engels, in één release, zonder i18n-laag. De inventaris op `1554c6a`: ongeveer 325 UI-strings in 20 bestanden onder `src/app/`, 119 `AppError`-meldingen in 27 bestanden onder `src/server/` en `src/app/api/`, de 500-fallback in `src/server/errors.ts:14`, de syncfouttekst `sync.ts:17`, de catalogusfallback `catalog.ts:7`, en de labels in `src/lib/series-list.ts:4-6`.
+Alle gebruikersgerichte tekst wordt Engels, in één release, zonder i18n-laag. De inventaris op `1554c6a`: ongeveer 325 UI-strings in 20 bestanden onder `src/app/`, 113 `AppError`-aanroepen in 28 bestanden onder `src/server/` en `src/app/api/` plus de foutcodekaart in `google-calendar.ts:38-45`, de 500-fallback in `src/server/errors.ts:14`, de syncfouttekst `sync.ts:17`, de catalogusfallback `catalog.ts:7`, en de labels in `src/lib/series-list.ts:4-6`.
 
 Taal- en opmaakregels:
 
@@ -92,7 +92,11 @@ Zie §4. De tekst van afspraken die buiten het syncvenster vallen blijft Nederla
 
 ### 4.1 Velden
 
-`CalendarEvent` (`src/server/google-calendar.ts:7-18`) krijgt `location?: string` en `timeZone?: string` op `start` en `end`. `safeEvent` (`:153-159`) neemt `location` mee in de proefreadback. `calendarEventHash` (`sync.ts:18-23`) hasht daarnaast `location ?? ""`, `start.timeZone ?? null` en `end.timeZone ?? null`; zonder dat zou een wijziging in locatie of tijdzone geen PATCH veroorzaken.
+`CalendarEvent` (`src/server/google-calendar.ts:7-18`) krijgt `location?: string | null` en `timeZone?: string | null` op `start` en `end`; `date` en `dateTime` worden `string | null` zodat een PATCH een veld expliciet kan wissen. `safeEvent` (`:153-159`) neemt `location` mee in de proefreadback.
+
+**Canonieke vergelijking.** Google geeft `dateTime` in antwoorden altijd als RFC 3339 mét offset terug (bijvoorbeeld `2026-10-09T20:00:00+02:00`), ook als het verzoek een offsetloze wandkloktijd plus `timeZone` droeg. Een letterlijke vergelijking van verzoek en readback faalt dus altijd voor tijdgebonden afspraken. Daarom wordt `calendarEventHash` (`sync.ts:18-23`) gedefinieerd over een canonieke vorm `canonicalEvent(event)`: `date` ongewijzigd; `dateTime` omgezet naar het tijdstip in UTC (ISO-string) met daarnaast de `timeZone`; een offsetloze `dateTime` wordt daarbij in de meegegeven `timeZone` geïnterpreteerd; `location ?? ""`; `null`-waarden gelden als afwezig. Overeenkomst betekent: gelijk tijdstip én gelijke `timeZone`. Deze hash wordt gebruikt bij de bevestiging na schrijven (`sync.ts:199`), de ongewijzigd-controle (`:250`), de adoptie van openstaande koppelingen (`:251`) en de proefcontrole (§5). `confirmedRemoteHash` blijft de hash van de canonieke readback, zoals nu bij de door Google aangevulde reminders (`:197-198`).
+
+**Datumadministratie.** Een helper `eventDate(event)` levert de lokale datum van een afspraak: `start.date`, anders de datum van `start.dateTime` in de tijdzone van de afspraak (Google geeft `dateTime` terug in die zone). `lastDate` wordt bij bevestiging gezet op de afleveringsdatum van de gewenste afspraak (voor beide vormen; nu `desired.start.date` op `:203`, dat bij tijdgebonden items leeg zou blijven), bij adoptie van een gevonden item op `eventDate(event)` (`:218`), en de venstercontrole op gevonden items gebruikt `eventDate` (`:212`). Zonder dit zouden tijdgebonden items na een datumverschuiving buiten het venster kunnen blijven staan terwijl TVmaze de datum intrekt.
 
 ### 4.2 Opbouw
 
@@ -111,15 +115,25 @@ Zie §4. De tekst van afspraken die buiten het syncvenster vallen blijft Nederla
 
 Google accepteert `dateTime` zonder offset wanneer `timeZone` is gezet. Reminders volgen de agenda-standaard; Google Agenda heeft aparte standaardherinneringen voor hele-dag- en tijdgebonden afspraken, en de gebruiker stelt beide zelf in.
 
+**Schrijfcontract.** `events.patch` voegt geneste velden samen met wat Google al heeft opgeslagen; alleen een expliciete `null` wist een veld. Een vormwissel via PATCH moet daarom de andere vorm expliciet wissen: bij Fixed time `start: { date: null, dateTime, timeZone }` (idem `end`), bij All-day `start: { date, dateTime: null, timeZone: null }`. De PATCH-body (`google-calendar.ts:140-144`) bevat daarom altijd alle vier de sleutels, met `null` voor de ongebruikte vorm; `location` wordt bij een lege aanbiederslijst als `null` meegestuurd zodat een eerder gezette locatie verdwijnt (relevant vanaf stap 3). Een insert-body laat `null`-velden weg. De canonieke hash negeert `null`-velden, zodat de gewenste afspraak en de readback gelijk blijven.
+
 ### 4.3 Bestaande koppelingen na uitrol
 
-`confirmedDesiredHash` (`sync.ts:250`) wijkt na uitrol af voor iedere gekoppelde aflevering in het venster, dus de eerstvolgende sync per gebruiker (handmatig of cron 06:05) stuurt één PATCH per afspraak in het venster. Daarbuiten gebeurt niets. `overview.ts:31` toont die items tot de bevestiging als niet-gekoppeld; dat is het bestaande gedrag bij een tekstwijziging (`tests/sync.test.ts:137-145`). Er worden geen nieuwe event-ID's aangemaakt en geen duplicaten (A4).
+`confirmedDesiredHash` (`sync.ts:250`) wijkt na uitrol af voor iedere gekoppelde aflevering die volgens de regel in §2 in aanmerking komt, dus de eerstvolgende sync per gebruiker (handmatig of cron 06:05) stuurt voor die afspraken één PATCH met de Engelse tekst. Afspraken buiten de regel blijven Nederlands en ongewijzigd. Daarnaast doet dezelfde run het gewone reconciliatiewerk dat toevallig samenvalt: een aflevering die nieuw in het venster komt wordt aangemaakt, een ingetrokken datum verwijderd. De vertaal-PATCHes zijn dus geen garantie op "nul inserts en nul deletes"; A4 toetst dat op een vaste, volledig bevestigde set koppelingen zonder bronwijziging, en de productierun rapporteert `updated` apart van `created`/`deleted` met uitleg. Er worden geen nieuwe event-ID's aangemaakt voor bestaande koppelingen en geen duplicaten. `overview.ts:31` toont die items tot de bevestiging als niet-gekoppeld (zie §4.5).
+
+Het `?`-teken in `string | null` voor `date`/`dateTime` verandert niets aan bestaande `desiredJson`-rijen; die blijven leesbaar.
 
 ### 4.4 Voorkeur
 
 `UserPreferences` (`prisma/schema.prisma:58-63`) krijgt `eventMode` (enum `ALL_DAY` | `FIXED_TIME`, standaard `ALL_DAY`) en `eventTime` (`String?`, `HH:MM`, verplicht bij `FIXED_TIME`, anders `null`). Expand-only migratie; bestaande rijen blijven All-day.
 
-`savePreferences` (`preferences.ts:19-31`) accepteert de twee nieuwe sleutels; `eventTime` matcht `^([01]\d|2[0-3]):[0-5]\d$`; `FIXED_TIME` zonder tijd is `INVALID_INPUT`. `currentSettings` (`services.ts:24-27`) geeft de voorkeuren door aan de sync. Het voorkeurenpaneel toont "Event style" als keuzerondjes All-day / Fixed time met een tijdveld (standaard 20:00) en de hulptekst "Applies to upcoming episodes at the next sync. Reminders follow your Google Calendar settings." Opslaan start geen sync; de bestaande knop Sync now op Following of de dagelijkse run past het toe (binnen het venster van §2).
+`savePreferences` (`preferences.ts:19-31`) accepteert de twee nieuwe sleutels; `eventTime` matcht `^([01]\d|2[0-3]):[0-5]\d$`; `FIXED_TIME` zonder tijd is `INVALID_INPUT`. `currentSettings` (`services.ts:24-27`) geeft de voorkeuren door aan de sync. Het voorkeurenpaneel toont "Event style" als keuzerondjes All-day / Fixed time met een tijdveld (standaard 20:00) en de hulptekst "Applies to upcoming episodes at the next sync. Reminders follow your Google Calendar settings." Opslaan start geen sync; de bestaande knop Sync now op Following of de dagelijkse run past het toe (binnen de regel van §2).
+
+De eigen-gegevensexport (`privacy.ts:19`) neemt `eventMode` en `eventTime` op naast `agendaMonths` en `timeZone`; de bestaande exporttest (`tests/privacy.test.ts:65`) wordt daarop uitgebreid.
+
+### 4.5 Overzicht en Agenda
+
+`overview.ts:31` berekent zelf de gewenste afspraak (`episodeEvent(userId,s,e,l.eventId)`) om `linked` te bepalen; Agenda gebruikt dezelfde vlag. Omdat de builder nu voorkeuren, origin en aanbieders nodig heeft, komt er één gedeelde factory `desiredEpisodeEvent(settings, show, episode, eventId)` waarbij `settings` uit `currentSettings(userId)` komt (`services.ts:24-27`: binding, tijdzone, voorkeuren, origin). Sync en overzicht gebruiken dezelfde factory en dezelfde invoer, nooit standaardwaarden. Test: na een geslaagde Fixed-time-sync is `linked` waar; na een voorkeurswissel onwaar tot de volgende bevestigde sync; daarna weer waar.
 
 ## 5. Proefevent (besluit 14, eerste praktijkbewijs)
 
@@ -133,15 +147,16 @@ Google accepteert `dateTime` zonder offset wanneer `timeZone` is gezet. Reminder
 | Vorm | de actuele voorkeur van de gebruiker (All-day of Fixed time met de ingestelde tijd, duur 60 minuten) |
 | Markers | ongewijzigd `kind: "probe"` |
 
-`POST /api/probe` houdt `{ date }` als invoer; de vorm volgt de voorkeur, zodat de proef precies toont wat echte afspraken zullen doen. De controle op `calendar-probe.ts:76` vergelijkt `start`/`end` met de opgeslagen `requestJson` in plaats van `dateTime` te verbieden. Het proefpaneel in Settings toont per proef de gebruikte vorm en de teruggelezen locatie. Opruimen (`removeLocked`) blijft gelijk.
+`POST /api/probe` houdt `{ date }` als invoer; de vorm volgt de voorkeur, zodat de proef precies toont wat echte afspraken zullen doen. De controle op `calendar-probe.ts:76` vergelijkt de canonieke vorm (§4.1) van `start`/`end` van de readback met die van de opgeslagen `requestJson`, in plaats van `dateTime` te verbieden. Het proefpaneel in Settings toont per proef de gebruikte vorm en de teruggelezen locatie. Opruimen (`removeLocked`) blijft gelijk. Proeven zijn uniek per gebruiker en datum (`Probe @@unique([userId, date])`, upsert zonder update op `:56-59`): een tweede proef vereist een andere datum. De proef schrijft alleen via insert; de PATCH-vormwissel (§4.2) wordt bewezen via echte afspraken onder A5.
 
 **Proefprocedure** (JP, na uitrol van stap 1, met voorkeur Fixed time 20:00):
 
-1. Settings: agenda bevestigen (`APP_CREATED`), voorkeur op Fixed time 20:00 zetten.
-2. Eén proefitem voor morgen aanmaken; readback controleren op titel, locatie, `dateTime` en `timeZone`.
+1. Settings: agenda bevestigen (`APP_CREATED`); is de Google-toegang verlopen (grants uit de Testing-fase vervallen na 7 dagen, `google-tokens.ts:42-43` → opnieuw verbinden), eerst opnieuw verbinden. Voorkeur op Fixed time 20:00 zetten.
+2. Eén proefitem voor morgen aanmaken; readback controleren op titel, locatie, `dateTime` (met offset) en `timeZone`.
 3. Op de iPhone in de gebruikte agenda-app(s) (Apple Agenda en/of Google Agenda) de afspraak openen: titel, locatie, beschrijving en link vastleggen.
 4. De melding afwachten die de agenda-app voor tijdgebonden afspraken geeft; vastleggen: app, feitelijke ontvangsttijd, zichtbare titel, of de **locatie** zichtbaar is, afkapping.
-5. Voorkeur terug op All-day, tweede proefitem, zelfde waarneming voor de hele-dagvorm.
+5. Voorkeur terug op All-day, tweede proefitem op een **andere** datum (overmorgen), zelfde waarneming voor de hele-dagvorm.
+7. Daarna, op echte afspraken: voorkeur op Fixed time, Sync now, syncresultaat en de readback van één afspraak vastleggen (`dateTime` met offset, `date` afwezig); terug naar All-day, Sync now, idem (`date` aanwezig, `dateTime` afwezig). Dit is het bewijs voor het schrijfcontract van §4.2.
 6. Beide proefitems opruimen via het paneel en de uitkomst controleren.
 
 Bewijs komt in `docs/evidence/idea-241-stap-1.md` (schermbeschrijving, geen tokens). Of de locatie in de melding zichtbaar is, is een open vraag uit de grill; het antwoord bepaalt of de aanbieders in stap 3 alleen in de afspraak of ook in de melding terechtkomen.
@@ -157,7 +172,7 @@ De onaangemelde tak van `src/app/page.tsx:22-38` wordt vervangen door een Engels
 5. Bronnenblok: "Episode data: TVmaze (CC BY-SA)" met link; vaste plek voor de TMDB/JustWatch-regels van stap 3.
 6. Footer (layout): Privacy en contact (`W2W_PRIVACY_CONTACT`, alleen tonen als gezet).
 
-Metadata: `/` (onaangemeld) en `/privacy` krijgen `robots: index, follow`; alle ingelogde pagina's houden `noindex` uit de layout. Alleen `/`, `/privacy`, `/invitation`, `/manifest.webmanifest`, iconen en `/api/health` zijn zonder sessie bereikbaar; dat is nu al zo en wordt in de smoke-test vastgehouden.
+Metadata: `/` (onaangemeld) en `/privacy` krijgen `robots: index, follow`; alle ingelogde pagina's houden `noindex` uit de layout. Zonder sessie bereikbare **pagina's** zijn alleen `/`, `/privacy` en `/invitation`; daarnaast de statische bestanden (`/manifest.webmanifest`, `/icons/*`, `/images/*`) en de API-uitzonderingen `/api/health`, `/api/auth/*`, `POST /api/invitations/exchange` (same-origin en rate-limited) en `/api/cron/sync` (bearer-secret). Dat is nu al zo en wordt zo in de smoke-test vastgehouden.
 
 De ingelogde tak van `/` (Agenda) verandert alleen van taal.
 
@@ -182,14 +197,16 @@ Stap 3 voegt TMDB/JustWatch en de landvoorkeur toe. De pagina blijft zonder sess
 
 Dit is beheerderswerk van JP in de Google Cloud Console (project `when2watch-509517`), vastgelegd in een nieuwe runbook `docs/runbooks/idea-241-production-consent.md`. Volgorde:
 
-1. **Voorwaarden:** stap 0 bewezen; stap 1 uitgerold op max2; `/` en `/privacy` Engels en publiek bereikbaar.
+1. **Voorwaarden:** stap 0 bewezen; stap 1 uitgerold op max2; `/` en `/privacy` Engels en publiek bereikbaar met `W2W_PRIVACY_CONTROLLER` en `W2W_PRIVACY_CONTACT` gezet en zichtbaar; **het praktijkbewijs van §5 vastgelegd** (Fixed-time-proefitem met readback, ontvangen iPhone-melding, en de vormwissel op echte afspraken). Zonder dat bewijs geen publicatie en geen eerste genodigde.
 2. **Scopes op het consentscherm** gelijk aan de code: `openid`, `email`, `profile`, `calendar.calendarlist.readonly`, `calendar.app.created`. `calendar.events` (nog genoemd in `docs/praktijkproef.md:128`) verwijderen als het er staat. Een verschil tussen gedeclareerde en gevraagde scopes geeft ook ná verificatie het waarschuwingsscherm.
 3. **Branding:** app name "When2Watch", support e-mail, homepage `https://when2watch.jp-visser.nl`, privacy `https://when2watch.jp-visser.nl/privacy`, authorized domain `jp-visser.nl`. Logo pas uploaden bij de verificatie (stap 2): zonder verificatie toont Google alleen het domein.
 4. **Audience → Publish app.** Status wordt In production; de testgebruikerslijst is niet meer bepalend. Google toont bij sensitive scopes de melding dat verificatie nodig is; publiceren kan toch.
-5. **Controle met een niet-testaccount** (tweede Google-account van JP of de eerste genodigde): uitnodiging accepteren, identiteitslogin zonder waarschuwing, agendatoestemming mét "Google hasn't verified this app" → Advanced → Go to When2Watch, agenda aanmaken, eerste sync. Vastleggen in `docs/evidence/idea-241-stap-1.md`.
-6. **Uitnodigingstekst** voor JP's mail bevat een vaste alinea die het waarschuwingsscherm aankondigt en uitlegt hoe door te klikken.
+5. **JP verbindt zijn agenda opnieuw** na publicatie: de grant uit de Testing-fase vervalt na 7 dagen; een nieuwe grant onder Production niet.
+6. **Controle met een niet-testaccount** (tweede Google-account van JP of de eerste genodigde): uitnodiging accepteren, identiteitslogin zonder waarschuwing, agendatoestemming mét "Google hasn't verified this app" → Advanced → Go to When2Watch, agenda aanmaken, eerste sync. Vastleggen in `docs/evidence/idea-241-stap-1.md`.
+7. **Uitnodigingstekst** voor JP's mail bevat een vaste alinea die het waarschuwingsscherm aankondigt en uitlegt hoe door te klikken; die wordt vóór de eerste consentpoging verstuurd.
+8. **Uitnodigingsbudget.** Google telt "100 new users in total" over de levensduur van het project en biedt daarvoor geen teller. De lokale gebruikerslijst is géén maat: verwijderde accounts verdwijnen eruit (`privacy.ts:100`) en een agenda-accountwissel autoriseert een extra Google-account zonder nieuwe gebruiker (`google-connection.ts:129`). De runbook houdt daarom een handmatig budget bij: iedere uitgegeven uitnodiging en iedere accountwissel telt als één; boven de 50 vóór verificatie wordt niet meer uitgenodigd.
 
-Randvoorwaarden uit de Google-documentatie: de onverifieerde-app-grens is "100 new users in total" over de hele levensduur van het project en kan niet worden gereset; verificatie heft hem op. Het 7-dagen-tokenverval geldt alleen in Testing. Verificatie zelf (brand plus sensitive scope: demo-video, scope-motivatie, Search Console) is stap 2 en valt buiten deze spec; de homepage- en privacy-eisen worden hier al vervuld.
+Randvoorwaarden uit de Google-documentatie: de onverifieerde-app-grens is "100 new users in total" over de hele levensduur van het project en kan niet worden gereset; verificatie heft hem op. Het 7-dagen-tokenverval geldt voor grants die in Testing zijn verleend; de app vangt een verlopen grant op met `needsReauth` en een herverbindknop. Verificatie zelf (brand plus sensitive scope: demo-video, scope-motivatie, Search Console) is stap 2 en valt buiten deze spec; de homepage- en privacy-eisen worden hier al vervuld.
 
 ## 9. Gegevensmodel en migratie
 
@@ -200,38 +217,39 @@ Randvoorwaarden uit de Google-documentatie: de onverifieerde-app-grens is "100 n
 | `Probe.requestJson` bevat voortaan `location` en eventueel `dateTime`/`timeZone` | geen schemawijziging |
 | `CalendarEventLink.desiredJson` idem | geen schemawijziging |
 
-Geen contract- of destroy-fase. Uitrol volgens `deploy/README.md` (release bouwen, `pg_dump`, migratie als aparte stap, nieuwe web-container, health, `current` omzetten). Rollback: vorige release starten; de nieuwe kolommen zijn onschadelijk voor de oude code.
+Geen contract- of destroy-fase. Uitrol volgens `deploy/README.md` (release bouwen, `pg_dump`, migratie als aparte stap, nieuwe web-container, health, `current` omzetten). Rollback: vorige release starten; de nieuwe kolommen zijn onschadelijk voor de oude code. Let op: de oude builder schrijft alleen `{date}` en de oude proefcontrole weigert `dateTime`; een rollback is daarom alleen schoon zolang niemand Fixed time heeft gekozen, of nadat iedereen is teruggezet en gesynchroniseerd. Daarna geldt forward-fix.
 
 ## 10. Acceptatie
 
 | ID | Waarneembare acceptatie | Bewijs |
 | --- | --- | --- |
-| A1 | Geen Nederlandse tekst meer in `src/`: een grep op een vaste woordenlijst (agenda, serie, instellingen, volgen, proberen, melding, opnieuw, bevestig, verwijder, uitnodiging, beheer) over `src/` geeft nul treffers buiten identifiers; `lang="en"`, manifest `en`, datums `en-GB` 24-uurs | grep in CI-stap of test; smoke-assert op `lang="en"` en `aria-label="Main navigation"` |
+| A1 | Geen Nederlandse tekst meer in `src/`: een hoofdletterongevoelige woordgrens-grep over stringliterals en JSX-tekst op de lijst (`instellingen`, `volgen`, `proberen`, `melding`, `opnieuw`, `bevestig`, `verwijder`, `uitnodiging`, `beheer`, `gegevens`, `probeer`, `niet`, `geen`) geeft nul treffers; het navigatielabel `Agenda` is als enige uitzondering vastgelegd; `lang="en"`, manifest `en`, datums `en-GB` 24-uurs | grep-script in de testsuite; smoke-assert op `lang="en"` en `aria-label="Main navigation"` |
 | A2 | `/following`, `/invitation`, `/admin/users`, `/admin/series` werken; oude paden geven 307 naar het nieuwe pad; `/invitation#token=…` uit een oude `/uitnodiging`-link werkt in Safari op iPhone en in desktop-Chrome | smoke-test (nieuwe en oude paden); handmatige fragmentproef |
-| A3 | `episodeEvent` levert de Engelse titel en beschrijving uit §4.2; All-day ongewijzigd van vorm; Fixed time geeft `dateTime` + `timeZone` en einde op runtime of 60 min; de hash verandert bij locatie- en tijdzonewijziging | unit-tests op builder en hash |
-| A4 | Na uitrol stuurt de eerste sync per gebruiker alleen PATCHes voor afspraken in het venster (lokale datum − 7 dagen en later), nul inserts, nul deletes, geen duplicaten; afspraken daarbuiten blijven Nederlands en ongewijzigd | `tests/sync.test.ts`-variant met bestaande links; productie-syncresultaat van JP (`updated` ≤ aantal afleveringen in venster, `created` = 0) |
-| A5 | Voorkeur: ongeldige tijd of `FIXED_TIME` zonder tijd geeft 400; wisselen naar Fixed time 20:00 herschrijft bij de volgende sync alle afspraken in het venster naar tijdgebonden; terugwisselen herstelt All-day; de hele-dag-/tijdgebonden-wissel verandert geen event-ID's | `tests/preferences.test.ts`, syncstest met voorkeurswissel |
-| A6 | Proefitem volgt de voorkeur, bevat de TEST-titel en de voorbeeldlocatie; readback bevat `location`; een gewijzigd of verwijderd item geeft `EVENT_CHANGED`; opruimen verwijdert alleen het eigen proefitem | `tests/calendar-probe.test.ts` uitgebreid |
+| A3 | De factory levert de Engelse titel en beschrijving uit §4.2; All-day ongewijzigd van vorm; Fixed time geeft `dateTime` + `timeZone` en einde op runtime of 60 min; de canonieke hash verandert bij locatie- en tijdzonewijziging en is gelijk voor `2026-10-09T20:00:00` + `Europe/Amsterdam` en `2026-10-09T20:00:00+02:00` | unit-tests op factory en hash, inclusief een test die faalt bij letterlijke vergelijking |
+| A4 | Op een vaste, volledig bevestigde set bestaande koppelingen zonder bron- of identiteitswijziging stuurt de eerste sync na uitrol uitsluitend PATCHes voor de afspraken die volgens §2 in aanmerking komen, op dezelfde event-ID's, nul inserts en nul deletes; afspraken daarbuiten blijven Nederlands en ongewijzigd. In productie rapporteert JP's eerste run `updated`, `created` en `deleted` per serie; `created`/`deleted` ≠ 0 wordt verklaard uit gewone reconciliatie (nieuw in venster, ingetrokken datum) | `tests/sync.test.ts`-variant met bestaande links; productie-syncresultaat in de evidence |
+| A5 | Voorkeur: ongeldige tijd of `FIXED_TIME` zonder tijd geeft 400; wisselen naar Fixed time 20:00 herschrijft bij de volgende sync de in aanmerking komende afspraken naar tijdgebonden met expliciete `date: null`; terugwisselen herstelt All-day met `dateTime: null, timeZone: null`; event-ID's blijven gelijk; de simulator past Google-merge-semantiek toe (genest samenvoegen, `null` wist) en geeft `dateTime` met offset terug, en een tweede sync doet nul schrijfacties; op max2 bevestigd met de readback uit §5 stap 7 | `tests/preferences.test.ts`; syncstest met voorkeurswissel die faalt zonder de `null`-velden; evidence |
+| A6 | Proefitem volgt de voorkeur, bevat de TEST-titel en de voorbeeldlocatie; readback bevat `location` en bij Fixed time `dateTime` met offset, en wordt canoniek vergeleken; een gewijzigd of verwijderd item geeft `EVENT_CHANGED`; opruimen verwijdert alleen het eigen proefitem | `tests/calendar-probe.test.ts` uitgebreid, simulator geeft offset terug |
 | A7 | Praktijkbewijs op JP's iPhone voor beide vormen: afspraak zichtbaar met titel, locatie, beschrijving; melding ontvangen en vastgelegd met tijd, app en of de locatie zichtbaar is | `docs/evidence/idea-241-stap-1.md` |
-| A8 | Onaangemeld `/` toont de landingpagina uit §6 zonder privégegevens; `?error=` toont de neutrale melding; Sign in werkt; `/privacy` is Engels, publiek en gelinkt vanuit footer en consentscherm | smoke-test; handmatige controle |
-| A9 | Consentscherm staat op In production met exact de vijf scopes; een niet-testaccount doorloopt het waarschuwingsscherm en koppelt een agenda; identiteitslogin toont geen waarschuwing | runbook §8 uitgevoerd; evidence |
+| A8 | Onaangemeld `/` toont de landingpagina uit §6 zonder privégegevens; `?error=` toont de neutrale melding; Sign in werkt; `/privacy` is Engels, publiek, gelinkt vanuit footer en consentscherm, en toont beheerder en contact (geen placeholder) | smoke-test; handmatige controle |
+| A9 | Consentscherm staat op In production met exact de vijf scopes, pas nadat het §5-bewijs is vastgelegd; JP heeft opnieuw verbonden; een niet-testaccount doorloopt het waarschuwingsscherm en koppelt een agenda; identiteitslogin toont geen waarschuwing | runbook §8 uitgevoerd; evidence |
+| A12 | `overview`/Agenda tonen `linked` waar na een geslaagde Fixed-time-sync, onwaar na een voorkeurswissel tot de volgende bevestigde sync; de export bevat `eventMode` en `eventTime`; `lastDate` is na bevestiging van een tijdgebonden afspraak de afleveringsdatum en een ingetrokken datum verwijdert ook een eerder verschoven tijdgebonden item | tests op overzicht, export en datumadministratie |
 | A10 | `npm test`, `npm run typecheck`, `npm run build`, `npm run test:http` en beide Docker-builds slagen in CI | CI-run op de PR |
 | A11 | Geen tokens, secrets of uitnodigingstokens in logs, evidence of docs | bestaande smoke-controle; review |
 
 ## 11. Tests en controles die wijzigen
 
-- Negen Dutch-assertions: `tests/series-list.test.ts:26-29`, `tests/credentials.test.ts:20-21`, `tests/shared-sync.test.ts:89`, `tests/sync.test.ts:130`, `tests/invitations.test.ts:53`.
+- Elf Dutch-assertions: `tests/series-list.test.ts:26-29`, `tests/credentials.test.ts:20-21`, `tests/shared-sync.test.ts:89`, `tests/sync.test.ts:129-130,143` (titelformaat en beschrijving), `tests/invitations.test.ts:53`.
 - `"VERWIJDEREN"` → `"DELETE"` in `tests/privacy.test.ts` (9 aanroepen) en `scripts/smoke-http.mjs:136-139`.
-- Smoke: paden `/volgen`, `/uitnodiging`, `/beheer/*` (regels 99-100, 155-168, 229-233), `aria-label` (231), linktekst "Lees verder op TVmaze" (224); nieuwe asserts voor redirects, `lang="en"`, landingpagina-inhoud en afwezigheid van privégegevens.
-- `tests/simulated-calendar.ts` valideert geen `location`/`dateTime`; de nieuwe builder-tests controleren de verstuurde body rechtstreeks. Een expliciete assert dat de simulator `dateTime` + `timeZone` accepteert zonder `date` voorkomt stille regressie.
-- Nieuwe tests: builder (All-day, Fixed time, runtime null, ontbrekende platform/afleveringstitel), hash (locatie, tijdzone), preferences-validatie, probe met beide vormen, redirects in smoke.
+- Smoke: paden `/volgen`, `/uitnodiging`, `/beheer/*` (regels 99-100, 155-168, 216, 221, 229-233), `aria-label` (231), linktekst "Lees verder op TVmaze" (224); nieuwe asserts voor redirects, `lang="en"`, landingpagina-inhoud, beheerder/contact op `/privacy` en afwezigheid van privégegevens.
+- Beide simulatoren (`tests/simulated-calendar.ts:26,36`, `tests/calendar-probe.test.ts:37`) geven nu de body letterlijk terug. Ze worden aangepast naar Google-gedrag: `dateTime` in de readback mét offset (berekend uit `timeZone`), PATCH als geneste samenvoeging waarbij `null` een veld wist, en een insert die `null`-velden negeert. Daarmee falen letterlijke vergelijkingen en ontbrekende `null`-velden in de tests zoals ze in productie zouden falen.
+- Nieuwe tests: factory (All-day, Fixed time, runtime null, ontbrekende platform/afleveringstitel), canonieke hash (offset, locatie, tijdzone), schrijfcontract bij vormwissel, datumadministratie (`lastDate`, `eventDate`, ingetrokken datum na verschuiving), overzicht `linked`, export, preferences-validatie, probe met beide vormen en offset-readback, redirects in smoke.
 
 ## 12. Bestanden
 
 | Gebied | Bestanden |
 | --- | --- |
-| Afspraakmodel | `src/server/google-calendar.ts`, `src/server/sync.ts`, `src/server/services.ts`, `src/server/calendar-probe.ts`, `src/app/settings/trial-panel.tsx` |
-| Voorkeur | `prisma/schema.prisma` + migratie, `src/server/preferences.ts`, `src/app/api/settings/preferences/route.ts`, `src/app/settings/preferences-panel.tsx` |
+| Afspraakmodel | `src/server/google-calendar.ts`, `src/server/sync.ts`, `src/server/services.ts`, `src/server/overview.ts`, `src/server/agenda.ts`, `src/server/calendar-probe.ts`, `src/app/settings/trial-panel.tsx`, `tests/simulated-calendar.ts`, `tests/calendar-probe.test.ts` (simulator) |
+| Voorkeur | `prisma/schema.prisma` + migratie, `src/server/preferences.ts`, `src/app/api/settings/preferences/route.ts`, `src/app/settings/preferences-panel.tsx`, `src/server/privacy.ts` (export), `tests/privacy.test.ts` |
 | Engels | alle bestanden uit de inventaris in §3.1; `src/lib/series-list.ts`; `src/server/errors.ts`; `src/server/privacy.ts` (DELETE) |
 | Routes | `next.config.ts`; mappen `src/app/volgen` → `following`, `uitnodiging` → `invitation`, `beheer/*` → `admin/*`; `navigation.tsx`; `invitations.ts`; `invitation-entry.tsx`; `agenda-panel.tsx`; `admin-users-panel.tsx` |
 | Landing en privacy | `src/app/page.tsx`, `src/app/layout.tsx`, `src/app/manifest.ts`, `src/app/privacy/page.tsx` |
@@ -243,16 +261,48 @@ Geen contract- of destroy-fase. Uitrol volgens `deploy/README.md` (release bouwe
 - **PATCH-golf na uitrol.** Begrensd door het venster; bij 25 series van JP hoogstens enkele tientallen PATCHes. Bij meer gebruikers loopt de cron ze sequentieel per gebruiker af zoals nu.
 - **Oude `/uitnodiging`-links.** Afgedekt door de redirect plus fragmentbehoud; 72 uur geldigheid beperkt de blootstelling.
 - **Consentscherm-scopes wijken af van de code.** Vóór publiceren controleren (§8 stap 2); anders blijft het waarschuwingsscherm ook na verificatie.
-- **Grens van 100 nieuwe gebruikers.** Levenslang per project; de admin-gebruikerslijst is de teller. Bij nadering vóór verificatie: wachten met uitnodigen.
+- **Grens van 100 nieuwe gebruikers.** Levenslang per project en zonder teller aan Google-zijde; het handmatige budget uit §8 stap 8 is de bewaking. Bij 50 vóór verificatie: wachten met uitnodigen.
+- **Rollback na Fixed time.** Alleen schoon zolang niemand Fixed time gebruikt (§9); daarna forward-fix.
 
 ## 14. Onderbouwing
 
 Codebasis `origin/main` `1554c6a`, gelezen op 8 oktober 2026 in een losse checkout: `src/server/sync.ts`, `google-calendar.ts`, `calendar-probe.ts`, `preferences.ts`, `services.ts`, `auth.ts`, `google-connection.ts`, `privacy.ts`, `errors.ts`, `src/app/page.tsx`, `layout.tsx`, `privacy/page.tsx`, `navigation.tsx`, `uitnodiging/*`, `next.config.ts`, `tests/*`, `scripts/smoke-http.mjs`, `deploy/README.md`, `docs/praktijkproef.md`. Google: [Calendar-scopes](https://developers.google.com/workspace/calendar/api/auth), [Events-velden](https://developers.google.com/workspace/calendar/api/v3/reference/events), [verificatie](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification), [app-audience en publicatiestatus](https://support.google.com/cloud/answer/15549945), [onverifieerde apps](https://support.google.com/cloud/answer/7454865). Scrum4Me: `grills/idea-241-verkenning` rev. 3, `specs/idea-219-specificatie`, tijdlijn IDEA-241 (besluiten 1-14 en het besluit van 8 oktober over §2).
 
+## 15. Open punten voor JP (geen stap-1-werk)
+
+- Ontvolgen verwijdert nu alle eigen agenda-items van de serie, ook uit het verleden (`sync.ts:84-92`, `:112-124`), terwijl de grill zegt "eerdere afspraken blijven als agendahistorie staan". Keuze: R2-gedrag houden (grill aanpassen) of in stap 4 alleen items vanaf vandaag verwijderen.
+
 ## Review record
 
 Review-loop volgens `~/.claude/skills/review-loop` (fase spec, maximaal 10 rondes, twee dispatch-jobs: codex en claude). In opdracht van JP, 8 oktober 2026.
 
-| Ronde | Status |
-| --- | --- |
-| 1 | gestart 8 oktober 2026; details volgen hieronder zodra de jobs zijn ingediend |
+### Ronde 1 — 8 oktober 2026, document v0.2 op commit `c4733dc0c6601ef9c2d4307dfa4165cc2bcf5490`
+
+Pins: `docs/specs/IDEA-241-stap-1.md` (sha256 `7e952a2e…8923f`), `docs/grills/IDEA-241-verkenning.md` rev. 3 (`7634dfee…5620`), `AGENTS.md` (`7bfbc5b0…4ba9`); `repository.base_sha` = dezelfde commit.
+
+| Slot | Request | root_message | Job | Idempotency | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| codex (`runtime: CODEX`) | `410c9e25-695c-43ef-88ab-2eb6f04c5e53` | `d35eaa7b-5fdc-4b37-8264-74af7491626f` | via dispatch | `1ac22d46-c982-4db6-9908-cd4945d20e00` | **NO-GO** — 2 BLOCKER, 4 MAJOR, 2 MINOR |
+| claude (`runtime: CLAUDE`) | `852a10db-ca27-454f-9595-da7bfe16f371` | `ebd8f3f8-dc06-42a5-b2af-4ebbb9cca201` | `b9b0af55-d9e8-4367-9515-6d0e2449f81a` | `5282c4e6-963a-4451-a52d-f3f48cca7b58` | **NO-GO** — 1 BLOCKER, 1 MAJOR, 9 MINOR |
+
+Triage (alle bevindingen tegen de tree gecontroleerd; geen afwijzingen):
+
+| # | Bevinding (bron) | Controle | Remedie in v0.3 |
+| --- | --- | --- | --- |
+| 1 | BLOCKER (beiden): readback van `dateTime` komt mét offset terug; letterlijke hash/vergelijking faalt in `confirm` (`sync.ts:199`), `:251` en de proefcontrole | bevestigd (`sync.ts:18-23`, `:199`, `calendar-probe.ts:76`; simulatoren echoën de body) | canonieke vergelijking op tijdstip + `timeZone` (§4.1); simulatoren geven offset terug (§11); A3/A6 |
+| 2 | BLOCKER (codex) / MINOR (claude): `lastDate` en venstercontrole lezen `start.date`, leeg voor tijdgebonden items (`sync.ts:203,212,218`) | bevestigd | `eventDate`-helper, `lastDate` = afleveringsdatum (§4.1); A12 |
+| 3 | MAJOR (claude): PATCH voegt geneste velden samen; vormwissel convergeert niet zonder expliciete `null` | aanvaard op basis van Google-patch-semantiek; simulator verbergt het (`simulated-calendar.ts:36`) | schrijfcontract met `null`-velden (§4.2); simulator met merge-semantiek (§11); rollback gekwalificeerd (§9); A5 |
+| 4 | MAJOR (codex) / MINOR (claude): `overview.ts:31` bouwt de gewenste afspraak zelf en mist de nieuwe invoer | bevestigd | gedeelde factory met `currentSettings` (§4.5); `overview.ts`/`agenda.ts` in §12; A12 |
+| 5 | MAJOR (codex): venster beschreven als hard filter; `oldDate`/`lastDate`/kandidaat/pending laten correctie buiten het venster toe (`tests/sync.test.ts:137-145`) | bevestigd | §2-rij en §4.3 herschreven met de volledige regel; A4 op vaste set, productie met uitleg |
+| 6 | MAJOR (codex): §8 publiceert zonder het §5-bewijs | bevestigd (grill bouwvolgorde stap 1) | §5-bewijs als voorwaarde in §8 stap 1; A9 |
+| 7 | MAJOR (codex): admin-gebruikerslijst is geen levenslange teller (`privacy.ts:100`, `google-connection.ts:129`) | bevestigd | SCHRAP; handmatig budget in runbook (§8 stap 8, §13) |
+| 8 | MINOR (beiden): twee proeven op dezelfde datum geven één proef (`Probe @@unique([userId,date])`) | bevestigd | andere datum in §5 stap 5 |
+| 9 | MINOR (codex): export mist nieuwe voorkeuren (`privacy.ts:19`) | bevestigd | §4.4, §12, A12 |
+| 10 | MINOR (claude): "oudere afspraken nooit aangeraakt" klopt niet voor ontvolgen (`sync.ts:84-92`) | bevestigd | §2-rij gekwalificeerd; open punt §15 |
+| 11 | MINOR (claude): §11 mist `sync.test.ts:129,143`, smoke 216/221; `AppError`-telling 113/28 | bevestigd | §3.1, §11 |
+| 12 | MINOR (claude): A1-grep slecht gedefinieerd (`Agenda`, `serie`/`series`) | bevestigd | A1 herschreven |
+| 13 | MINOR (claude): grants uit Testing vervallen na 7 dagen; herverbinden ontbreekt | bevestigd (`google-tokens.ts:42-43`) | §5 stap 1, §8 stap 5 |
+| 14 | MINOR (claude): lijst "zonder sessie bereikbaar" onvolledig (`/api/auth/*`, exchange, cron, images) | bevestigd | §6 |
+| 15 | MINOR (claude): beheerder/contact moeten gezet zijn vóór publicatie | bevestigd (`privacy/page.tsx:8,15`) | §8 stap 1, A8 |
+
+Scope-delta ronde 1: geen werk toegevoegd buiten de besluiten; toegevoegd binnen stap 1 zijn de canonieke vergelijking, het PATCH-contract, de datumhelper, de gedeelde factory en de export-uitbreiding (alle noodzakelijk om Fixed time werkend te krijgen); het praktijkbewijs is uitgebreid met de vormwissel op echte afspraken en is nu een harde voorwaarde vóór publicatie. Eerste bruikbare resultaat ongewijzigd.
