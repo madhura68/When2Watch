@@ -6,8 +6,8 @@ import { getPreferences } from "./preferences";
 
 export async function agendaOverview(userId: string, origin: string, now = new Date(), db: PrismaClient = database()) {
   const preferences = await getPreferences(userId, db);
-  const window = agendaWindow(now, preferences.timeZone, preferences.agendaMonths);
   const data = await overview(userId, db, now, origin);
+  const window = agendaWindow(now, data.timeZone, preferences.agendaMonths);
   const episodes = data.shows.flatMap(show => show.upcoming
     .filter(episode => episode.date >= window.from && episode.date < window.untilExclusive)
     .map(episode => ({ ...episode, show: { id: show.id, title: show.title, sourceUrl: show.sourceUrl, platform: show.platform, bannerUrl: show.bannerUrl, backgroundUrl: show.backgroundUrl, poster: show.poster, error: show.error } })))

@@ -66,6 +66,9 @@ export class CalendarProbeService {
     try {
       event = await this.google.event(probe.calendarId, probe.eventId);
     } catch (error) {
+      if (error instanceof AppError && probe.status === "created" && ["NOT_FOUND", "GONE"].includes(error.code)) {
+        throw new AppError("EVENT_CHANGED", 409, "The probe event was changed or removed. Check it in your calendar.");
+      }
       if (!(error instanceof AppError) || error.code !== "NOT_FOUND" || probe.status !== "prepared") throw error;
       if (!futureDate) throw new AppError("PROBE_DATE_PASSED", 409, "Google has no test event on this date. Choose a new date to run the test.");
       try { await this.google.insert(probe.calendarId, JSON.parse(probe.requestJson) as CalendarEvent); }

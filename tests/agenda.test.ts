@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agendaWindow } from "@/lib/agenda-range";
+import { overview } from "@/server/overview";
 import { agendaOverview } from "@/server/agenda";
 import { savePreferences } from "@/server/preferences";
 import { testDatabase } from "./database";
@@ -53,6 +54,28 @@ describe("local Agenda reads", () => {
     expect(result.groups.flatMap(g => g.episodes).every(e => !e.linked && e.show.title !== "Private")).toBe(true);
     expect((await agendaOverview("nobody",  "https://when2watch.example.test",  new Date("2026-09-24T12:00:00Z"),  db)).groups).toEqual([]);
     expect(await db.userPreferences.count()).toBe(0);
+  });
+
+  it.each([
+    ["+02:00", "2026-12-01T22:30:00Z", "2026-12-01"],
+    ["asia/kolkata", "2026-10-08T20:00:00Z", "2026-10-08"],
+  ])("uses the same effective day as Following for legacy zone %s", async (zone, instant, date) => {
+    storage = testDatabase(); const db = storage.db;
+    await db.user.create({ data: { id: "owner", accessStatus: "ACTIVE" } });
+    // Existing preferences predate strict IANA validation; reads must share its fallback.
+    await db.userPreferences.create({ data: { userId: "owner", timeZone: zone } });
+    const show = await db.catalogShow.create({ data: { tvmazeId: 1, title: "Day boundary", status: "Running", sourceUrl: "https://www.tvmaze.com/shows/1" } });
+    await db.userFollow.create({ data: { userId: "owner", catalogShowId: show.id } });
+    await db.catalogEpisode.create({ data: { catalogShowId: show.id, sourceId: 1, title: "Today", airdate: date, sourceUrl: "https://www.tvmaze.com/episodes/1" } });
+    vi.stubGlobal("fetch", () => { throw Error("Local reads must not call providers"); });
+    const now = new Date(instant), origin = "https://when2watch.example.test";
+    const following = await overview("owner", db, now, origin);
+    expect(following.timeZone).toBe("Europe/Amsterdam");
+    expect(following.shows[0].upcoming.map(e => e.date)).toEqual([date]);
+    const agenda = await agendaOverview("owner", origin, now, db);
+    expect(agenda.window.from).toBe(date);
+    expect(agenda.groups.map(g => g.date)).toEqual([date]);
+    expect(agenda.preferences.timeZone).toBe(zone);
   });
 
   it("changes only the visible horizon and preserves event identities, hashes and Google writes after reopen", async () => {

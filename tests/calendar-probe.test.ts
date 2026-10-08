@@ -15,6 +15,7 @@ function simulatedGoogle() {
   const writes: string[] = [];
   let role = "owner";
   let loseInsertResponse = false;
+  let missingStatus = 404;
   let insertPause: { entered: () => void; wait: Promise<void> } | null = null;
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -45,9 +46,10 @@ function simulatedGoogle() {
       events.delete(id);
       return new Response(null, { status: 204 });
     }
-    return events.has(id) ? Response.json(events.get(id)) : Response.json({}, { status: 404 });
+    return events.has(id) ? Response.json(events.get(id)) : Response.json({}, { status: missingStatus });
   };
   return { events, writes, fetcher, role: (value: string) => { role = value; }, loseResponse: () => { loseInsertResponse = true; },
+    missingResponse: (status: number) => { missingStatus = status; },
     pauseNextInsert: () => {
       let entered!: () => void;
       let resume!: () => void;
@@ -189,6 +191,16 @@ describe("Calendar trial using real SQLite and simulated Google HTTP", () => {
     const probe=await service.create("owner","2026-09-24");
     const event=google.events.get(probe.eventId)!;event[field]=field==="status"?"cancelled":"Changed in Google";
     await expect(service.create("owner","2026-09-24")).rejects.toMatchObject({code:"EVENT_CHANGED",status:409});
+  });
+
+  it.each([404, 410])("reports EVENT_CHANGED for a missing created probe (GET %s) without recreating it", async status => {
+    const probe = await service.create("owner", "2026-09-24");
+    expect(probe.status).toBe("created");
+    google.events.delete(probe.eventId);google.missingResponse(status);
+    const before = [...google.writes];
+    await expect(service.create("owner", "2026-09-24")).rejects.toMatchObject({ code: "EVENT_CHANGED", status: 409 });
+    expect(google.writes).toEqual(before);
+    expect((await database.db.probe.findUniqueOrThrow({where:{id:probe.id}})).status).toBe("created");
   });
 
 });
