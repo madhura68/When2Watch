@@ -1,7 +1,11 @@
+import legacy from "./fixtures/calendar/legacy-event.json";
+import { savePreferences } from "@/server/preferences";
+import { loadSyncSettings } from "@/server/sync-settings";
+import type { CalendarEvent } from "@/server/google-calendar";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import raw from "./fixtures/tvmaze/slow-horses.json";
 import { parseSnapshot } from "@/server/tvmaze";
-import { SyncService } from "@/server/sync";
+import { calendarEventHash, eventDate, SyncService } from "@/server/sync";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { AppError } from "@/server/errors";
 import { legacySqliteDatabase, testDatabase } from "./database";
@@ -126,8 +130,8 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   const first=await service.add("owner",45039);
   expect(first.status).toBe("success");expect(first.series[0]).toMatchObject({created:5,failed:0});
   expect(active()).toHaveLength(5);
-  expect(active()[0]).toMatchObject({summary:"Slow Horses S06E02 — Daddy Issues",start:{date:"2026-09-23"},end:{date:"2026-09-24"},transparency:"transparent"});
-  expect(active()[0].description).toContain("Oorspronkelijke uitzenddatum");
+  expect(active()[0]).toMatchObject({summary:"Slow Horses · S06E02 · Daddy Issues",start:{date:"2026-09-23"},end:{date:"2026-09-24"},transparency:"transparent"});
+  expect(active()[0].description).toContain("Original release date");
   expect(active()[0].extendedProperties.private).toMatchObject({app:"when2watch",userId:"owner",showId:"45039",episodeId:"3643506"});
   google.writes.length=0;
   const second=await service.add("owner",45039);
@@ -140,7 +144,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   episode.airdate="2026-09-10";episode.name="Corrected title";episode.url="https://www.tvmaze.com/episodes/3643506/corrected";
   const result=await service.sync("owner","manual");
   expect(result.series[0].updated).toBe(1);
-  expect(google.events.get(id)).toMatchObject({summary:"Slow Horses S06E02 — Corrected title",start:{date:"2026-09-10"}});
+  expect(google.events.get(id)).toMatchObject({summary:"Slow Horses · S06E02 · Corrected title",start:{date:"2026-09-10"}});
   expect(google.events.get(id).description).toContain("/corrected");expect(google.writes.map(w=>w.method)).toEqual(["PATCH"]);
  });
  it("does not mutate events on invalid source data or guess an unknown date",async()=>{
@@ -220,4 +224,58 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   expect((await service.sync("owner","manual")).status).toBe("success");
   expect((await displayed()).linked).toBe(true);
  });
+ it("switches both event styles on stable IDs, confirms readback and updates linked state",async()=>{
+  await service.add("owner",45039);const ids=active().map(e=>e.id).sort();google.writes.length=0;
+  const dynamicService=()=>new SyncService(storage.db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,async()=>({...await loadSyncSettings("owner",storage.db),origin:config.origin}),()=>now,{sourceMaxAgeMs:0});
+  await savePreferences("owner",{eventMode:"FIXED_TIME",eventTime:"20:00"},storage.db);
+  const view=()=>overview("owner",storage.db,now,config.origin);
+  expect((await view()).shows[0].upcoming.every(e=>!e.linked)).toBe(true);
+  expect((await dynamicService().sync("owner","manual")).series[0]).toMatchObject({created:0,updated:5,deleted:0,failed:0});
+  expect(active().map(e=>e.id).sort()).toEqual(ids);
+  expect(google.writes.every(w=>w.method==="PATCH" && w.body.start.date===null && w.body.end.date===null)).toBe(true);
+  expect(active().every(e=>!e.start.date && !!e.start.dateTime)).toBe(true);
+  expect((await view()).shows[0].upcoming.every(e=>e.linked)).toBe(true);
+  const links=await storage.db.calendarEventLink.findMany({include:{catalogEpisode:true}});
+  expect(links.every(l=>l.lastDate===l.catalogEpisode!.airdate)).toBe(true);
+  google.writes.length=0;await dynamicService().sync("owner","manual");expect(google.writes).toEqual([]);
+  await savePreferences("owner",{eventMode:"ALL_DAY"},storage.db);
+  expect((await view()).shows[0].upcoming.every(e=>!e.linked)).toBe(true);
+  await dynamicService().sync("owner","manual");
+  expect(google.writes.every(w=>w.method==="PATCH" && w.body.start.dateTime===null && w.body.start.timeZone===null)).toBe(true);
+  expect(active().every(e=>!!e.start.date && !e.start.dateTime && !e.start.timeZone)).toBe(true);
+  expect(active().map(e=>e.id).sort()).toEqual(ids);
+  expect((await view()).shows[0].upcoming.every(e=>e.linked)).toBe(true);
+  google.writes.length=0;await dynamicService().sync("owner","manual");expect(google.writes).toEqual([]);
+ });
+ it("upgrades a fixed confirmed legacy set by PATCH only on the same identities",async()=>{
+  await service.add("owner",45039);const ids=active().map(e=>e.id).sort();
+  for(const link of await storage.db.calendarEventLink.findMany()) {
+   const event=google.events.get(link.eventId);event.summary="Legacy Dutch title";event.description="Oorspronkelijke uitzenddatum";
+   await storage.db.calendarEventLink.update({where:{id:link.id},data:{desiredJson:JSON.stringify(event),confirmedDesiredHash:calendarEventHash(event),confirmedRemoteHash:calendarEventHash(event)}});
+  }
+  google.writes.length=0;const result=await service.sync("owner","manual");
+  expect(result.series[0]).toMatchObject({created:0,updated:5,deleted:0,failed:0});
+  expect(google.writes.map(w=>w.method)).toEqual(Array(5).fill("PATCH"));expect(active().map(e=>e.id).sort()).toEqual(ids);
+ });
+ it("removes a shifted timed event when its source date is withdrawn",async()=>{
+  const timed=new SyncService(storage.db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,{...config,eventMode:"FIXED_TIME",eventTime:"20:00"},()=>now,{sourceMaxAgeMs:0});
+  await timed.add("owner",45039);const ep=input._embedded.episodes.find(e=>e.id===3643506)!;
+  const remote=active().find(e=>e.extendedProperties.private.episodeId==="3643506")!;
+  remote.start.dateTime="2026-09-10T20:00:00+02:00";remote.end.dateTime="2026-09-10T21:00:00+02:00";
+  // Catalog refresh already withdrew the date: lastDate is now the only in-window signal.
+  await storage.db.catalogEpisode.updateMany({where:{sourceId:3643506},data:{airdate:null}});ep.airdate="";
+  expect((await timed.sync("owner","manual")).series[0].deleted).toBe(1);
+ });
+
+});
+
+it("keeps legacy all-day hashes compatible and canonicalizes timed readback",()=>{
+ expect(calendarEventHash(legacy.event as CalendarEvent)).toBe(legacy.hash);
+ const a:CalendarEvent={...legacy.event as CalendarEvent,start:{dateTime:"2026-10-09T20:00:00+02:00",timeZone:"Europe/Amsterdam"},end:{dateTime:"2026-10-09T21:00:00+02:00",timeZone:"Europe/Amsterdam"}};
+ const b={...a,start:{...a.start,dateTime:"2026-10-09T18:00:00Z"},end:{...a.end,dateTime:"2026-10-09T19:00:00Z"}};
+ expect(calendarEventHash(a)).toBe(calendarEventHash(b));
+ expect(calendarEventHash(a)).not.toBe(calendarEventHash({...a,start:{...a.start,timeZone:"America/New_York"}}));
+ expect(calendarEventHash(a)).not.toBe(calendarEventHash({...a,location:"Netherlands: Example"}));
+ expect(calendarEventHash({...legacy.event as CalendarEvent,start:{date:"2026-09-01",timeZone:"Europe/Amsterdam"}})).toBe(legacy.hash);
+ expect(eventDate({...a,start:{dateTime:"2026-10-09T04:00:00+02:00",timeZone:"America/New_York"}},"Europe/Amsterdam")).toBe("2026-10-08");
 });

@@ -1,3 +1,4 @@
+import legacy from "../fixtures/calendar/legacy-event.json";
 import { afterEach, expect, it } from "vitest";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { SyncService } from "@/server/sync";
@@ -56,4 +57,18 @@ it("refuses any Calendar mutation through the read-only fetcher", async () => {
   const fetcher = readOnlyFetch(async () => Response.json({}));
   await expect(fetcher("https://www.googleapis.com/calendar/v3/calendars/x/events", { method: "POST" })).rejects.toThrow(/read-only/);
   await expect(fetcher("https://www.googleapis.com/calendar/v3/calendars/x/events/y", { method: "DELETE" })).rejects.toThrow(/read-only/);
+});
+
+it("classifies frozen legacy Dutch content as source change without invalidating its remote hash",async()=>{
+ const {db,google,readOnly}=await migratedOwner();
+ const link=await db.calendarEventLink.findFirstOrThrow({include:{catalogEpisode:true}});
+ // Literal pre-step-1 fixture: hash computed from old array, never from the new hash function.
+ // Use the episode with the fixture's immutable marker to keep its fixed hash meaningful.
+ const episode=await db.catalogEpisode.findFirstOrThrow({where:{sourceId:3643506}});
+ await db.calendarEventLink.deleteMany();
+ await db.calendarEventLink.create({data:{userId:"owner",bindingId:link.bindingId,catalogEpisodeId:episode.id,calendarId:config.calendarId,eventId:legacy.event.id,status:"synced",lastDate:"2026-09-01",desiredJson:JSON.stringify(legacy.event),confirmedDesiredHash:legacy.hash,confirmedRemoteHash:legacy.hash}});
+ google.events.clear();google.events.set(legacy.event.id,{...legacy.event,etag:'"legacy"'});
+ const report=await readbackOwnEvents(db,readOnly,"owner",config.calendarId,config.origin);
+ expect(report).toMatchObject({links:1,remoteChanged:0,sourceChanged:1,unchanged:0});
+ expect(readbackNeedsAttention(report)).toBe(false);expect(google.writes).toEqual([]);
 });

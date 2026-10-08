@@ -4,18 +4,25 @@ export type Reminder = { method: "popup" | "email"; minutes: number };
 export type CalendarInfo = {
   id: string; summary: string; timeZone: string; accessRole: string; defaultReminders: Reminder[];
 };
+export type EventPart = { date?: string | null; dateTime?: string | null; timeZone?: string | null };
 export type CalendarEvent = {
   id: string;
   summary?: string;
   description?: string;
+  location?: string | null;
   status?: string;
   etag?: string;
   transparency?: "transparent" | "opaque";
-  start: { date?: string; dateTime?: string };
-  end: { date?: string; dateTime?: string };
+  start: EventPart;
+  end: EventPart;
   reminders: { useDefault: boolean; overrides?: Reminder[] };
   extendedProperties?: { private?: Record<string, string> };
 };
+
+// google-calendar.ts
+const part = (p?: EventPart | null) => ({ date: p?.date ?? null, dateTime: p?.dateTime ?? null, timeZone: p?.timeZone ?? null });
+export const patchBody = (e: CalendarEvent) => ({ ...e, start: part(e.start), end: part(e.end), location: e.location ?? null });
+export const insertBody = (e: CalendarEvent) => JSON.parse(JSON.stringify(e, (_k, v) => (v === null ? undefined : v)));
 
 export class GoogleCalendar {
   constructor(private readonly token: () => Promise<string>, private readonly fetcher: typeof fetch = fetch) {}
@@ -114,7 +121,7 @@ export class GoogleCalendar {
   }
 
   insert(calendarId: string, event: CalendarEvent): Promise<CalendarEvent> {
-    return this.request(`calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=none`, { method: "POST", body: JSON.stringify(event) });
+    return this.request(`calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=none`, { method: "POST", body: JSON.stringify(insertBody(event)) });
   }
 
   async ownedEpisodes(calendarId: string, userId: string, showId: number): Promise<CalendarEvent[]> {
@@ -139,7 +146,7 @@ export class GoogleCalendar {
 
   patch(calendarId: string, eventId: string, event: CalendarEvent, etag: string): Promise<CalendarEvent> {
     return this.request(`calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`, {
-      method: "PATCH", headers: { "If-Match": etag }, body: JSON.stringify(event),
+      method: "PATCH", headers: { "If-Match": etag }, body: JSON.stringify(patchBody(event)),
     });
   }
 
@@ -152,7 +159,7 @@ export class GoogleCalendar {
 
 export function safeEvent(event: CalendarEvent): CalendarEvent {
   return {
-    id: event.id, summary: event.summary, description: event.description, transparency: event.transparency, status: event.status, etag: event.etag,
+    id: event.id, summary: event.summary, description: event.description, location: event.location, transparency: event.transparency, status: event.status, etag: event.etag,
     start: event.start, end: event.end, reminders: event.reminders,
     extendedProperties: event.extendedProperties,
   };

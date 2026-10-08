@@ -1,3 +1,4 @@
+import { resolveWallTime, localDateIn } from "./event-time";
 import type { SyncSettings } from "./sync-settings";
 import { desiredEpisodeEvent, markers } from "./episode-event";
 import { createHash, randomUUID } from "node:crypto";
@@ -5,7 +6,7 @@ import type { CalendarBinding, CalendarEventLink, CatalogEpisode, CatalogShow, P
 import { localDate } from "@/lib/dates";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { AppError } from "./errors";
-import { GoogleCalendar, type CalendarEvent } from "./google-calendar";
+import { GoogleCalendar, type CalendarEvent, type EventPart } from "./google-calendar";
 import { ensureCatalogSnapshot, refreshCatalogArtwork, type CatalogSource } from "./catalog";
 import { bindingUsable } from "./calendar-bindings";
 
@@ -15,12 +16,24 @@ export type SyncConfiguration = SyncSettings & { origin: string };
 export type SyncSource = Pick<CatalogSource, "snapshot"> & Partial<Pick<CatalogSource, "artwork">>;
 type EpisodeWithLinks = CatalogEpisode & { links: CalendarEventLink[] };
 const failure = (error: unknown) => error instanceof AppError ? error.message : "Synchroniseren is onderbroken. Probeer opnieuw; bewaarde koppelingen blijven behouden.";
+// sync.ts — canonical hash; the array equals today's for all-day events without location
+const instantOf = (part?: EventPart | null): string | null => {
+  if (!part?.dateTime) return null;
+  const withOffset = /(Z|[+-]\d\d:\d\d)$/.test(part.dateTime);
+  return (withOffset ? new Date(part.dateTime) : resolveWallTime(part.dateTime.slice(0, 10), part.dateTime.slice(11, 16), part.timeZone ?? "UTC")).toISOString();
+};
 export const calendarEventHash = (event: CalendarEvent) => createHash("sha256").update(JSON.stringify([
-  event.summary ?? "", event.description ?? "", event.start?.date ?? null, event.start?.dateTime ?? null,
-  event.end?.date ?? null, event.end?.dateTime ?? null, event.transparency ?? "opaque",
+  event.summary ?? "", event.description ?? "", event.start?.date ?? null, instantOf(event.start),
+  event.end?.date ?? null, instantOf(event.end), event.transparency ?? "opaque",
   event.reminders?.useDefault ?? false, event.reminders?.overrides ?? [],
-  Object.entries(event.extendedProperties?.private ?? {}).sort(([a],[b]) => a.localeCompare(b)),
+  Object.entries(event.extendedProperties?.private ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+  ...(event.start?.dateTime ? [event.start.timeZone ?? null, event.end?.timeZone ?? null] : []),
+  ...(event.location ? [event.location] : []),
 ])).digest("hex");
+export const eventDate = (event: CalendarEvent, fallbackZone: string): string | null => {
+  const iso = instantOf(event.start);
+  return event.start?.date ?? (iso ? localDateIn(new Date(iso), event.start?.timeZone ?? fallbackZone) : null);
+};
 const pending = (link?: CalendarEventLink) => !!link && ["prepared", "updating", "deleting"].includes(link.status);
 
 
@@ -183,17 +196,17 @@ export class SyncService {
     catch (error) { if (error instanceof AppError && [404,410].includes(error.status)) return null; throw error; }
   }
 
-  private async confirm(link: CalendarEventLink, desired: CalendarEvent, userId: string, showId: number, episodeId: number): Promise<void> {
+  private async confirm(link: CalendarEventLink, desired: CalendarEvent, userId: string, showId: number, episode: CatalogEpisode): Promise<void> {
     const event = await this.read(link.eventId);
     if (!event) throw new AppError("EVENT_UNCONFIRMED", 502, "Google heeft het agenda-item nog niet bevestigd. Probeer opnieuw.");
-    this.assertOwned(event,userId,showId,episodeId);
+    this.assertOwned(event,userId,showId,episode.sourceId);
     // Google canonicalizes all-day defaults. Remember its confirmed representation
     // separately from the desired payload, so unchanged runs perform no writes.
     if (event.id !== desired.id || calendarEventHash({ ...event, reminders: desired.reminders }) !== calendarEventHash(desired)) {
       throw new AppError("EVENT_UNCONFIRMED", 502, "Het teruggelezen agenda-item wijkt af. Probeer opnieuw.");
     }
     await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "synced", desiredJson: JSON.stringify(desired),
-      lastDate: desired.start.date, confirmedDesiredHash: calendarEventHash(desired), confirmedRemoteHash: calendarEventHash(event) } });
+      lastDate: episode.airdate, confirmedDesiredHash: calendarEventHash(desired), confirmedRemoteHash: calendarEventHash(event) } });
   }
 
   private async syncEpisode(userId: string, show: CatalogShow, binding: CalendarBinding, episode: EpisodeWithLinks, oldDate: string | null,
@@ -202,13 +215,13 @@ export class SyncService {
     const within = (date: string | null | undefined) => !!date && date >= cutoff;
     const candidates = allRemote.filter(e => e.status !== "cancelled" && Object.entries(markers(userId, show.tvmazeId, episode.sourceId)).every(([k,v]) => e.extendedProperties?.private?.[k] === v));
     // Missing mappings can still have an owned remote date inside the window.
-    if (!within(episode.airdate) && !within(oldDate) && !within(link?.lastDate) && !candidates.some(e => within(e.start?.date)) && !pending(link)) return;
+    if (!within(episode.airdate) && !within(oldDate) && !within(link?.lastDate) && !candidates.some(e => within(eventDate(e, this.settings.timeZone))) && !pending(link)) return;
     if (candidates.length > 1) throw new AppError("DUPLICATE_EVENTS", 409, "Meerdere eigen agenda-items voor deze aflevering gevonden. Los dit conflict eerst op.");
     let event: CalendarEvent | null = candidates[0] ?? (link ? await this.read(link.eventId) : null);
     if (event) this.assertOwned(event,userId,show.tvmazeId,episode.sourceId);
     if (event && link && event.id !== link.eventId && link.status !== "deleted") throw new AppError("EVENT_CONFLICT", 409, "De opgeslagen koppeling wijkt af van het gevonden agenda-item.");
     const ownership = { userId, bindingId: binding.id, catalogEpisodeId: episode.id, calendarId: binding.calendarId };
-    if (!link && event) link = await this.db.calendarEventLink.create({ data: { ...ownership, eventId: event.id, status: "synced", desiredJson: "{}", lastDate: event.start?.date ?? null } });
+    if (!link && event) link = await this.db.calendarEventLink.create({ data: { ...ownership, eventId: event.id, status: "synced", desiredJson: "{}", lastDate: eventDate(event, this.settings.timeZone) } });
 
     const wanted = episode.present && episode.airdate !== null;
     if ((!wanted || link?.status === "deleting") && link && link.status !== "deleted") {
@@ -238,14 +251,14 @@ export class SyncService {
       await this.db.calendarEventLink.update({ where: { id: link.id }, data: { desiredJson: JSON.stringify(desired), status: "prepared" } });
       try { await this.google.insert(binding.calendarId, desired); }
       catch (error) { if (!(error instanceof AppError && error.status === 409)) throw error; }
-      await this.confirm(link,desired,userId,show.tvmazeId,episode.sourceId); result.created++; return;
+      await this.confirm(link,desired,userId,show.tvmazeId,episode); result.created++; return;
     }
     if (link.confirmedDesiredHash === calendarEventHash(desired) && link.confirmedRemoteHash === calendarEventHash(event)) { result.unchanged++; return; }
     if ((!link.confirmedDesiredHash || pending(link)) && calendarEventHash({ ...event, reminders: desired.reminders }) === calendarEventHash(desired)) {
-      await this.confirm(link,desired,userId,show.tvmazeId,episode.sourceId); result.unchanged++; return;
+      await this.confirm(link,desired,userId,show.tvmazeId,episode); result.unchanged++; return;
     }
     await this.db.calendarEventLink.update({ where: { id: link.id }, data: { desiredJson: JSON.stringify(desired), status: "updating" } });
     await this.google.patch(binding.calendarId, event.id, desired, event.etag!);
-    await this.confirm(link,desired,userId,show.tvmazeId,episode.sourceId); result.updated++;
+    await this.confirm(link,desired,userId,show.tvmazeId,episode); result.updated++;
   }
 }

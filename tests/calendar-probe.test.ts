@@ -1,3 +1,4 @@
+import { storedEvent } from "./calendar-transport";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { CalendarProbeService } from "@/server/calendar-probe";
@@ -34,7 +35,7 @@ function simulatedGoogle() {
         gate.entered(); await gate.wait;
       }
       if (events.has(event.id)) return Response.json({}, { status: 409 });
-      events.set(event.id, { ...event, etag: '"version-1"', status: "confirmed" });
+      events.set(event.id, { ...storedEvent({},event), etag: '"version-1"', status: "confirmed" });
       if (loseInsertResponse) { loseInsertResponse = false; throw new TypeError("network connection lost after insert"); }
       return Response.json(events.get(event.id));
     }

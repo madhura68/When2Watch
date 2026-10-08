@@ -1,0 +1,27 @@
+{
+  "event": {
+    "id": "legacy-event",
+    "summary": "Slow Horses S06E01 — Legacy",
+    "description": "Oorspronkelijke uitzenddatum volgens TVmaze; beschikbaarheid in Nederland kan afwijken.\nhttps://www.tvmaze.com/episodes/3643505\nBron: TVmaze (CC BY-SA).",
+    "start": {
+      "date": "2026-09-01"
+    },
+    "end": {
+      "date": "2026-09-02"
+    },
+    "transparency": "transparent",
+    "reminders": {
+      "useDefault": false
+    },
+    "extendedProperties": {
+      "private": {
+        "app": "when2watch",
+        "kind": "episode",
+        "userId": "owner",
+        "showId": "45039",
+        "episodeId": "3643506"
+      }
+    }
+  },
+  "hash": "8f69fca95e876884b3de78e7fdaf8240e448db761d8f5d9b3ea2a742ee7891b1"
+}
