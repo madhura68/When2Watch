@@ -103,3 +103,22 @@ All-day meldingen in Apple Agenda en Chrome zijn door JP bevestigd op 24 septemb
 ## Broncontracten
 
 TVmaze: [API](https://www.tvmaze.com/api), echte fixtures met ophaaldatum in `tests/fixtures/tvmaze/source.json`; data onder CC BY-SA. Google: [extended properties](https://developers.google.com/workspace/calendar/api/guides/extended-properties) combineert herhaalde private filters met OR. De adapter haalt daarom app-kandidaten op en controleert lokaal alle eigendomsvelden, op alle responsepagina's.
+
+## IDEA-241 Engelse routes
+
+De oude paden `/volgen`, `/uitnodiging`, `/beheer/gebruikers` en `/beheer/series` geven een tijdelijke 307 naar de Engelse routes. Verwijder deze redirects na 30 dagen na de uitrol of in stap 4, met een expliciete beoordeling van nog geldige uitnodigingslinks. Fragmentbehoud wordt op Safari/iPhone en Chrome in P9 bewezen.
+
+## IDEA-241 stap 1 — migratie en herstel
+
+Uitrollen alleen na opdracht van JP voor een concrete beoordeelde release en nadat stap 0 bewezen is. Lees de actuele binding vóór uitrol terug als APP_CREATED. Zet `W2W_PRIVACY_CONTROLLER` en `W2W_PRIVACY_CONTACT` met echte waarden in de private `.env`; controleer dat homepage en privacy ze tonen vóór Production-publicatie.
+
+De expand-migratie `20261008120000_idea241_event_style` voegt EventMode (ALL_DAY/FIXED_TIME) en eventTime toe; bestaande voorkeuren blijven ALL_DAY. Maak eerst de afgeschermde `pg_dump -Fc`, pas de migratie apart toe met `--profile migrate`, start dan de nieuwe webrelease en controleer health vóór `current` wordt omgezet. Geen DDL via de normale start.
+
+Herstel heeft twee gevallen:
+
+1. **Vóór enige Google-write na de uitrol:** zet de backup van vóór de migratie terug; draai `tsx scripts/restore-privacy.ts apply`; pak het compose-bestand van de vorige release uit en start die release. Remote readback vóór cron/appvrijgave. Alleen de vorige image starten met de nieuwe database is onvoldoende: `scripts/start.sh` weigert een onbekende toegepaste migratie.
+2. **Na Google-writes:** voorkeur is forward-fix, zeker zodra Fixed time gebruikt is. Zet nooit blind een oude backup terug: dump eerst de huidige database en behoud de herstelidentiteiten van geschreven items volgens de bestaande herstelregel. Alleen wanneer alle gebruikers terug naar ALL_DAY gesynchroniseerd zijn én de externe staat gecontroleerd is, kan een afzonderlijk beoordeelde terugrol worden overwogen. Anders forward-fix.
+
+De concrete herstelprocedure P8/P9 gaat voor de verkorte rollbackzin in spec §9. Een legacy remote readback kan na stap 1 sourceChanged rapporteren door de nieuwe Engelse gewenste tekst; dat is op zichzelf geen readbackNeedsAttention. remoteChanged/missing/foreign/pending blijven een onderzoeksgate.
+
+Praktijkbewijs: `docs/evidence/idea-241-stap-1.md`; consentstappen: `docs/runbooks/idea-241-production-consent.md`. Publiceren vereist beide eventstijlen en werkelijk ontvangen iPhone-meldingen; elke externe stap blijft een aparte opdracht.

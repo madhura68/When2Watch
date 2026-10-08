@@ -4,7 +4,7 @@ import { AppError } from "./errors";
 
 const hour = 3600_000, day = 24 * hour;
 export type CatalogSource = Pick<EpisodeSource, "snapshot"> & { updates(since: "week" | null): Promise<Map<number, number>>; artwork(id: number): Promise<ShowArtwork> };
-const message = (error: unknown) => error instanceof AppError ? error.message : "TVmaze kon deze serie nu niet leveren. Bestaande gegevens blijven behouden.";
+const message = (error: unknown) => error instanceof AppError ? error.message : "TVmaze could not provide this series right now. Your existing data has been preserved.";
 
 // One process: a show is fetched at most once at a time, whoever asks.
 const shared = globalThis as typeof globalThis & { w2wCatalogFlights?: Map<number, Promise<CatalogShow>> };

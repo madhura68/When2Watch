@@ -62,7 +62,7 @@ describe("own export", () => {
     expect(data.user).toMatchObject({ id: "a", email: "a@example.test" });
     expect(data.follows).toEqual([expect.objectContaining({ tvmazeId: 45039, trying: true })]);
     expect(data.calendars).toHaveLength(1); expect(data.calendarItems).toEqual([expect.objectContaining({ eventId: "evta", tvmazeEpisodeId: 1 })]);
-    expect(data.preferences).toEqual({ agendaMonths: 2, timeZone: "Europe/Amsterdam" });
+    expect(data.preferences).toEqual({ agendaMonths: 2, timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY", eventTime: null });
     for (const forbidden of ["w2w:v1", "refresh", "synthetic-access", "hash-by-a", "hash-for-a", "b@example.test", "b-cal", "evtb", "session-a"]) expect(text).not.toContain(forbidden);
   });
 });
@@ -72,13 +72,13 @@ describe("deleting the own account", () => {
     const storage = testDatabase(); cleanups.push(() => storage.close()); const db = storage.db;
     await seed(db); const journal = await withJournal(db);
     await expect(deleteOwnAccount(db, "a", "session-a", "ja", { journal, now: clock })).rejects.toMatchObject({ code: "CONFIRMATION_REQUIRED" });
-    await expect(deleteOwnAccount(db, "a", "session-b", "VERWIJDEREN", { journal, now: clock })).rejects.toMatchObject({ code: "FRESH_LOGIN_REQUIRED" });
-    await expect(deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal, now: () => new Date(now.getTime() + freshLoginMs) })).rejects.toMatchObject({ code: "FRESH_LOGIN_REQUIRED" });
+    await expect(deleteOwnAccount(db, "a", "session-b", "DELETE", { journal, now: clock })).rejects.toMatchObject({ code: "FRESH_LOGIN_REQUIRED" });
+    await expect(deleteOwnAccount(db, "a", "session-a", "DELETE", { journal, now: () => new Date(now.getTime() + freshLoginMs) })).rejects.toMatchObject({ code: "FRESH_LOGIN_REQUIRED" });
     await db.user.update({ where: { id: "b" }, data: { role: "USER" } });
-    await expect(deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal, now: clock })).rejects.toMatchObject({ code: "LAST_ADMIN" });
+    await expect(deleteOwnAccount(db, "a", "session-a", "DELETE", { journal, now: clock })).rejects.toMatchObject({ code: "LAST_ADMIN" });
     await db.user.update({ where: { id: "b" }, data: { role: "ADMIN" } });
-    await expect(deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal: join(journal, "..", "missing.jsonl"), now: clock })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
-    await expect(deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal: "relative.jsonl", now: clock })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
+    await expect(deleteOwnAccount(db, "a", "session-a", "DELETE", { journal: join(journal, "..", "missing.jsonl"), now: clock })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
+    await expect(deleteOwnAccount(db, "a", "session-a", "DELETE", { journal: "relative.jsonl", now: clock })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
     expect(await db.user.findUniqueOrThrow({ where: { id: "a" } })).toMatchObject({ accessStatus: "ACTIVE" });
     expect(await db.session.count({ where: { userId: "a" } })).toBe(1);
   });
@@ -88,7 +88,7 @@ describe("deleting the own account", () => {
     await seed(db); const journal = await withJournal(db);
     // A failing disk write (independent of file modes, which root ignores in CI).
     const failingWrite = () => { throw new AppError("JOURNAL_UNAVAILABLE", 503, "write failed"); };
-    await expect(deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal, now: clock, append: failingWrite })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
+    await expect(deleteOwnAccount(db, "a", "session-a", "DELETE", { journal, now: clock, append: failingWrite })).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
     expect(await db.user.findUniqueOrThrow({ where: { id: "a" } })).toMatchObject({ accessStatus: "ACTIVE" });
     expect(await db.userFollow.count({ where: { userId: "a" } })).toBe(1); expect(await db.deletionTombstone.count()).toBe(0);
   });
@@ -100,7 +100,7 @@ describe("deleting the own account", () => {
     const flaky = new Proxy(db, { get: (target, key) => key === "$transaction"
       ? (...args: unknown[]) => { if (++transactions === 2) throw Error("database gone"); return (target.$transaction as (...a: unknown[]) => unknown)(...args); }
       : Reflect.get(target, key) });
-    await expect(deleteOwnAccount(flaky, "a", "session-a", "VERWIJDEREN", { journal, now: clock })).rejects.toThrow("database gone");
+    await expect(deleteOwnAccount(flaky, "a", "session-a", "DELETE", { journal, now: clock })).rejects.toThrow("database gone");
     expect(await db.user.findUniqueOrThrow({ where: { id: "a" } })).toMatchObject({ accessStatus: "BLOCKED" });
     expect(readFileSync(journal, "utf8")).toContain('"userId":"a"');
     await expect(reactivateUser(db, "b", "a")).rejects.toMatchObject({ status: 409 });
@@ -116,7 +116,7 @@ describe("deleting the own account", () => {
     const inFlight = new Promise<void>(r => entered = r), gate = new Promise<void>(r => release = r);
     const manual = serializeCalendarMutation("a", async () => { entered(); await gate; }); await inFlight;
     let done = false;
-    const deletion = deleteOwnAccount(db, "a", "session-a", "VERWIJDEREN", { journal, now: clock }).then(r => { done = true; return r; });
+    const deletion = deleteOwnAccount(db, "a", "session-a", "DELETE", { journal, now: clock }).then(r => { done = true; return r; });
     await new Promise(r => setTimeout(r, 200));
     // Access ends at once, deletion waits for the running action.
     expect(done).toBe(false);
@@ -154,7 +154,7 @@ describe("restoring a backup", () => {
     await backup.db.installation.update({ where: { id: "singleton" }, data: { deletionJournalId } });
     expect(await journalTool(live.db, "check", journal)).toEqual({ status: "VALID", entries: 0 });
 
-    await deleteOwnAccount(live.db, "a", "session-a", "VERWIJDEREN", { journal, now: clock });
+    await deleteOwnAccount(live.db, "a", "session-a", "DELETE", { journal, now: clock });
     await expect(journalTool(backup.db, "apply", join(journal, "..", "missing.jsonl"))).rejects.toMatchObject({ code: "JOURNAL_UNAVAILABLE" });
     expect(await journalTool(backup.db, "apply", journal)).toEqual({ status: "APPLIED", journalled: 1, purged: 1 });
     expect(await journalTool(backup.db, "apply", journal)).toEqual({ status: "APPLIED", journalled: 1, purged: 0 });

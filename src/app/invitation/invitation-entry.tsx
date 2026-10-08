@@ -9,7 +9,7 @@ export function InvitationEntry() {
     // Read the fragment once and wipe it from the address bar and history; store it nowhere.
     const match = /(?:^#|&)token=([A-Za-z0-9_-]+)/.exec(window.location.hash);
     token.current = match?.[1] ?? null;
-    window.history.replaceState(null, "", "/uitnodiging");
+    window.history.replaceState(null, "", "/invitation");
     setState(token.current ? "ready" : "invalid");
   }, []);
   async function accept() {
@@ -20,6 +20,6 @@ export function InvitationEntry() {
     if (!response?.ok) return setState("invalid");
     await signIn("google", { callbackUrl: "/settings" });
   }
-  if (state === "invalid") return <p role="alert" className="notice error">Deze uitnodiging is niet (meer) geldig. Vraag de beheerder om een nieuwe link.</p>;
-  return <button className="primary" disabled={state !== "ready"} onClick={() => void accept()}>{state === "busy" ? "Even geduld…" : "Uitnodiging accepteren met Google"}</button>;
+  if (state === "invalid") return <p role="alert" className="notice error">This invitation is no longer valid. Ask the administrator for a new link.</p>;
+  return <button className="primary" disabled={state !== "ready"} onClick={() => void accept()}>{state === "busy" ? "Please wait…" : "Accept invitation with Google"}</button>;
 }

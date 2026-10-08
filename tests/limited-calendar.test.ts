@@ -115,10 +115,10 @@ describe("legacy calendars under narrow grants", () => {
   it("pauses sync for an unproven legacy binding while stored data stays visible, and switches only after explicit acknowledgement", async () => {
     const google = limitedGoogle(), { db, calendar, settings } = await setup(google, { calendarId: "legacy@example.test" });
     await db.calendarBinding.updateMany({ data: { provenance: "LEGACY_UNVERIFIED" } });
-    const service = new SyncService(db, calendar, { snapshot: async id => parseSnapshot(raw, id) }, { calendarId: "legacy@example.test", timeZone: "Europe/Amsterdam" }, () => new Date("2026-09-24T07:00:00Z"));
+    const service = new SyncService(db, calendar, { snapshot: async id => parseSnapshot(raw, id) }, { calendarId: "legacy@example.test", timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" }, () => new Date("2026-09-24T07:00:00Z"));
     const result = await service.add("a", 45039);
     expect(result).toMatchObject({ status: "success", calendarState: "paused" });
-    expect((await overview("a", db, new Date("2026-09-24T07:00:00Z"))).shows[0].upcoming.length).toBeGreaterThan(0);
+    expect((await overview("a",  db,  new Date("2026-09-24T07:00:00Z"),  "https://when2watch.example.test")).shows[0].upcoming.length).toBeGreaterThan(0);
     const legacy = await db.calendarBinding.findFirstOrThrow({ where: { userId: "a", status: "ACTIVE" } });
     const created = await settings.create("a", { requestId: "req-00000005", name: "When2Watch", timeZone: "Europe/Amsterdam" });
     // Creating keeps the legacy binding active until the user explicitly switches.
@@ -131,7 +131,7 @@ describe("legacy calendars under narrow grants", () => {
 
   it("pauses instead of widening scopes when the account only holds the old broad grant", async () => {
     const google = limitedGoogle(), { db, calendar } = await setup(google, { calendarId: "app@example.test", scope: "https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events" });
-    const service = new SyncService(db, calendar, { snapshot: async id => parseSnapshot(raw, id) }, { calendarId: "app@example.test", timeZone: "Europe/Amsterdam" });
+    const service = new SyncService(db, calendar, { snapshot: async id => parseSnapshot(raw, id) }, { calendarId: "app@example.test", timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" });
     expect(await service.add("a", 45039)).toMatchObject({ calendarState: "paused" });
     const attempt = await db.googleConnectionAttempt.count();
     expect(attempt).toBe(0);
@@ -140,7 +140,7 @@ describe("legacy calendars under narrow grants", () => {
   it("reports a 403 as a failure without requesting broader access", async () => {
     const google = limitedGoogle({ forbidden: true }), { db, calendar } = await setup(google, { calendarId: "app@example.test" });
     google.calendars.set("app@example.test", { id: "app@example.test", summary: "When2Watch", timeZone: "Europe/Amsterdam", accessRole: "owner", appCreated: true });
-    const service = new SyncService(db, calendar, { snapshot: async id => parseSnapshot(raw, id) }, { calendarId: "app@example.test", timeZone: "Europe/Amsterdam" });
+    const service = new SyncService(db, calendar, { snapshot: async id => parseSnapshot(raw, id) }, { calendarId: "app@example.test", timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" });
     const result = await service.add("a", 45039);
     expect(result.status).not.toBe("success");
     expect((await db.account.findUniqueOrThrow({ where: { id: "acc-a" } })).scope).toBe(narrow);

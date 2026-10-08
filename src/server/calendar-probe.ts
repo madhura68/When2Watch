@@ -1,9 +1,11 @@
+import { desiredEpisodeEvent } from "./episode-event";
+import { calendarEventHash } from "./sync";
 import type { SyncConfiguration } from "./sync";
 import type { CalendarBinding, PrismaClient, Probe } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { GoogleCalendar, safeEvent, type CalendarEvent } from "./google-calendar";
 import { AppError } from "./errors";
-import { localDate, nextDate } from "@/lib/dates";
+import { localDate } from "@/lib/dates";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { bindingMetadata, bindingUsable, getActiveBinding } from "./calendar-bindings";
 
@@ -22,9 +24,9 @@ export class CalendarProbeService {
   private async verifyLocked(userId: string): Promise<CalendarBinding> {
     const active = await getActiveBinding(this.db, userId);
     if (!("binding" in active) || active.binding.calendarId !== this.settings.calendarId) {
-      throw new AppError("CALENDAR_NOT_CONFIRMED", 409, "Kies en bevestig eerst je eigen agenda bij Instellingen.");
+      throw new AppError("CALENDAR_NOT_CONFIRMED", 409, "Choose and confirm your own calendar in Settings first.");
     }
-    if (bindingUsable(active.binding, active.account) !== "ok") throw new AppError("CALENDAR_PAUSED", 409, "Deze agenda is niet door When2Watch aangemaakt of de toegang ontbreekt. Maak bij Instellingen een When2Watch-agenda.");
+    if (bindingUsable(active.binding, active.account) !== "ok") throw new AppError("CALENDAR_PAUSED", 409, "This calendar was not created by When2Watch or access is missing. Create a When2Watch calendar in Settings.");
     const calendar = await this.google.calendar(active.binding.calendarId);
     return this.db.calendarBinding.update({ where: { id: active.binding.id }, data: bindingMetadata(calendar, this.now()) });
   }
@@ -37,35 +39,38 @@ export class CalendarProbeService {
     const parsedDate = new Date(`${date}T00:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedDate.getTime()) ||
         parsedDate.toISOString().slice(0, 10) !== date || date >= "9999-12-31") {
-      throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de meldingsproef.");
+      throw new AppError("INVALID_DATE", 400, "Choose a valid date from tomorrow onward for the notification test.");
     }
     const existing = await this.db.probe.findUnique({ where: { userId_date: { userId, date } } });
     const futureDate = date > localDate(this.now(), this.settings.timeZone);
-    if (!existing && !futureDate) throw new AppError("INVALID_DATE", 400, "Kies een geldige datum vanaf morgen voor de meldingsproef.");
+    if (!existing && !futureDate) throw new AppError("INVALID_DATE", 400, "Choose a valid date from tomorrow onward for the notification test.");
     const calendar = await this.verifyLocked(userId);
     const id = randomUUID();
     const eventId = `p${randomUUID().replaceAll("-", "")}`;
-    const request: CalendarEvent = {
-      id: eventId,
-      summary: "When2Watch — meldingsproef",
-      description: "Proefitem voor When2Watch, geen echte aflevering. Stel de meldingstijd voor hele-dagafspraken in je agenda-app in. Controleer de ontvangst in elke agenda-app die je gebruikt.",
-      start: { date }, end: { date: nextDate(date) }, reminders: { useDefault: true },
-      extendedProperties: { private: { app: "when2watch", kind: "probe", userId, probeId: id } },
-    };
+    const request = desiredEpisodeEvent({ ...this.settings, userId },
+      { title: "Example Show", tvmazeId: 0, platform: "Example broadcaster", country: null, runtimeMinutes: 60 },
+      { sourceId: 0, title: "Example episode", season: 1, number: 1, airdate: date, sourceUrl: "" }, eventId,
+      { country: "Netherlands", names: ["Example service A", "Example service B"] });
+    request.summary = `[W2W TEST] ${request.summary}`;
+    request.description = `Notification test only — not a real episode.\nOriginally on Example broadcaster.\nThis date is for the notification test, not an actual release.\nWhen2Watch: ${this.settings.origin}/following\nSource: TVmaze (CC BY-SA).`;
+    request.extendedProperties = { private: { app: "when2watch", kind: "probe", userId, probeId: id } };
     // Persist the ID before touching Google, so a lost response can be retried.
     const probe = await this.db.probe.upsert({
       where: { userId_date: { userId, date } }, update: {},
       create: { id, userId, calendarId: calendar.calendarId, bindingId: calendar.id, eventId, date, requestJson: JSON.stringify(request) },
     });
-    if (probe.calendarId !== calendar.calendarId) throw new AppError("WRONG_CALENDAR", 409, "Dit proefitem hoort bij een andere agenda.");
-    if (probe.status === "deleted") throw new AppError("PROBE_ALREADY_REMOVED", 409, "Deze proef is opgeruimd. Kies een andere datum voor een nieuwe proef.");
+    if (probe.calendarId !== calendar.calendarId) throw new AppError("WRONG_CALENDAR", 409, "This test event belongs to a different calendar.");
+    if (probe.status === "deleted") throw new AppError("PROBE_ALREADY_REMOVED", 409, "This test has been cleaned up. Choose another date for a new test.");
 
     let event: CalendarEvent;
     try {
       event = await this.google.event(probe.calendarId, probe.eventId);
     } catch (error) {
+      if (error instanceof AppError && probe.status === "created" && ["NOT_FOUND", "GONE"].includes(error.code)) {
+        throw new AppError("EVENT_CHANGED", 409, "The probe event was changed or removed. Check it in your calendar.");
+      }
       if (!(error instanceof AppError) || error.code !== "NOT_FOUND" || probe.status !== "prepared") throw error;
-      if (!futureDate) throw new AppError("PROBE_DATE_PASSED", 409, "Google heeft geen proefitem op deze datum. Kies een nieuwe datum om de proef alsnog uit te voeren.");
+      if (!futureDate) throw new AppError("PROBE_DATE_PASSED", 409, "Google has no test event on this date. Choose a new date to run the test.");
       try { await this.google.insert(probe.calendarId, JSON.parse(probe.requestJson) as CalendarEvent); }
       catch (insertError) {
         if (!(insertError instanceof AppError) || insertError.code !== "CONFLICT") throw insertError;
@@ -73,8 +78,9 @@ export class CalendarProbeService {
       event = await this.google.event(probe.calendarId, probe.eventId);
     }
     this.assertOwned(probe, event);
-    if (event.status === "cancelled" || event.start?.date !== date || event.end?.date !== nextDate(date) || event.start.dateTime || event.end.dateTime) {
-      throw new AppError("EVENT_CHANGED", 409, "Het proefitem is gewijzigd of verwijderd. Controleer het in de agenda.");
+    const savedRequest = JSON.parse(probe.requestJson) as CalendarEvent;
+    if (event.status === "cancelled" || calendarEventHash({ ...event, reminders: savedRequest.reminders }) !== calendarEventHash(savedRequest)) {
+      throw new AppError("EVENT_CHANGED", 409, "The probe event was changed or removed. Check it in your calendar.");
     }
     return this.db.probe.update({
       where: { id: probe.id }, data: { status: "created", readbackJson: JSON.stringify(safeEvent(event)) },
@@ -87,13 +93,13 @@ export class CalendarProbeService {
 
   private async removeLocked(userId: string, probeId: string): Promise<void> {
     const probe = await this.db.probe.findFirst({ where: { id: probeId, userId } });
-    if (!probe) throw new AppError("PROBE_NOT_FOUND", 404, "Dit proefitem hoort niet bij jouw account.");
+    if (!probe) throw new AppError("PROBE_NOT_FOUND", 404, "This test event does not belong to your account.");
     if (probe.status === "deleted") return;
     try {
       const event = await this.google.event(probe.calendarId, probe.eventId);
       if (event.status !== "cancelled") {
         this.assertOwned(probe, event);
-        if (!event.etag) throw new AppError("EVENT_CHANGED", 409, "De versie van het proefitem ontbreekt. Probeer opnieuw.");
+        if (!event.etag) throw new AppError("EVENT_CHANGED", 409, "The test event version is missing. Try again.");
         await this.google.remove(probe.calendarId, probe.eventId, event.etag);
       }
     } catch (error) {
@@ -105,7 +111,7 @@ export class CalendarProbeService {
   private assertOwned(probe: Probe, event: CalendarEvent): void {
     const marker = event.extendedProperties?.private;
     if (event.id !== probe.eventId || marker?.app !== "when2watch" || marker.kind !== "probe" || marker.userId !== probe.userId || marker.probeId !== probe.id) {
-      throw new AppError("EVENT_NOT_OWNED", 409, "Dit agenda-item heeft niet de verwachte When2Watch-markering. Het wordt niet gewijzigd.");
+      throw new AppError("EVENT_NOT_OWNED", 409, "This calendar event does not have the expected When2Watch marker. It will not be changed.");
     }
   }
 }

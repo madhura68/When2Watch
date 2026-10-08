@@ -1,0 +1,2 @@
+CREATE TYPE "EventMode" AS ENUM ('ALL_DAY', 'FIXED_TIME');
+ALTER TABLE "UserPreferences" ADD COLUMN "eventMode" "EventMode" NOT NULL DEFAULT 'ALL_DAY', ADD COLUMN "eventTime" TEXT;

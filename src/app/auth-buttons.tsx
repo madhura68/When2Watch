@@ -10,5 +10,5 @@ export function AuthButton({ logout = false }: { logout?: boolean }) {
       if (logout) await signOut({ callbackUrl: "/" });
       else await signIn("google", { callbackUrl: "/" });
     } finally { setBusy(false); }
-  }}>{busy ? "Even geduld…" : logout ? "Uitloggen" : "Inloggen met Google"}</button>;
+  }}>{busy ? "Please wait…" : logout ? "Sign out" : "Sign in with Google"}</button>;
 }

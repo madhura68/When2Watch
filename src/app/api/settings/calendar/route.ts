@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   try {
     const user = await requireUser(); requireSameOrigin(request, config().origin);
     const input = await request.json().catch(() => null);
-    if (!input || typeof input !== "object" || typeof input.calendarId !== "string" || Object.keys(input).some(k => !["calendarId", "switch", "acknowledgeOldItems"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Kies de volledige agenda-ID.");
+    if (!input || typeof input !== "object" || typeof input.calendarId !== "string" || Object.keys(input).some(k => !["calendarId", "switch", "acknowledgeOldItems"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Choose the full calendar ID.");
     const calendar = input.switch === true ? await calendarSettingsService().switchCalendar(user.id, input.calendarId, input.acknowledgeOldItems === true)
       : await calendarSettingsService().select(user.id, input.calendarId);
     return Response.json({ calendar }, { headers: { "Cache-Control": "private, no-store" } });

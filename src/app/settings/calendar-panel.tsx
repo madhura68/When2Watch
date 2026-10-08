@@ -12,50 +12,50 @@ export function CalendarPanel({ settings }: { settings: Settings }) {
   const [name, setName] = useState("When2Watch"), [timeZone, setTimeZone] = useState(settings.preferences.timeZone), [acknowledged, setAcknowledged] = useState(false);
   async function request(path: string, payload?: object) {
     const response = await fetch(path, payload ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) } : undefined);
-    const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Deze actie is niet gelukt."); return body;
+    const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "This action failed."); return body;
   }
   async function run(work: () => Promise<string>) {
     setBusy(true); setMessage("");
-    try { setMessage(await work()); } catch (error) { setMessage(error instanceof Error ? error.message : "Verbinding onderbroken. Vernieuw de lijst voordat je opnieuw een agenda aanmaakt."); }
+    try { setMessage(await work()); } catch (error) { setMessage(error instanceof Error ? error.message : "Connection interrupted. Refresh the list before creating another calendar."); }
     finally { router.refresh(); setBusy(false); }
   }
   const current = settings.calendar, paused = current && current.state !== "ok", ready = settings.calendarPermission && !settings.needsReauth;
   const pending = settings.calendarCreation && ["sending", "uncertain"].includes(settings.calendarCreation.status) ? settings.calendarCreation : null;
   const checkName = () => run(async () => {
     const body = await request(`/api/settings/calendars?name=${encodeURIComponent(name)}`); setMatches(body.matches);
-    return body.matches.length ? "Er bestaat al een agenda met deze naam. Een agenda die When2Watch niet zelf maakte kun je niet koppelen; kies dan een andere naam." : "Deze naam is vrij.";
+    return body.matches.length ? "A calendar with this name already exists. You cannot connect a calendar that When2Watch did not create; choose another name." : "This name is available.";
   });
   const create = () => run(async () => {
     const body = await request("/api/settings/calendars", { requestId: crypto.randomUUID(), name, timeZone });
     setCalendars(previous => [...previous.filter(c => c.id !== body.calendar.id), body.calendar]);
-    return current ? "De nieuwe agenda is aangemaakt. Stap hieronder bewust over." : "De nieuwe agenda is aangemaakt, teruggelezen en gekozen.";
+    return current ? "The new calendar has been created. Deliberately switch to it below." : "The new calendar has been created, read back, and selected.";
   });
   const choose = (id: string) => run(async () => {
     await request("/api/settings/calendar", current && current.id !== id ? { calendarId: id, switch: true, acknowledgeOldItems: acknowledged } : { calendarId: id });
-    return "De agenda is gekozen. Nieuwe afspraken komen voortaan hierin.";
+    return "The calendar has been selected. New events will be added to it from now on.";
   });
-  const list = () => run(async () => { const body = await request("/api/settings/calendars"); setCalendars(body.calendars); return body.calendars.length ? "Dit zijn je When2Watch-agenda's." : "Je hebt nog geen agenda die When2Watch zelf heeft aangemaakt."; });
-  return <section className="card settings-form" id="agenda-keuze"><h2>Je Google-agenda</h2>
+  const list = () => run(async () => { const body = await request("/api/settings/calendars"); setCalendars(body.calendars); return body.calendars.length ? "These are your When2Watch calendars." : "You do not have a calendar created by When2Watch yet."; });
+  return <section className="card settings-form" id="calendar"><h2>Your Google Calendar</h2>
     {current ? <p className={`notice ${paused ? "error" : "success"}`}><strong>{current.name}</strong> · {current.timeZone}<br /><span className="calendar-id">{current.id}</span></p>
-      : <p>Maak een aparte agenda voor When2Watch aan. Tot die tijd kun je series volgen en lokaal bekijken.</p>}
-    {current?.state === "legacy" && <p className="notice error">Deze agenda is niet door When2Watch aangemaakt. Met de beperkte Google-rechten kan When2Watch hem niet meer bijwerken; synchroniseren is gepauzeerd. Je series en overzicht blijven gewoon zichtbaar. Maak een nieuwe When2Watch-agenda en stap bewust over.</p>}
-    {current?.state === "permission" && <p className="notice error">Synchroniseren is gepauzeerd: geef bij je Google-account opnieuw toegang tot de agendalijst en je When2Watch-agenda.</p>}
-    {current && current.timeZone !== settings.preferences.timeZone && <p className="notice">Je Google-agenda gebruikt {current.timeZone}; When2Watch gebruikt {settings.preferences.timeZone}. Hele-dagafspraken behouden hun uitzenddatum. Controleer de meldingstijd in je agenda-app.</p>}
-    {!ready && <p><a href="#google">Geef eerst de benodigde Google-agendatoegang.</a></p>}
-    {pending && <p className="notice">De aanmaak van “{pending.name}” is niet bevestigd. When2Watch maakt hem niet opnieuw aan en koppelt niets op naam.
-      <button disabled={busy} onClick={() => void run(async () => { await request("/api/settings/calendars", { action: "abandon", requestId: pending.id }); return "Aanvraag losgelaten. Kies voor een nieuwe agenda een andere naam."; })}>Aanvraag loslaten</button></p>}
+      : <p>Create a separate calendar for When2Watch. Until then, you can follow series and view them locally.</p>}
+    {current?.state === "legacy" && <p className="notice error">This calendar was not created by When2Watch. With limited Google permissions, When2Watch can no longer update it; syncing is paused. Your series and overview remain visible. Create a new When2Watch calendar and deliberately switch to it.</p>}
+    {current?.state === "permission" && <p className="notice error">Syncing is paused: grant access to the calendar list and your When2Watch calendar again through your Google account.</p>}
+    {current && current.timeZone !== settings.preferences.timeZone && <p className="notice">Your Google Calendar uses {current.timeZone}; When2Watch uses {settings.preferences.timeZone}. All-day events keep their release date; timed events use the When2Watch time zone. Check notification times in your calendar app.</p>}
+    {!ready && <p><a href="#google">Grant the required Google Calendar access first.</a></p>}
+    {pending && <p className="notice">Creating “{pending.name}” has not been confirmed. When2Watch will not create it again or connect anything by name.
+      <button disabled={busy} onClick={() => void run(async () => { await request("/api/settings/calendars", { action: "abandon", requestId: pending.id }); return "Request released. Choose a different name for a new calendar."; })}>Release request</button></p>}
     {(!current || paused) && ready && <>
       <form onSubmit={event => { event.preventDefault(); void create(); }}>
-        <label htmlFor="calendar-name">Naam van de nieuwe agenda (1–100 tekens)</label>
+        <label htmlFor="calendar-name">Name of the new calendar (1–100 characters)</label>
         <input id="calendar-name" value={name} maxLength={100} required disabled={busy} onChange={event => { setName(event.target.value); setMatches(null); }} />
-        <label htmlFor="calendar-zone">Tijdzone</label><input id="calendar-zone" value={timeZone} required disabled={busy} onChange={event => setTimeZone(event.target.value)} />
-        <div className="form-row"><button type="button" disabled={busy} onClick={() => void checkName()}>Naam controleren</button>
-          <button className="primary" disabled={busy || !!pending || !!matches?.some(m => !m.reusable)}>Agenda aanmaken</button></div>
+        <label htmlFor="calendar-zone">Time zone</label><input id="calendar-zone" value={timeZone} required disabled={busy} onChange={event => setTimeZone(event.target.value)} />
+        <div className="form-row"><button type="button" disabled={busy} onClick={() => void checkName()}>Check name</button>
+          <button className="primary" disabled={busy || !!pending || !!matches?.some(m => !m.reusable)}>Create calendar</button></div>
       </form>
-      {matches?.filter(m => m.reusable).map(m => <p key={m.id}>Je eerdere When2Watch-agenda “{m.summary}” <button disabled={busy} onClick={() => void choose(m.id)}>Deze gebruiken</button></p>)}
-      <button disabled={busy} onClick={() => void list()}>Mijn When2Watch-agenda's tonen</button>
-      {current && <label className="checkbox"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} /> Ik begrijp dat bestaande afspraken in de oude agenda blijven staan en dubbel zichtbaar kunnen zijn. When2Watch verplaatst of verwijdert ze niet.</label>}
-      {calendars.filter(c => c.id !== current?.id).map(c => <p key={c.id}>{c.summary} · {c.timeZone} <button className="primary" disabled={busy || (!!current && !acknowledged)} onClick={() => void choose(c.id)}>{current ? "Overstappen naar deze agenda" : "Deze agenda kiezen"}</button></p>)}
+      {matches?.filter(m => m.reusable).map(m => <p key={m.id}>Your previous When2Watch calendar “{m.summary}” <button disabled={busy} onClick={() => void choose(m.id)}>Use this one</button></p>)}
+      <button disabled={busy} onClick={() => void list()}>Show my When2Watch calendars</button>
+      {current && <label className="checkbox"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} /> I understand that existing events will remain in the old calendar and may appear twice. When2Watch does not move or delete them.</label>}
+      {calendars.filter(c => c.id !== current?.id).map(c => <p key={c.id}>{c.summary} · {c.timeZone} <button className="primary" disabled={busy || (!!current && !acknowledged)} onClick={() => void choose(c.id)}>{current ? "Switch to this calendar" : "Choose this calendar"}</button></p>)}
     </>}
     <div role="status">{message && <p className="notice">{message}</p>}</div>
   </section>;

@@ -103,3 +103,7 @@ journaal; zonder dat journaal geen vrijgave. Daarna eerst een remote readback, d
 
 Dagelijkse `pg_dump -Fc` buiten het appvolume, maximaal 30 dagen bewaard. Het journaal en de sleutel horen in een
 aparte host-backup. Een herstel in een aparte database bewijs je periodiek met `restore-privacy.ts apply` en daarna een start van de controlecontainer (startcontrole + health). `verify-catalog` geldt alleen direct na de backfill: later zijn er actieve genodigden en nieuwe follows.
+
+## Readback na IDEA-241 stap 1
+
+Legacy-koppelingen met Nederlandse gewenste tekst kunnen na stap 1 `sourceChanged` rapporteren: de nieuwe Engelse factory geeft andere gewenste inhoud. De canonieke hele-daghash van de remote staat blijft compatibel. `sourceChanged` alleen is verwacht en geen `readbackNeedsAttention`; onderzoek wél `remoteChanged`, missing, foreign, pending en otherCalendar. Geef de actuele app-origin mee via de bestaande private env.

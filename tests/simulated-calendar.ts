@@ -1,3 +1,4 @@
+import { storedEvent } from "./calendar-transport";
 import { expect } from "vitest";
 export function simulatedCalendar() {
   const events = new Map<string, any>(), writes: {method:string; id:string; body?:any}[] = [];
@@ -23,7 +24,7 @@ export function simulatedCalendar() {
     if(method==="POST") {
       const body=JSON.parse(String(init?.body)); writes.push({method,id:body.id,body});
       if(events.has(body.id)) return Response.json({}, {status:409});
-      events.set(body.id,{...body,reminders:{useDefault:false},status:"confirmed",etag:`"v${++revision}"`});
+      events.set(body.id,{...storedEvent({},body),reminders:{useDefault:false},status:"confirmed",etag:`"v${++revision}"`});
       if(loseInsert){loseInsert=false;throw new Error("Lost after commit");}
       return Response.json(events.get(body.id));
     }
@@ -33,7 +34,7 @@ export function simulatedCalendar() {
       if(method==="DELETE" && failDelete){failDelete=false;return Response.json({}, {status:403});}
       const body=method==="PATCH"?JSON.parse(String(init?.body)):undefined;
       writes.push({method,id,body});
-      if(body)events.set(id,{...old,...body,reminders:{useDefault:false},etag:`"v${++revision}"`});
+      if(body)events.set(id,{...storedEvent(old,body),reminders:{useDefault:false},etag:`"v${++revision}"`});
       else events.set(id,{id,status:"cancelled"});
       return body?Response.json(events.get(id)):new Response(null,{status:204});
     }

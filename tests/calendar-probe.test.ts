@@ -1,3 +1,4 @@
+import { storedEvent } from "./calendar-transport";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { CalendarProbeService } from "@/server/calendar-probe";
@@ -5,7 +6,7 @@ import { testDatabase } from "./database";
 import { bindCalendar } from "./fixtures/users";
 
 const calendarId = "chosen@group.calendar.google.com";
-const chosen = { calendarId, timeZone: "Europe/Amsterdam" };
+const chosen = { calendarId, timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" };
 const now = new Date("2026-09-23T12:00:00Z");
 
 // Synthetic Google transport; these tests do not prove real client reminders.
@@ -14,6 +15,7 @@ function simulatedGoogle() {
   const writes: string[] = [];
   let role = "owner";
   let loseInsertResponse = false;
+  let missingStatus = 404;
   let insertPause: { entered: () => void; wait: Promise<void> } | null = null;
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -34,7 +36,7 @@ function simulatedGoogle() {
         gate.entered(); await gate.wait;
       }
       if (events.has(event.id)) return Response.json({}, { status: 409 });
-      events.set(event.id, { ...event, etag: '"version-1"', status: "confirmed" });
+      events.set(event.id, { ...storedEvent({},event), etag: '"version-1"', status: "confirmed" });
       if (loseInsertResponse) { loseInsertResponse = false; throw new TypeError("network connection lost after insert"); }
       return Response.json(events.get(event.id));
     }
@@ -44,9 +46,10 @@ function simulatedGoogle() {
       events.delete(id);
       return new Response(null, { status: 204 });
     }
-    return events.has(id) ? Response.json(events.get(id)) : Response.json({}, { status: 404 });
+    return events.has(id) ? Response.json(events.get(id)) : Response.json({}, { status: missingStatus });
   };
   return { events, writes, fetcher, role: (value: string) => { role = value; }, loseResponse: () => { loseInsertResponse = true; },
+    missingResponse: (status: number) => { missingStatus = status; },
     pauseNextInsert: () => {
       let entered!: () => void;
       let resume!: () => void;
@@ -172,4 +175,32 @@ describe("Calendar trial using real SQLite and simulated Google HTTP", () => {
     await service.remove("owner", probe.id);
     expect(google.writes.filter((write) => write.startsWith("delete:"))).toHaveLength(1);
   });
+  it("creates a fixed-time enriched TEST event and reads it back in the calendar zone",async()=>{
+    const timed=new CalendarProbeService(database.db,new GoogleCalendar(async()=>"test-access",google.fetcher),{...chosen,eventMode:"FIXED_TIME",eventTime:"20:00",timeZone:"America/New_York"},()=>now);
+    const probe=await timed.create("owner","2026-09-24");
+    const request=JSON.parse(probe.requestJson),readback=JSON.parse(probe.readbackJson!);
+    expect(request.summary).toBe("[W2W TEST] Example Show · S01E01 · Example episode");
+    expect(request.location).toBe("Netherlands: Example service A, Example service B");
+    expect(request.start).toEqual({dateTime:"2026-09-24T20:00:00-04:00",timeZone:"America/New_York"});
+    expect(readback.start).toEqual({dateTime:"2026-09-25T02:00:00+02:00",timeZone:"America/New_York"});
+    expect(readback.location).toBe(request.location);expect(probe.status).toBe("created");
+    expect((await timed.create("owner","2026-09-24")).id).toBe(probe.id);expect(google.writes).toHaveLength(1);
+    await timed.remove("owner",probe.id);expect(google.events.size).toBe(0);
+  });
+  it.each(["location","summary","description","status"])("rejects a probe changed only in %s",async field=>{
+    const probe=await service.create("owner","2026-09-24");
+    const event=google.events.get(probe.eventId)!;event[field]=field==="status"?"cancelled":"Changed in Google";
+    await expect(service.create("owner","2026-09-24")).rejects.toMatchObject({code:"EVENT_CHANGED",status:409});
+  });
+
+  it.each([404, 410])("reports EVENT_CHANGED for a missing created probe (GET %s) without recreating it", async status => {
+    const probe = await service.create("owner", "2026-09-24");
+    expect(probe.status).toBe("created");
+    google.events.delete(probe.eventId);google.missingResponse(status);
+    const before = [...google.writes];
+    await expect(service.create("owner", "2026-09-24")).rejects.toMatchObject({ code: "EVENT_CHANGED", status: 409 });
+    expect(google.writes).toEqual(before);
+    expect((await database.db.probe.findUniqueOrThrow({where:{id:probe.id}})).status).toBe("created");
+  });
+
 });

@@ -3,7 +3,7 @@ import { adminFor } from "./user-access";
 import { sourceRequestCounts } from "./tvmaze";
 
 /**
- * Admin-only statistics: per shared show the number of distinct ACTIVE followers (Proberen counts once,
+ * Admin-only statistics: per shared show the number of distinct ACTIVE followers (Try counts once,
  * blocked or deleted users not). Show identity and a number only — never who follows.
  */
 export async function getFollowerCounts(db: PrismaClient, adminId: string) {

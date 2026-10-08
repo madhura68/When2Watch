@@ -16,7 +16,7 @@ export const hashSession = (token: string) => createHash("sha256").update(token)
 export type ConnectionMode = "calendar" | "candidate" | "replace-client";
 export type GoogleProfile = { email?: string; email_verified?: boolean; name?: string };
 type ConnectionInput = { mode: ConnectionMode; clientId?: string; clientSecret?: string };
-const expired = () => new AppError("CONNECTION_EXPIRED", 409, "Deze koppelpoging is verlopen of hoort bij een andere sessie. Start de koppeling opnieuw vanuit Instellingen.");
+const expired = () => new AppError("CONNECTION_EXPIRED", 409, "This connection attempt has expired or belongs to another session. Start the connection again from Settings.");
 export type RefreshFactory = typeof googleTokenRefresher;
 
 export class GoogleConnectionService {
@@ -32,11 +32,11 @@ export class GoogleConnectionService {
     return serializeCalendarMutation(userId, async () => {
       await accessFor(this.db, userId);
       if (await this.sessionOwner(sessionToken) !== userId) throw expired();
-      if (!input || !["calendar", "candidate", "replace-client"].includes(input.mode)) throw new AppError("INVALID_INPUT", 400, "Kies een geldige Google-actie.");
+      if (!input || !["calendar", "candidate", "replace-client"].includes(input.mode)) throw new AppError("INVALID_INPUT", 400, "Choose a valid Google action.");
       // The OAuth client is central installation configuration: only an admin may replace it.
       if (input.mode === "replace-client") await adminFor(this.db, userId);
       const installation = await getInstallation(this.db);
-      if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Richt eerst de Google-koppeling van deze installatie in.");
+      if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Set up the Google connection for this installation first.");
       let clientId = installation.oauthClientConfigId;
       const account = await connectionAccount(this.db, userId);
       const required = input.mode === "replace-client"
@@ -46,10 +46,10 @@ export class GoogleConnectionService {
         if (input.mode === "replace-client") {
           if (typeof input.clientId !== "string" || !/^[a-zA-Z0-9._-]+\.apps\.googleusercontent\.com$/.test(input.clientId) ||
               typeof input.clientSecret !== "string" || !input.clientSecret.trim() || input.clientSecret.length > 1000) {
-            throw new AppError("INVALID_INPUT", 400, "Gebruik de client-ID en het secret van een Google OAuth-webclient.");
+            throw new AppError("INVALID_INPUT", 400, "Use the client ID and secret of a Google OAuth web client.");
           }
           const current = await tx.oAuthClientConfig.findUniqueOrThrow({ where: { id: clientId } });
-          if (current.clientId === input.clientId) throw new AppError("SAME_OAUTH_CLIENT", 409, "Dit is de huidige client. Kies een andere OAuth-webclient.");
+          if (current.clientId === input.clientId) throw new AppError("SAME_OAUTH_CLIENT", 409, "This is the current client. Choose a different OAuth web client.");
           clientId = (await tx.oAuthClientConfig.create({ data: sealedClient(input.clientId, input.clientSecret.trim()) })).id;
         }
         await tx.googleConnectionAttempt.updateMany({ where: { ownerId: userId, status: { in: ["pending", "completed", "ready"] } }, data: { status: "cancelled", tokensJson: null } });
@@ -86,11 +86,11 @@ export class GoogleConnectionService {
 
   // The NextAuth route holds the same owner lock across adapter work and callback.
   async completeLocked(id: string, sessionToken: string, userId: string, account: Account, profile: GoogleProfile) {
-    if (!await this.accepts(id, sessionToken, account, profile)) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "Gebruik het account dat bij deze koppelpoging hoort.");
+    if (!await this.accepts(id, sessionToken, account, profile)) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "Use the account associated with this connection attempt.");
     const attempt = await this.validate(id, sessionToken);
     if (attempt.ownerId !== userId) throw expired();
     const linked = await this.db.account.findUnique({ where: { provider_providerAccountId: { provider: "google", providerAccountId: account.providerAccountId } } });
-    if (!linked || linked.userId !== userId) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "Deze Google-identiteit hoort niet bij de bestaande eigenaar.");
+    if (!linked || linked.userId !== userId) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "This Google identity does not belong to the existing owner.");
     const tokens = { access_token: account.access_token, expires_at: account.expires_at, scope: account.scope, token_type: account.token_type,
       refresh_token: account.refresh_token || (linked.oauthClientConfigId === attempt.oauthClientConfigId ? openOptional(linked.refresh_token, "account.refresh_token", linked.id) : undefined) };
     await this.db.googleConnectionAttempt.update({ where: { id }, data: { status: "completed", accountId: linked.id,
@@ -114,13 +114,13 @@ export class GoogleConnectionService {
       if (attempt.ownerId !== userId || !attempt.accountId || !attempt.tokensJson) throw expired();
       const tokens = JSON.parse(open(attempt.tokensJson, "connectionAttempt.tokens", attempt.id)) as Account;
       const required = JSON.parse(attempt.requiredScopesJson) as string[];
-      if (!required.every(scope => tokens.scope?.split(/\s+/).includes(scope))) throw new AppError("CALENDAR_PERMISSION_REQUIRED", 409, "Niet alle gevraagde agendarechten zijn verleend. Verbind opnieuw en selecteer de benodigde toestemmingen.");
-      if (!tokens.refresh_token) throw new AppError("RECONNECT_GOOGLE", 409, "De blijvende Google-toegang ontbreekt. Verbind opnieuw voordat je deze keuze bevestigt.");
+      if (!required.every(scope => tokens.scope?.split(/\s+/).includes(scope))) throw new AppError("CALENDAR_PERMISSION_REQUIRED", 409, "Not all requested calendar permissions were granted. Reconnect and select the required permissions.");
+      if (!tokens.refresh_token) throw new AppError("RECONNECT_GOOGLE", 409, "Persistent Google access is missing. Reconnect before confirming this choice.");
       const client = await this.db.oAuthClientConfig.findUniqueOrThrow({ where: { id: attempt.oauthClientConfigId } });
       let refreshed: Awaited<ReturnType<ReturnType<RefreshFactory>>>;
       try { refreshed = await this.refresh(client.clientId, clientSecretOf(client))(tokens.refresh_token); }
-      catch { throw new AppError("RECONNECT_GOOGLE", 409, "De nieuwe Google-verbinding kon niet blijvend worden bevestigd. De bestaande verbinding is behouden."); }
-      if (!refreshed.access_token || !refreshed.expiry_date) throw new AppError("RECONNECT_GOOGLE", 409, "Google gaf geen bruikbare blijvende toegang.");
+      catch { throw new AppError("RECONNECT_GOOGLE", 409, "The new Google connection could not be persistently verified. The existing connection has been preserved."); }
+      if (!refreshed.access_token || !refreshed.expiry_date) throw new AppError("RECONNECT_GOOGLE", 409, "Google did not provide usable persistent access.");
       if (hasCalendarScopes(tokens.scope)) await new GoogleCalendar(async () => refreshed.access_token!, this.fetcher).calendars();
       await this.db.$transaction(async tx => {
         await tx.account.update({ where: { id: attempt.accountId! }, data: { oauthClientConfigId: attempt.oauthClientConfigId,

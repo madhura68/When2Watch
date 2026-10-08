@@ -6,10 +6,12 @@ type Props = {
   calendarId: string;
   calendar: { name: string; timeZone: string; confirmedAt: string; reminders: string } | null;
   tomorrow: string;
+  eventMode: "ALL_DAY" | "FIXED_TIME";
+  eventTime: string | null;
   probes: { id: string; date: string; status: string; request: string; readback: string | null }[];
 };
 
-export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
+export function TrialPanel({ calendarId, calendar, tomorrow, probes, eventMode, eventTime }: Props) {
   const router = useRouter();
   const [date, setDate] = useState(tomorrow);
   const [busy, setBusy] = useState(false);
@@ -20,43 +22,53 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
     try {
       const result = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const response = await result.json();
-      if (!result.ok) throw new Error(response.error ?? "Deze actie is niet gelukt.");
+      if (!result.ok) throw new Error(response.error ?? "This action failed.");
       setMessage(success);
       router.refresh();
-    } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Verbinding onderbroken. Probeer dezelfde actie opnieuw."); }
+    } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Connection interrupted. Try the same action again."); }
     finally { setBusy(false); }
   }
+  const createLabel = eventMode === "FIXED_TIME" ? `Create fixed-time probe at ${eventTime}` : "Create all-day probe";
+  const probeStyle = (raw: string) => {
+    const request = JSON.parse(raw);
+    return request.start?.dateTime ? `Fixed time ${new Intl.DateTimeFormat("en-GB", {timeZone: request.start.timeZone, hour:"2-digit", minute:"2-digit", hourCycle:"h23"}).format(new Date(request.start.dateTime))}` : "All-day";
+  };
+  const reminders = calendar ? JSON.parse(calendar.reminders) as {method: string; minutes: number}[] : [];
   return <>
     <div aria-live="polite" aria-atomic="true">{message && <p className={`notice ${failed ? "error" : "success"}`}>{message}</p>}</div>
     <section className="card">
-      <h2>Controleer je agenda</h2>
-      <p>Je gekozen agenda is <strong>{calendar?.name}</strong>. Controleer de toegang voordat je het proefitem maakt.</p>
-      <details><summary>Agenda-ID bekijken</summary><code className="calendar-id">{calendarId}</code></details>
-      {calendar && <p className="notice success">Bevestigd via Google: <strong>{calendar.name}</strong> · {calendar.timeZone} · schrijfbaar</p>}
-      <button disabled={busy} onClick={() => action("/api/calendar/verify", "POST", {}, "De gekozen agenda is teruggelezen en bevestigd.")}>{busy ? "Even geduld…" : calendar ? "Agenda opnieuw controleren" : "Controleer en bevestig deze agenda"}</button>
+      <h2>Check your calendar</h2>
+      <p>Your selected calendar is <strong>{calendar?.name}</strong>. Check access before creating the test event.</p>
+      <details><summary>View calendar ID</summary><code className="calendar-id">{calendarId}</code></details>
+      {calendar && <p className="notice success">Confirmed through Google: <strong>{calendar.name}</strong> · {calendar.timeZone} · writable</p>}
+      <p className="muted small">Default event notifications: {reminders.length ? reminders.map(r => `${r.method}: ${r.minutes} minutes before`).join(", ") : "None"}</p>
+      {calendar && reminders.length === 0 && <p className="notice">No default notification for timed events is set on this calendar; set one in Google Calendar before the probe.</p>}
+      <button disabled={busy} onClick={() => action("/api/calendar/verify", "POST", {}, "The selected calendar was read back and confirmed.")}>{busy ? "Please wait…" : calendar ? "Check calendar again" : "Check and confirm this calendar"}</button>
     </section>
     <section className="card">
-      <h2>Een melding beproeven</h2>
-      <p>Het proefitem duurt de hele dag en gebruikt de standaardmeldingen van de agenda. De ontvangst hangt ook af van de instellingen op je apparaat.</p>
+      <h2>Test a notification</h2>
+      <p>The probe uses your selected event style and the calendar's default notifications. Delivery also depends on your device settings.</p>
       <ol className="checklist">
-        <li>Kies in je agenda-app een meldingstijd voor afspraken die de hele dag duren, bijvoorbeeld 09:00 op dezelfde dag.</li>
-        <li>Controleer dat je gekozen agenda zichtbaar is en meldingen voor je agenda-app zijn toegestaan.</li>
-        <li>Gebruik je Google Agenda in de browser, laat die open. Controleer ook eventuele Focus- of niet-storeninstellingen.</li>
+        <li>In Google Calendar, set default notifications for timed and all-day events before creating a probe.</li>
+        <li>Make sure your selected calendar is visible and notifications are allowed for your calendar app.</li>
+        <li>If you use Google Calendar in your browser, leave it open. Also check any Focus or Do Not Disturb settings.</li>
       </ol>
-      <form onSubmit={(event) => { event.preventDefault(); void action("/api/probe", "POST", { date }, "Het proefitem is aangemaakt en teruggelezen. Controleer de ontvangst in elke agenda-app die je gebruikt."); }}>
-        <label htmlFor="probe-date">Datum van de meldingsproef</label>
-        <div className="form-row"><input id="probe-date" type="date" min={tomorrow} value={date} onChange={(event) => setDate(event.target.value)} required disabled={busy} /><button className="primary" disabled={busy || !calendar}>{busy ? "Even geduld…" : "Maak all-day proefitem"}</button></div>
+      <form onSubmit={(event) => { event.preventDefault(); void action("/api/probe", "POST", { date }, "The test event was created and read back. Check that it arrives in every calendar app you use."); }}>
+        <label htmlFor="probe-date">Notification test date</label>
+        <div className="form-row"><input id="probe-date" type="date" min={tomorrow} value={date} onChange={(event) => setDate(event.target.value)} required disabled={busy} /><button className="primary" disabled={busy || !calendar}>{busy ? "Please wait…" : createLabel}</button></div>
       </form>
-      {!calendar && <p className="muted small">Bevestig eerst de agenda hierboven.</p>}
-      <p className="muted small">Dit is een herkenbaar proefitem, geen echte aflevering. Een aangemaakt item bewijst nog niet dat je apparaat de melding heeft getoond.</p>
+      {!calendar && <p className="muted small">Confirm the calendar above first.</p>}
+      <p className="muted small">This is a recognizable test event, not a real episode. A created event does not prove that your device displayed the notification.</p>
     </section>
     {probes.map((probe) => <section className="card" key={probe.id}>
-      <span className="tag">{probe.status === "created" ? "Teruggelezen uit Google" : probe.status === "deleted" ? "Opgeruimd" : "Aanvraag nog niet bevestigd"}</span>
-      <h2>Proef van {probe.date}</h2>
-      <p>De meldingstijd volgt de instellingen van je agenda-app. Controleer de werkelijke ontvangst op elk apparaat dat je gebruikt.</p>
-      {probe.status === "prepared" && <button disabled={busy} onClick={() => action("/api/probe", "POST", { date: probe.date }, "Het bestaande proefitem is teruggevonden en bevestigd.")}>Dezelfde aanvraag hervatten</button>}
-      <details><summary>Verzoek en antwoord bekijken</summary><p className="small">Deze gegevens bewijzen het agenda-item. Ze bewijzen geen ontvangen melding.</p><pre>{JSON.stringify({ request: JSON.parse(probe.request), readback: probe.readback ? JSON.parse(probe.readback) : null }, null, 2)}</pre></details>
-      {probe.status !== "deleted" && <button className="secondary" disabled={busy} onClick={() => action("/api/probe", "DELETE", { id: probe.id }, "Alleen dit eigen proefitem is opgeruimd.")}>Ruim dit proefitem op</button>}
+      <span className="tag">{probe.status === "created" ? "Read back from Google" : probe.status === "deleted" ? "Cleaned up" : "Request not confirmed yet"}</span>
+      <h2>Probe on {probe.date}</h2>
+      <p>{probeStyle(probe.request)}</p>
+      {probe.readback && JSON.parse(probe.readback).location && <p>Location: {JSON.parse(probe.readback).location}</p>}
+      <p>The notification time follows your calendar app settings. Verify actual delivery on every device you use.</p>
+      {probe.status === "prepared" && <button disabled={busy} onClick={() => action("/api/probe", "POST", { date: probe.date }, "The existing test event was found and confirmed.")}>Resume the same request</button>}
+      <details><summary>View request and response</summary><p className="small">This data proves the calendar event exists. It does not prove that a notification was received.</p><pre>{JSON.stringify({ request: JSON.parse(probe.request), readback: probe.readback ? JSON.parse(probe.readback) : null }, null, 2)}</pre></details>
+      {probe.status !== "deleted" && <button className="secondary" disabled={busy} onClick={() => action("/api/probe", "DELETE", { id: probe.id }, "Only this test event was cleaned up.")}>Clean up this test event</button>}
     </section>)}
   </>;
 }

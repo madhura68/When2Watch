@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     if (input && typeof input === "object" && input.action === "abandon" && typeof input.requestId === "string") {
       return Response.json(await calendarSettingsService().abandonCreation(user.id, input.requestId), { headers: noStore });
     }
-    if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["requestId", "name", "timeZone"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Geef een naam en tijdzone voor de agenda op.");
+    if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["requestId", "name", "timeZone"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Enter a name and time zone for the calendar.");
     return Response.json({ calendar: await calendarSettingsService().create(user.id, input) }, { headers: noStore });
   } catch (error) { return errorResponse(error); }
 }

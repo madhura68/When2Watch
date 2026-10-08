@@ -15,9 +15,9 @@ export async function blockUser(db: PrismaClient, adminId: string, userId: strin
   await adminFor(db, adminId);
   return serializeCalendarMutation(userId, () => db.$transaction(async tx => {
     const target = await tx.user.findUnique({ where: { id: userId } });
-    if (!target) throw new AppError("NOT_FOUND", 404, "Deze gebruiker bestaat niet.");
+    if (!target) throw new AppError("NOT_FOUND", 404, "This user does not exist.");
     if (target.role === "ADMIN" && target.accessStatus === "ACTIVE" && await tx.user.count({ where: { role: "ADMIN", accessStatus: "ACTIVE" } }) <= 1) {
-      throw new AppError("LAST_ADMIN", 409, "De laatste actieve beheerder kan niet worden geblokkeerd.");
+      throw new AppError("LAST_ADMIN", 409, "The last active administrator cannot be blocked.");
     }
     await tx.user.update({ where: { id: userId }, data: { accessStatus: "BLOCKED" } });
     await tx.session.deleteMany({ where: { userId } });
@@ -31,10 +31,10 @@ export async function reactivateUser(db: PrismaClient, adminId: string, userId: 
   await adminFor(db, adminId);
   return serializeCalendarMutation(userId, () => db.$transaction(async tx => {
     // A user whose own deletion is pending never returns.
-    if (await tx.deletionTombstone.count({ where: { userId } })) throw new AppError("NOT_BLOCKED", 409, "Dit account wordt verwijderd en kan niet worden heractiveerd.");
+    if (await tx.deletionTombstone.count({ where: { userId } })) throw new AppError("NOT_BLOCKED", 409, "This account is being deleted and cannot be reactivated.");
     // Only a blocked user returns; an old UNCLAIMED profile needs an invitation.
     const updated = await tx.user.updateMany({ where: { id: userId, accessStatus: "BLOCKED" }, data: { accessStatus: "ACTIVE" } });
-    if (!updated.count) throw new AppError("NOT_BLOCKED", 409, "Alleen een geblokkeerde gebruiker kan worden heractiveerd.");
+    if (!updated.count) throw new AppError("NOT_BLOCKED", 409, "Only a blocked user can be reactivated.");
     await audit(tx, "user.reactivated", adminId, userId);
     return { reactivated: true };
   }));

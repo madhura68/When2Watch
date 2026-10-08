@@ -24,7 +24,7 @@ export async function DELETE(request: Request) {
   try {
     const admin = await requireAdmin(); requireSameOrigin(request, config().origin);
     const body = await request.json().catch(() => null) as { id?: unknown } | null;
-    if (typeof body?.id !== "string") throw new AppError("INVALID_INPUT", 400, "Kies een uitnodiging.");
+    if (typeof body?.id !== "string") throw new AppError("INVALID_INPUT", 400, "Choose an invitation.");
     return Response.json(await revokeInvitation(database(), admin.id, body.id), { headers: noStore });
   } catch (error) { return errorResponse(error); }
 }

@@ -15,7 +15,7 @@ export async function PATCH(request: Request) {
   try {
     const admin = await requireAdmin(); requireSameOrigin(request, config().origin);
     const body = await request.json().catch(() => null) as { userId?: unknown; action?: unknown } | null;
-    if (typeof body?.userId !== "string" || !["block", "reactivate"].includes(body.action as string)) throw new AppError("INVALID_INPUT", 400, "Kies een gebruiker en een actie.");
+    if (typeof body?.userId !== "string" || !["block", "reactivate"].includes(body.action as string)) throw new AppError("INVALID_INPUT", 400, "Choose a user and an action.");
     const result = body.action === "block" ? await blockUser(database(), admin.id, body.userId) : await reactivateUser(database(), admin.id, body.userId);
     return Response.json(result, { headers: noStore });
   } catch (error) { return errorResponse(error); }

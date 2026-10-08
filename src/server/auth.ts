@@ -18,7 +18,7 @@ export async function oauthReady() { return !!(await getInstallation())?.oauthCl
 
 export async function authOptions(connection?: { attemptId: string; sessionToken: string }, invitation?: { cookie: string; sessionToken: string }): Promise<NextAuthOptions> {
   const settings = config(), db = database(), installation = await getInstallation(db);
-  if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Richt eerst de Google-koppeling van deze installatie in.");
+  if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Set up the Google connection for this installation first.");
   const connections = new GoogleConnectionService(db);
   const attempt = connection ? await connections.validate(connection.attemptId, connection.sessionToken) : null;
   const client = await db.oAuthClientConfig.findUniqueOrThrow({ where: { id: attempt?.oauthClientConfigId ?? installation.oauthClientConfigId } });
@@ -27,7 +27,7 @@ export async function authOptions(connection?: { attemptId: string; sessionToken
   adapter.linkAccount = (account: AdapterAccount) => linkAccount({ ...account, access_token: undefined, refresh_token: undefined,
     expires_at: undefined, scope: undefined, id_token: undefined, oauthClientConfigId: client.id } as never);
   // No free registration: a new user is only created through an invitation (P6).
-  adapter.createUser = async () => { throw new AppError("NOT_INVITED", 403, "Dit Google-account heeft geen toegang tot deze installatie."); };
+  adapter.createUser = async () => { throw new AppError("NOT_INVITED", 403, "This Google account does not have access to this installation."); };
   // NextAuth gives callbacks.signIn the raw, OIDC-verified profile; events.signIn
   // receives a normalized profile without email_verified. Keep validation local
   // to this request rather than manufacturing that assertion in the event.
@@ -61,9 +61,9 @@ export async function authOptions(connection?: { attemptId: string; sessionToken
     events: {
       async signIn({ user, account }) {
         const current = await db.user.findUnique({ where: { id: user.id }, select: { accessStatus: true } });
-        if (current?.accessStatus !== "ACTIVE") throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "Dit account heeft geen actieve toegang.");
+        if (current?.accessStatus !== "ACTIVE") throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "This account does not have active access.");
         if (attempt && connection && account) {
-          if (!verifiedProfile) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "De Google-identiteit kon niet worden bevestigd.");
+          if (!verifiedProfile) throw new AppError("WRONG_GOOGLE_ACCOUNT", 403, "The Google identity could not be verified.");
           await connections.completeLocked(attempt.id, connection.sessionToken, user.id, account, verifiedProfile);
         }
         // Ordinary identity login never overwrites separately confirmed Calendar tokens.

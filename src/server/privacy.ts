@@ -6,7 +6,7 @@ import { serializeCalendarMutation } from "./calendar-mutations";
 
 type Tx = Prisma.TransactionClient;
 const journalFormat = "w2w-deletion-journal-1";
-export const deletionConfirmation = "VERWIJDEREN";
+export const deletionConfirmation = "DELETE";
 export const freshLoginMs = 10 * 60_000;
 
 // ------------------------------------------------------------------ export
@@ -16,7 +16,7 @@ export async function exportOwnData(db: PrismaClient, userId: string, now = new 
   await accessFor(db, userId);
   const [user, preferences, follows, connection, bindings, links, syncRuns] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true, name: true, email: true, role: true, accessStatus: true } }),
-    db.userPreferences.findUnique({ where: { userId }, select: { agendaMonths: true, timeZone: true } }),
+    db.userPreferences.findUnique({ where: { userId }, select: { agendaMonths: true, timeZone: true, eventMode: true, eventTime: true } }),
     db.userFollow.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { trying: true, createdAt: true, lastAttemptAt: true, lastSuccessAt: true, lastError: true,
       show: { select: { tvmazeId: true, title: true, sourceUrl: true } } } }),
     db.userConnection.findUnique({ where: { userId }, select: { account: { select: { provider: true, profileEmail: true, scope: true } } } }),
@@ -44,7 +44,7 @@ export async function exportOwnData(db: PrismaClient, userId: string, now = new 
  * journal is an error; it is never silently recreated.
  */
 export function journalPath(value = process.env.W2W_DELETION_JOURNAL) {
-  if (!value?.startsWith("/")) throw new AppError("JOURNAL_UNAVAILABLE", 503, "Het verwijderjournaal is niet ingericht. Verwijderen kan nu niet; neem contact op met de beheerder.");
+  if (!value?.startsWith("/")) throw new AppError("JOURNAL_UNAVAILABLE", 503, "The deletion journal has not been configured. Deletion is currently unavailable; contact the administrator.");
   return value;
 }
 
@@ -56,16 +56,16 @@ export function initJournal(path: string, journalId: string, now = new Date()) {
 }
 
 export function readJournal(path: string, journalId: string | null | undefined) {
-  const broken = (why: string) => new AppError("JOURNAL_UNAVAILABLE", 503, `Het verwijderjournaal is ${why}. Verwijderen en herstellen zijn geblokkeerd tot de beheerder dit oplost.`);
+  const broken = (why: string) => new AppError("JOURNAL_UNAVAILABLE", 503, `The deletion journal is ${why}. Deletion and recovery are blocked until the administrator resolves this.`);
   let text: string;
-  try { text = readFileSync(path, "utf8"); } catch { throw broken("niet leesbaar"); }
-  if (!text.endsWith("\n")) throw broken("onvolledig");
-  const lines = text.slice(0, -1).split("\n").map(line => { try { return JSON.parse(line) as Record<string, unknown>; } catch { throw broken("beschadigd"); } });
+  try { text = readFileSync(path, "utf8"); } catch { throw broken("unreadable"); }
+  if (!text.endsWith("\n")) throw broken("incomplete");
+  const lines = text.slice(0, -1).split("\n").map(line => { try { return JSON.parse(line) as Record<string, unknown>; } catch { throw broken("damaged"); } });
   const [header, ...entries] = lines;
-  if (header?.kind !== "header" || header.format !== journalFormat || !journalId || header.journalId !== journalId) throw broken("niet van deze installatie");
+  if (header?.kind !== "header" || header.format !== journalFormat || !journalId || header.journalId !== journalId) throw broken("not from this installation");
   const deleted = new Map<string, string>();
   for (const entry of entries) {
-    if (entry.kind !== "deletion" || typeof entry.userId !== "string" || typeof entry.deletedAt !== "string") throw broken("beschadigd");
+    if (entry.kind !== "deletion" || typeof entry.userId !== "string" || typeof entry.deletedAt !== "string") throw broken("damaged");
     if (!deleted.has(entry.userId)) deleted.set(entry.userId, entry.deletedAt);
   }
   return deleted;
@@ -77,7 +77,7 @@ export function appendDeletion(path: string, journalId: string | null, userId: s
   try {
     fd = openSync(path, "a");
     writeSync(fd, `${JSON.stringify({ kind: "deletion", userId, deletedAt: at.toISOString() })}\n`); fsyncSync(fd);
-  } catch { throw new AppError("JOURNAL_UNAVAILABLE", 503, "Het verwijderjournaal kon niet worden bijgewerkt. Er is niets verwijderd."); }
+  } catch { throw new AppError("JOURNAL_UNAVAILABLE", 503, "The deletion journal could not be updated. Nothing was deleted."); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
 
@@ -113,13 +113,13 @@ export async function purgeUser(tx: Tx, userId: string, deletedAt: Date) {
 export async function deleteOwnAccount(db: PrismaClient, userId: string, sessionToken: string, confirmation: unknown, options: { journal?: string; now?: () => Date; append?: typeof appendDeletion } = {}) {
   const now = options.now ?? (() => new Date());
   const user = await accessFor(db, userId);
-  if (confirmation !== deletionConfirmation) throw new AppError("CONFIRMATION_REQUIRED", 400, `Typ ${deletionConfirmation} om je account te verwijderen.`);
+  if (confirmation !== deletionConfirmation) throw new AppError("CONFIRMATION_REQUIRED", 400, `Type ${deletionConfirmation} to delete your account.`);
   const session = await db.session.findUnique({ where: { sessionToken }, select: { userId: true, createdAt: true } });
   if (!session || session.userId !== userId || now().getTime() - session.createdAt.getTime() > freshLoginMs) {
-    throw new AppError("FRESH_LOGIN_REQUIRED", 401, "Log opnieuw in en verwijder je account binnen 10 minuten daarna.");
+    throw new AppError("FRESH_LOGIN_REQUIRED", 401, "Sign in again, then delete your account within 10 minutes.");
   }
   if (user.role === "ADMIN" && await db.user.count({ where: { role: "ADMIN", accessStatus: "ACTIVE", id: { not: userId } } }) === 0) {
-    throw new AppError("LAST_ADMIN", 409, "Je bent de laatste beheerder. Maak eerst iemand anders beheerder.");
+    throw new AppError("LAST_ADMIN", 409, "You are the last administrator. Make someone else an administrator first.");
   }
   const path = journalPath(options.journal), journalId = (await db.installation.findUnique({ where: { id: "singleton" }, select: { deletionJournalId: true } }))?.deletionJournalId ?? null;
   readJournal(path, journalId);

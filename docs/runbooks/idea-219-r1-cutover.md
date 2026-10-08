@@ -55,3 +55,7 @@ Bewezen vooraf: repetitie op een privékopie zonder egress ([bewijs](../evidence
 ## 6. Reguliere backup (voorstel, aparte beslissing)
 
 Dagelijks `docker exec when2watch-db-1 pg_dump -U when2watch_migrator -d when2watch -Fc` naar een map buiten het appvolume, versleuteld, maximaal 30 dagen bewaard; herstel periodiek naar een aparte database bewijzen (zoals in de repetitie). RPO bij dagelijkse dumps ≤ 24 uur.
+
+## Readback na IDEA-241 stap 1
+
+Legacy-koppelingen met Nederlandse gewenste tekst kunnen na stap 1 `sourceChanged` rapporteren: de nieuwe Engelse factory geeft andere gewenste inhoud. De canonieke hele-daghash van de remote staat blijft compatibel. `sourceChanged` alleen is verwacht en geen `readbackNeedsAttention`; onderzoek wél `remoteChanged`, missing, foreign, pending en otherCalendar. Geef de actuele app-origin mee via de bestaande private env.

@@ -24,7 +24,7 @@ export async function importLegacyInstallation(db: PrismaClient, legacy: LegacyI
     if (!legacy || matches.length !== 1 || matches[0].accounts.length !== 1 ||
         users.some(user => user.id !== matches[0].id && user.accounts.length > 0) ||
         (matches[0].calendar && legacy.calendarId && matches[0].calendar.calendarId !== legacy.calendarId)) {
-      throw new AppError("INSTALLATION_AMBIGUOUS", 503, "De bestaande eigenaar of agenda is niet eenduidig. Controleer de oude installatieconfiguratie voordat je doorgaat.");
+      throw new AppError("INSTALLATION_AMBIGUOUS", 503, "The existing owner or calendar is ambiguous. Check the previous installation configuration before continuing.");
     }
     const owner = matches[0], account = owner.accounts[0];
     return db.$transaction(async tx => {

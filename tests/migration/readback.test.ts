@@ -1,3 +1,4 @@
+import legacy from "../fixtures/calendar/legacy-event.json";
 import { afterEach, expect, it } from "vitest";
 import { GoogleCalendar } from "@/server/google-calendar";
 import { SyncService } from "@/server/sync";
@@ -10,7 +11,7 @@ import raw from "../fixtures/tvmaze/slow-horses.json";
 
 let storage: ReturnType<typeof testDatabase>;
 afterEach(async () => { await storage?.close(); });
-const config = { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam" }, now = new Date("2026-09-24T07:00:00Z");
+const config = { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" }, now = new Date("2026-09-24T07:00:00Z");
 
 async function migratedOwner() {
   storage = testDatabase(); const db = storage.db, google = simulatedCalendar();
@@ -25,7 +26,7 @@ async function migratedOwner() {
 it("confirms every existing own event by GET only, without Calendar or database writes", async () => {
   const { db, google, readOnly } = await migratedOwner();
   const links = await db.calendarEventLink.findMany({ orderBy: { id: "asc" } }), accounts = await db.account.findMany();
-  const report = await readbackOwnEvents(db, readOnly, "owner", config.calendarId);
+  const report = await readbackOwnEvents(db,  readOnly,  "owner",  config.calendarId,  "https://when2watch.example.test");
   expect(report).toEqual({ links: links.length, unchanged: links.length, remoteChanged: 0, sourceChanged: 0, missing: 0, foreign: 0, pending: 0, deleted: 0, otherCalendar: 0 });
   expect(links.length).toBeGreaterThan(0);
   expect(readbackNeedsAttention(report)).toBe(false);
@@ -46,7 +47,7 @@ it("separates remote edits, source changes, missing events, foreign markers and 
   await db.calendarEventLink.update({ where: { id: e.id }, data: { status: "prepared" } });
   const older = await db.calendarBinding.create({ data: { userId: "owner", calendarId: "older@example.test", status: "LEGACY_UNRESOLVED", provenance: "LEGACY_UNVERIFIED" } });
   await db.calendarEventLink.create({ data: { userId: "owner", bindingId: older.id, catalogEpisodeId: a.catalogEpisodeId, calendarId: "older@example.test", eventId: "older-event", status: "synced", desiredJson: "{}" } });
-  const report = await readbackOwnEvents(db, readOnly, "owner", config.calendarId);
+  const report = await readbackOwnEvents(db,  readOnly,  "owner",  config.calendarId,  "https://when2watch.example.test");
   expect(report).toMatchObject({ remoteChanged: 1, sourceChanged: 1, missing: 1, foreign: 1, pending: 1, otherCalendar: 1 });
   expect(readbackNeedsAttention(report)).toBe(true);
   expect(google.writes).toEqual([]);
@@ -56,4 +57,18 @@ it("refuses any Calendar mutation through the read-only fetcher", async () => {
   const fetcher = readOnlyFetch(async () => Response.json({}));
   await expect(fetcher("https://www.googleapis.com/calendar/v3/calendars/x/events", { method: "POST" })).rejects.toThrow(/read-only/);
   await expect(fetcher("https://www.googleapis.com/calendar/v3/calendars/x/events/y", { method: "DELETE" })).rejects.toThrow(/read-only/);
+});
+
+it("classifies frozen legacy Dutch content as source change without invalidating its remote hash",async()=>{
+ const {db,google,readOnly}=await migratedOwner();
+ const link=await db.calendarEventLink.findFirstOrThrow({include:{catalogEpisode:true}});
+ // Literal pre-step-1 fixture: hash computed from old array, never from the new hash function.
+ // Use the episode with the fixture's immutable marker to keep its fixed hash meaningful.
+ const episode=await db.catalogEpisode.findFirstOrThrow({where:{sourceId:3643506}});
+ await db.calendarEventLink.deleteMany();
+ await db.calendarEventLink.create({data:{userId:"owner",bindingId:link.bindingId,catalogEpisodeId:episode.id,calendarId:config.calendarId,eventId:legacy.event.id,status:"synced",lastDate:"2026-09-01",desiredJson:JSON.stringify(legacy.event),confirmedDesiredHash:legacy.hash,confirmedRemoteHash:legacy.hash}});
+ google.events.clear();google.events.set(legacy.event.id,{...legacy.event,etag:'"legacy"'});
+ const report=await readbackOwnEvents(db,readOnly,"owner",config.calendarId,config.origin);
+ expect(report).toMatchObject({links:1,remoteChanged:0,sourceChanged:1,unchanged:0});
+ expect(readbackNeedsAttention(report)).toBe(false);expect(google.writes).toEqual([]);
 });
