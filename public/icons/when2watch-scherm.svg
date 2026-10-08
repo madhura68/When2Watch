@@ -1,10 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">When2Watch — Scherm</title>
-  <desc id="desc">Twee lichte W's in een groen televisiescherm, op een donkere achtergrond.</desc>
-  <rect width="512" height="512" fill="#152e32"/>
+  <title id="title">When2Watch — Screen</title>
+  <desc id="desc">Two paper-coloured W's on an ink television screen with one ember light, on warm paper.</desc>
+  <!-- Vis tokens: surface-canvas, ink, ink-tertiary, accent -->
+  <rect width="512" height="512" fill="#fdf9f4"/>
   <g id="mark">
-    <rect x="64" y="120" width="384" height="264" rx="60" fill="#176b60"/>
-    <path d="M112 196 140 304 172 216 204 304 232 196 M280 196 308 304 340 216 372 304 400 196" fill="none" stroke="#f4f7f3" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M196 420H316" fill="none" stroke="#d7e0dd" stroke-width="20" stroke-linecap="round"/>
+    <rect x="64" y="120" width="384" height="264" rx="48" fill="#2d2f34"/>
+    <path d="M112 196 140 304 172 216 204 304 232 196 M280 196 308 304 340 216 372 304 400 196" fill="none" stroke="#fdf9f4" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="404" cy="340" r="12" fill="#f67748"/>
+    <path d="M196 420H316" fill="none" stroke="#5e646e" stroke-width="20" stroke-linecap="round"/>
   </g>
 </svg>

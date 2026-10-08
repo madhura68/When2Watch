@@ -36,7 +36,7 @@ export function PreferencesPanel({ preferences, invalidTimeZone }: { preferences
       {invalidTimeZone && <p role="alert" className="notice error">Your saved time zone is not a valid IANA name; choose one from the list.</p>}
       <p className="muted small">Changing the event style rewrites your upcoming events on the next sync. Reminders follow your Google Calendar settings; timed events use the calendar's default notification for events, all-day events the one for all-day events.</p>
       <p className="muted small">The period determines how far ahead you look here. The time zone determines what When2Watch considers today. Set notifications for all-day events in your calendar app.</p>
-      <button className="primary" disabled={busy || (Number(months) === preferences.agendaMonths && timeZone === preferences.timeZone && eventMode === preferences.eventMode && eventTime === (preferences.eventTime ?? "20:00"))}>{busy ? "Saving…" : "Save"}</button>
+      <button disabled={busy || (Number(months) === preferences.agendaMonths && timeZone === preferences.timeZone && eventMode === preferences.eventMode && eventTime === (preferences.eventTime ?? "20:00"))}>{busy ? "Saving…" : "Save"}</button>
       <div role="status">{message && <p className={`notice ${failed ? "error" : "success"}`}>{message}</p>}</div>
     </form>
   </section>;

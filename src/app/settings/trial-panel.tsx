@@ -55,13 +55,13 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes, eventMode, 
       </ol>
       <form onSubmit={(event) => { event.preventDefault(); void action("/api/probe", "POST", { date }, "The test event was created and read back. Check that it arrives in every calendar app you use."); }}>
         <label htmlFor="probe-date">Notification test date</label>
-        <div className="form-row"><input id="probe-date" type="date" min={tomorrow} value={date} onChange={(event) => setDate(event.target.value)} required disabled={busy} /><button className="primary" disabled={busy || !calendar}>{busy ? "Please wait…" : createLabel}</button></div>
+        <div className="form-row"><input id="probe-date" type="date" min={tomorrow} value={date} onChange={(event) => setDate(event.target.value)} required disabled={busy} /><button disabled={busy || !calendar}>{busy ? "Please wait…" : createLabel}</button></div>
       </form>
       {!calendar && <p className="muted small">Confirm the calendar above first.</p>}
       <p className="muted small">This is a recognizable test event, not a real episode. A created event does not prove that your device displayed the notification.</p>
     </section>
     {probes.map((probe) => <section className="card" key={probe.id}>
-      <span className="tag">{probe.status === "created" ? "Read back from Google" : probe.status === "deleted" ? "Cleaned up" : "Request not confirmed yet"}</span>
+      <span className={`status${probe.status === "created" ? " success" : probe.status === "deleted" ? "" : " warning"}`}>{probe.status === "created" ? "Read back from Google" : probe.status === "deleted" ? "Cleaned up" : "Request not confirmed yet"}</span>
       <h2>Probe on {probe.date}</h2>
       <p>{probeStyle(probe.request)}</p>
       {probe.readback && JSON.parse(probe.readback).location && <p>Location: {JSON.parse(probe.readback).location}</p>}

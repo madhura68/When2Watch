@@ -13,14 +13,14 @@ export function AgendaPanel({ data }: { data: AgendaOverview }) {
     {data.needsReauth && <p className="notice error">Your saved overview remains available. <a href="/settings">Reconnect Google</a> to resume calendar updates.</p>}
     {!data.calendar && <p className="notice">No Google Calendar has been confirmed yet. <a href="/settings">Check your calendar</a>.</p>}
     {data.lastRun?.status && data.lastRun.status !== "success" && <p className="notice">The latest sync has not finished completely. <a href="/following">View the status of your series</a>.</p>}
-    {!data.groups.length && <section className="card empty-agenda"><h2>No new episodes for now.</h2><p>No air dates are known in this period for the series you follow.</p><p><a href="/following">View or follow your series</a>, or choose a longer period in Settings.</p></section>}
+    {!data.groups.length && <section className="card feature empty-agenda"><h2>No new episodes for now.</h2><p>No air dates are known in this period for the series you follow.</p><p><a href="/following">View or follow your series</a>, or choose a longer period in Settings.</p></section>}
     {data.groups.map(group => <section className="agenda-day" key={group.date} aria-labelledby={`day-${group.date}`}>
       <h2 id={`day-${group.date}`} className="agenda-day-label"><time dateTime={group.date}>{formatDayLabel(group.date, true)}</time></h2>
       <ul className="agenda-episodes">{group.episodes.map(episode => <li key={`${episode.show.id}-${episode.id}`} className="agenda-episode">
         <SeriesBanner bannerUrl={episode.show.bannerUrl} backgroundUrl={episode.show.backgroundUrl} poster={episode.show.poster} />
         <div className="agenda-episode-body">
           <div className="agenda-episode-heading"><div><p className="eyebrow">{episode.show.platform ?? "Followed series"}</p><h3>{episode.show.title}</h3></div>
-            <span className={`tag${episode.linked ? " success" : ""}`}>{episode.linked ? "In your calendar" : "Not confirmed yet"}</span></div>
+            <span className={`status ${episode.linked ? "success" : "warning"}`}>{episode.linked ? "In your calendar" : "Not confirmed yet"}</span></div>
           <p className="episode-title"><strong>{episode.season !== null && episode.number !== null ? `S${String(episode.season).padStart(2, "0")}E${String(episode.number).padStart(2, "0")}` : "Episode"}</strong>{episode.title ? ` · ${episode.title}` : ""}</p>
           {episode.show.error && <p className="notice error">{episode.show.error}</p>}
           {episode.summaryText && <details className="episode-description"><summary>Description (spoilers)</summary><p>{episode.summaryText}</p></details>}
