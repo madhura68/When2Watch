@@ -12,7 +12,7 @@ import { simulatedCalendar } from "./simulated-calendar";
 
 let storage: ReturnType<typeof testDatabase>;
 afterEach(async () => { await storage?.close(); });
-const now = new Date("2026-09-24T07:00:00Z"), config = { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam" };
+const now = new Date("2026-09-24T07:00:00Z"), config = { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" };
 
 async function twoFollowers() {
   storage = testDatabase(); const db = storage.db;
@@ -38,8 +38,8 @@ describe("two users sharing one series", () => {
     expect(live("a").every(e => e.extendedProperties.private.userId === "a")).toBe(true);
     expect(live("b").every(e => e.extendedProperties.private.userId === "b")).toBe(true);
     expect(await db.catalogShow.count()).toBe(1);
-    expect((await overview("a", db, now)).shows[0].trying).toBe(true);
-    expect((await overview("b", db, now)).shows[0].trying).toBe(false);
+    expect((await overview("a",  db,  now,  "https://when2watch.example.test")).shows[0].trying).toBe(true);
+    expect((await overview("b",  db,  now,  "https://when2watch.example.test")).shows[0].trying).toBe(false);
     const links = await db.calendarEventLink.findMany({ select: { userId: true, bindingId: true, catalogEpisodeId: true } });
     expect(new Set(links.map(l => l.userId))).toEqual(new Set(["a", "b"]));
     expect(links.every(l => l.bindingId && l.catalogEpisodeId)).toBe(true);

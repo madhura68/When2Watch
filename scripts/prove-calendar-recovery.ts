@@ -1,3 +1,4 @@
+import { config } from "../src/server/config";
 // Operator-only proof. Bundle for Node, execute inside the authorized app
 // container. No HTTP route exposes this script. Uses a separately provisioned,
 // empty PostgreSQL trial database (W2W_TRIAL_DATABASE_URL), never the production DB.
@@ -71,7 +72,7 @@ async function main() {
     episode.id=syntheticId;episode.name="SIMULATIE — geen echte aflevering";episode.airdate=nextDate(localDate(new Date(),settings.timeZone));
     input._embedded.episodes=[episode];
     const source={snapshot:async()=>parseSnapshot(input,45039)};
-    const service=()=>new SyncService(trial!,google,source,settings);
+    const service=()=>new SyncService(trial!,google,source,{ ...settings, origin: config().origin });
     cleanup=async()=>{input._embedded.episodes=[];const result=await service().sync(user.id,"manual");assert.equal(result.status,"success");cleaned=true;return result;};
     const first=await service().add(user.id,45039);
     assert.notEqual(first.status,"success");

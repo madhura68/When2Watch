@@ -21,7 +21,7 @@ async function showInput(request: Request, requireTrying: boolean) {
   return { id, trying: value.trying === true };
 }
 export async function GET() {
-  try {const user=await requireUser();return Response.json(await overview(user.id),{headers:{"Cache-Control":"private, no-store"}});}catch(error){return errorResponse(error);}
+  try {const user=await requireUser();return Response.json(await overview(user.id, database(), new Date(), config().origin),{headers:{"Cache-Control":"private, no-store"}});}catch(error){return errorResponse(error);}
 }
 export async function POST(request: Request) {
   try {

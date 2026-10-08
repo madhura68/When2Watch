@@ -27,6 +27,6 @@ it("counts distinct ACTIVE followers per show (Proberen once), drops blocked and
   await expect(adminStats(db, "u3")).rejects.toMatchObject({ status: 403 });
   expect(Object.keys((await adminStats(db, "admin")).tvmazeRequests)).toEqual(["since", "total", "search", "show", "updates", "other"]);
   // Ordinary responses never carry counts or other users.
-  const own = JSON.stringify(await overview("u3", db, new Date()));
+  const own = JSON.stringify(await overview("u3",  db,  new Date(),  "https://when2watch.example.test"));
   expect(own).not.toMatch(/followers|u2|admin/);
 });

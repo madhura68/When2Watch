@@ -37,10 +37,10 @@ it("stores background artwork during sync and serves it with the existing poster
   const {db}=await setup();const google=simulatedCalendar();
   const backgroundUrl="https://static.tvmaze.com/uploads/images/original_untouched/631/1577977.jpg";
   const source={snapshot:async()=>parseSnapshot(raw,45039),artwork:async()=>({bannerUrl:null,backgroundUrl})};
-  const service=new SyncService(db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,{calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam"},()=>start);
+  const service=new SyncService(db,new GoogleCalendar(async()=>"synthetic-access",google.fetcher),source,{calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test"},()=>start);
   expect((await service.add("owner",45039)).status).toBe("success");
   vi.stubGlobal("fetch",()=>{throw Error("page reads must not fetch metadata");});
-  expect((await agendaOverview("owner",start,db)).groups[0].episodes[0].show).toMatchObject({bannerUrl:null,backgroundUrl,poster:"https://static.tvmaze.com/uploads/images/medium_portrait/641/1604425.jpg"});
+  expect((await agendaOverview("owner",  "https://when2watch.example.test", start, db)).groups[0].episodes[0].show).toMatchObject({bannerUrl:null,backgroundUrl,poster:"https://static.tvmaze.com/uploads/images/medium_portrait/641/1604425.jpg"});
   expect(google.writes).toEqual([]);
 });
 it("caches success and absence for seven days across database reopen",async()=>{
@@ -72,7 +72,7 @@ it("retains the previous banner and background on a source error and retries no 
   expect(await current()).toMatchObject({bannerUrl:url,backgroundUrl,artworkNextCheckAt:new Date(+start+2*day)});
 });
 it("does not let banner failure block following/Calendar sync or let new banners alter events",async()=>{
-  const {db}=await setup();const google=simulatedCalendar();const config={calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam"};
+  const {db}=await setup();const google=simulatedCalendar();const config={calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test"};
   await bindCalendar(db,"owner",config.calendarId);
   let now=start;
   const artwork=vi.fn(async():Promise<ShowArtwork>=>{throw Error("source unavailable");});
@@ -87,9 +87,9 @@ it("does not let banner failure block following/Calendar sync or let new banners
   expect(google.writes).toEqual([]);expect(await db.calendarEventLink.findMany({orderBy:{id:"asc"}})).toEqual(links);
   expect([...google.events.entries()]).toEqual(events);
   vi.stubGlobal("fetch",()=>{throw Error("no source request allowed during a page read");});
-  expect((await overview("owner",db,now)).shows[0].bannerUrl).toBe(url);
-  expect((await agendaOverview("owner",now,db)).groups[0].episodes[0].show).toMatchObject({bannerUrl:url,backgroundUrl,poster:"https://static.tvmaze.com/uploads/images/medium_portrait/641/1604425.jpg"});
-  await agendaOverview("owner",now,db);expect(artwork).toHaveBeenCalledTimes(2);
+  expect((await overview("owner", db, now,  "https://when2watch.example.test")).shows[0].bannerUrl).toBe(url);
+  expect((await agendaOverview("owner",  "https://when2watch.example.test", now, db)).groups[0].episodes[0].show).toMatchObject({bannerUrl:url,backgroundUrl,poster:"https://static.tvmaze.com/uploads/images/medium_portrait/641/1604425.jpg"});
+  await agendaOverview("owner",  "https://when2watch.example.test", now, db);expect(artwork).toHaveBeenCalledTimes(2);
 });
 
 it("adds a nullable background while preserving every existing show field and the old negative cache",async()=>{

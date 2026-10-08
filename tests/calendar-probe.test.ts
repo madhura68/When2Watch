@@ -5,7 +5,7 @@ import { testDatabase } from "./database";
 import { bindCalendar } from "./fixtures/users";
 
 const calendarId = "chosen@group.calendar.google.com";
-const chosen = { calendarId, timeZone: "Europe/Amsterdam" };
+const chosen = { calendarId, timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" };
 const now = new Date("2026-09-23T12:00:00Z");
 
 // Synthetic Google transport; these tests do not prove real client reminders.

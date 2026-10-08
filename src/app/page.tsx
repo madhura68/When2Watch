@@ -1,3 +1,4 @@
+import { config } from "@/server/config";
 import { oauthReady } from "@/server/auth";
 import { currentUser } from "@/server/user-access";
 import { AuthButton } from "./auth-buttons";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function Home({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user=await currentUser();
   if (user) {
-    const data = await agendaOverview(user.id);
+    const data = await agendaOverview(user.id, config().origin);
     if (!data.calendar && data.showCount === 0) redirect("/settings");
     return <>
       <Navigation active="/" admin={user.role === "ADMIN"} />

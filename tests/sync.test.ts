@@ -36,7 +36,7 @@ it("adds detail columns to a populated old SQLite database without changing exis
 describe("Episode synchronization with real SQLite and simulated providers",()=>{
  let storage:ReturnType<typeof testDatabase>, google:ReturnType<typeof simulatedCalendar>, service:SyncService;
  let input:typeof raw, sourceError=false, now:Date;
- const config={calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam"};
+ const config={calendarId:"chosen@example.test",timeZone:"Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test"};
  const source={snapshot:async()=>{if(sourceError)throw new AppError("INVALID_SOURCE",502,"Invalid snapshot");return parseSnapshot(input,45039);}};
  beforeEach(async()=>{
   storage=testDatabase();input=structuredClone(raw);sourceError=false;now=new Date("2026-09-24T07:00:00Z");google=simulatedCalendar();
@@ -49,13 +49,13 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  it("adds a trying series to Calendar and keeps the choice through retry and source updates", async()=>{
   const first=await service.add("owner",45039,true);
   expect(first.series[0]).toMatchObject({created:5,failed:0});
-  expect((await overview("owner",storage.db,now)).shows[0]).toMatchObject({trying:true});
+  expect((await overview("owner", storage.db, now,  "https://when2watch.example.test")).shows[0]).toMatchObject({trying:true});
   const links=await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}});
   google.writes.length=0;
   input.status="Ended";
   await service.add("owner",45039);
   await service.sync("owner","manual");
-  expect((await overview("owner",storage.db,now)).shows[0]).toMatchObject({trying:true,status:"Ended"});
+  expect((await overview("owner", storage.db, now,  "https://when2watch.example.test")).shows[0]).toMatchObject({trying:true,status:"Ended"});
   expect(await storage.db.calendarEventLink.findMany({orderBy:{id:"asc"}})).toEqual(links);
   expect(google.writes).toEqual([]);
  });
@@ -102,10 +102,10 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
   try {
    sourceError=true;
    vi.stubGlobal("fetch",()=>{throw new Error("Provider disabled during overview");});
-   const view=await overview("owner",reopened,now);
+   const view=await overview("owner", reopened, now,  "https://when2watch.example.test");
    expect(view.shows[0]).toMatchObject({summaryText:"A new local synopsis.",genres:["Comedy"],runtimeMinutes:52});
    expect(view.shows[0].upcoming.find(e=>e.id===3643507)).toMatchObject({summaryText:"Episode-only details.",linked:true});
-   expect((await overview("other",reopened,now)).shows).toEqual([]);
+   expect((await overview("other", reopened, now,  "https://when2watch.example.test")).shows).toEqual([]);
   }finally{vi.unstubAllGlobals();await reopened.$disconnect();}
  });
  it("keeps cached details after source failure and clears them on a valid empty response",async()=>{
@@ -208,7 +208,7 @@ describe("Episode synchronization with real SQLite and simulated providers",()=>
  });
  it.each(["date","title","show title"])("does not label changed %s as confirmed after a Google read failure",async(field)=>{
   await service.add("owner",45039);
-  const displayed=async()=>(await overview("owner",storage.db,now)).shows[0].upcoming.find(e=>e.id===3643507)!;
+  const displayed=async()=>(await overview("owner", storage.db, now,  "https://when2watch.example.test")).shows[0].upcoming.find(e=>e.id===3643507)!;
   expect((await displayed()).linked).toBe(true);
   const episode=input._embedded.episodes.find(e=>e.id===3643507)!;
   if(field==="date")episode.airdate="2026-10-01";

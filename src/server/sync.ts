@@ -1,6 +1,8 @@
+import type { SyncSettings } from "./sync-settings";
+import { desiredEpisodeEvent, markers } from "./episode-event";
 import { createHash, randomUUID } from "node:crypto";
 import type { CalendarBinding, CalendarEventLink, CatalogEpisode, CatalogShow, PrismaClient, UserFollow } from "@prisma/client";
-import { localDate, nextDate } from "@/lib/dates";
+import { localDate } from "@/lib/dates";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { AppError } from "./errors";
 import { GoogleCalendar, type CalendarEvent } from "./google-calendar";
@@ -9,11 +11,9 @@ import { bindingUsable } from "./calendar-bindings";
 
 export type SeriesResult = { showId: number; title: string; created: number; updated: number; deleted: number; unchanged: number; failed: number; errors: string[] };
 export type SyncResult = { id: string; status: "success" | "partial" | "failed"; calendarState?: "unconfigured" | "paused"; startedAt: string; finishedAt: string; series: SeriesResult[] };
-export type SyncConfiguration = { calendarId: string; timeZone: string };
+export type SyncConfiguration = SyncSettings & { origin: string };
 export type SyncSource = Pick<CatalogSource, "snapshot"> & Partial<Pick<CatalogSource, "artwork">>;
-type EpisodeFields = Pick<CatalogEpisode, "sourceId" | "title" | "season" | "number" | "airdate" | "sourceUrl">;
 type EpisodeWithLinks = CatalogEpisode & { links: CalendarEventLink[] };
-const markers = (userId: string, showId: number, episodeId: number) => ({ app: "when2watch", kind: "episode", userId, showId: String(showId), episodeId: String(episodeId) });
 const failure = (error: unknown) => error instanceof AppError ? error.message : "Synchroniseren is onderbroken. Probeer opnieuw; bewaarde koppelingen blijven behouden.";
 export const calendarEventHash = (event: CalendarEvent) => createHash("sha256").update(JSON.stringify([
   event.summary ?? "", event.description ?? "", event.start?.date ?? null, event.start?.dateTime ?? null,
@@ -23,13 +23,6 @@ export const calendarEventHash = (event: CalendarEvent) => createHash("sha256").
 ])).digest("hex");
 const pending = (link?: CalendarEventLink) => !!link && ["prepared", "updating", "deleting"].includes(link.status);
 
-export function episodeEvent(userId: string, show: { title: string; tvmazeId: number }, e: EpisodeFields, eventId: string): CalendarEvent {
-  const code = e.season !== null && e.number !== null ? ` S${String(e.season).padStart(2,"0")}E${String(e.number).padStart(2,"0")}` : "";
-  return { id: eventId, summary: `${show.title}${code}${e.title ? ` — ${e.title}` : ""}`,
-    description: `Oorspronkelijke uitzenddatum volgens TVmaze; beschikbaarheid in Nederland kan afwijken.\n${e.sourceUrl}\nBron: TVmaze (CC BY-SA).`,
-    start: { date: e.airdate! }, end: { date: nextDate(e.airdate!) }, transparency: "transparent",
-    reminders: { useDefault: true }, extendedProperties: { private: markers(userId, show.tvmazeId, e.sourceId) } };
-}
 
 type Options = { sourceMaxAgeMs?: number };
 
@@ -233,13 +226,13 @@ export class SyncService {
     if (!event && !within(episode.airdate) && !pending(link)) return;
     if (!event && (!link || link.status === "synced" || link.status === "deleted")) {
       const eventId = `e${randomUUID().replaceAll("-", "")}`;
-      const data = { eventId, status: "prepared", desiredJson: JSON.stringify(episodeEvent(userId,show,episode,eventId)), lastDate: episode.airdate,
+      const data = { eventId, status: "prepared", desiredJson: JSON.stringify(desiredEpisodeEvent({ ...this.settings, userId },show,episode,eventId)), lastDate: episode.airdate,
         confirmedDesiredHash: null, confirmedRemoteHash: null };
       link = link ? await this.db.calendarEventLink.update({ where: { id: link.id }, data })
         : await this.db.calendarEventLink.create({ data: { ...data, ...ownership } });
     }
     if (!link) throw new AppError("MAPPING_MISSING", 500, "De agendakoppeling ontbreekt.");
-    const desired = episodeEvent(userId,show,episode,link.eventId);
+    const desired = desiredEpisodeEvent({ ...this.settings, userId },show,episode,link.eventId);
     if (!event) {
       // Persist intent before POST. A lost response is recovered by GET of this ID.
       await this.db.calendarEventLink.update({ where: { id: link.id }, data: { desiredJson: JSON.stringify(desired), status: "prepared" } });

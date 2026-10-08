@@ -1,13 +1,13 @@
-import { getPreferences } from "./preferences";
-import { database } from "./db";
+import { loadSyncSettings } from "./sync-settings";
+import { desiredEpisodeEvent } from "./episode-event";
 import { localDate } from "@/lib/dates";
 import type { PrismaClient } from "@prisma/client";
-import { calendarEventHash, episodeEvent } from "./sync";
+import { calendarEventHash } from "./sync";
 import { getActiveBinding } from "./calendar-bindings";
 
 /** The user's own follows over the shared catalog; links only from the user's own active binding. */
-export async function overview(userId: string, db: PrismaClient = database(), now = new Date(), timeZone?: string) {
-  const zone = timeZone ?? (await getPreferences(userId, db)).timeZone;
+export async function overview(userId: string, db: PrismaClient, now: Date, origin: string) {
+  const settings = await loadSyncSettings(userId, db), zone = settings.timeZone;
   const today = localDate(now, zone);
   const active = await getActiveBinding(db, userId);
   const bindingId = "binding" in active ? active.binding.id : null;
@@ -28,7 +28,7 @@ export async function overview(userId: string, db: PrismaClient = database(), no
       lastAttempt:f.lastAttemptAt?.toISOString()??null,lastSuccess:f.lastSuccessAt?.toISOString()??null,error:f.lastError,
       upcoming:s.episodes.filter(e=>e.airdate && e.airdate>=today).map(e=>({id:e.sourceId,title:e.title,season:e.season,number:e.number,date:e.airdate!,
         summaryText:e.summaryText,sourceUrl:e.sourceUrl,
-        linked:e.links.some(l=>l.calendarId===calendar?.calendarId && l.status==="synced" && l.confirmedDesiredHash===calendarEventHash(episodeEvent(userId,s,e,l.eventId)))})),
+        linked:e.links.some(l=>l.calendarId===calendar?.calendarId && l.status==="synced" && l.confirmedDesiredHash===calendarEventHash(desiredEpisodeEvent({ ...settings, userId, origin },s,e,l.eventId)))})),
       unknownDates:s.episodes.filter(e=>!e.airdate).length,
     }))};
 }

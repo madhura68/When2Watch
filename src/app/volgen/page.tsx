@@ -1,3 +1,5 @@
+import { database } from "@/server/db";
+import { config } from "@/server/config";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/server/user-access";
 import { overview } from "@/server/overview";
@@ -10,6 +12,6 @@ export default async function Following() {
   return <div className="following-page">
     <Navigation active="/volgen" admin={user.role === "ADMIN"} />
     <section className="hero compact"><p className="eyebrow">Je series, in je agenda</p><h1>Blijf je favorieten volgen.</h1><p className="intro">Zoek een serie en kies de juiste match. Nieuwe afleveringen komen vanzelf in je agenda.</p></section>
-    <SeriesPanel data={await overview(user.id)} />
+    <SeriesPanel data={await overview(user.id, database(), new Date(), config().origin)} />
   </div>;
 }

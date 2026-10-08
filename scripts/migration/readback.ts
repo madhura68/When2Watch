@@ -1,3 +1,6 @@
+import { config } from "../../src/server/config";
+import { loadSyncSettings } from "../../src/server/sync-settings";
+import { desiredEpisodeEvent } from "../../src/server/episode-event";
 /**
  * Cutover dry-run: read back every stored own Calendar event by GET only and classify it
  * the way SyncService would, without Calendar writes and without database writes.
@@ -10,7 +13,7 @@ import { PrismaClient } from "@prisma/client";
 import { AppError } from "../../src/server/errors";
 import { GoogleCalendar } from "../../src/server/google-calendar";
 import { googleTokenRefresher } from "../../src/server/google-tokens";
-import { calendarEventHash, episodeEvent } from "../../src/server/sync";
+import { calendarEventHash } from "../../src/server/sync";
 import { safeError } from "./manifest";
 
 export type ReadbackReport = { links: number; unchanged: number; remoteChanged: number; sourceChanged: number; missing: number; foreign: number; pending: number; deleted: number; otherCalendar: number };
@@ -28,7 +31,8 @@ export function readOnlyFetch(fetcher: typeof fetch = fetch): typeof fetch {
   };
 }
 
-export async function readbackOwnEvents(db: PrismaClient, google: GoogleCalendar, userId: string, calendarId: string): Promise<ReadbackReport> {
+export async function readbackOwnEvents(db: PrismaClient, google: GoogleCalendar, userId: string, calendarId: string, origin: string): Promise<ReadbackReport> {
+  const settings = await loadSyncSettings(userId, db);
   const report: ReadbackReport = { links: 0, unchanged: 0, remoteChanged: 0, sourceChanged: 0, missing: 0, foreign: 0, pending: 0, deleted: 0, otherCalendar: 0 };
   // R2 links carry their owner; R1 links are owned through the legacy series.
   const own = { OR: [{ userId }, { episode: { show: { userId } } }] };
@@ -47,7 +51,7 @@ export async function readbackOwnEvents(db: PrismaClient, google: GoogleCalendar
     if (marker.app !== "when2watch" || marker.kind !== "episode" || marker.userId !== userId || marker.showId !== String(show.tvmazeId) || marker.episodeId !== String(episode.sourceId)) { report.foreign++; continue; }
     if (calendarEventHash(event) !== link.confirmedRemoteHash) { report.remoteChanged++; continue; }
     // A stored TVmaze change since the last sync is expected work for the first sync, not a migration effect.
-    if (!episode.present || !episode.airdate || calendarEventHash(episodeEvent(userId, show, episode, link.eventId)) !== link.confirmedDesiredHash) { report.sourceChanged++; continue; }
+    if (!episode.present || !episode.airdate || calendarEventHash(desiredEpisodeEvent({ ...settings, userId, origin }, show, episode, link.eventId)) !== link.confirmedDesiredHash) { report.sourceChanged++; continue; }
     report.unchanged++;
   }
   return report;
@@ -73,7 +77,7 @@ async function main() {
       if (!refreshed.access_token) throw Error("Token refresh returned no access token.");
       return token = refreshed.access_token;
     };
-    const report = await readbackOwnEvents(db, new GoogleCalendar(accessToken, readOnlyFetch()), userId, settings.calendarId);
+    const report = await readbackOwnEvents(db, new GoogleCalendar(accessToken, readOnlyFetch()), userId, settings.calendarId, config().origin);
     console.log(JSON.stringify(report));
     if (readbackNeedsAttention(report)) process.exitCode = 2;
   } finally { await db.$disconnect(); }

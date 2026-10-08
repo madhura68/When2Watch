@@ -46,7 +46,7 @@ it("reports an explicit unconfigured state instead of borrowing another user's c
 
 it("keeps probes, preferences and series private; another user's object is a neutral 404", async () => {
   const { db } = await twoUsers(), calendar = simulatedCalendar();
-  const probeB = new CalendarProbeService(db, new GoogleCalendar(async () => "synthetic-access", calendar.fetcher), { calendarId: "b-cal@example.test", timeZone: "Europe/Amsterdam" });
+  const probeB = new CalendarProbeService(db, new GoogleCalendar(async () => "synthetic-access", calendar.fetcher), { calendarId: "b-cal@example.test", timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" });
   await db.probe.create({ data: { id: "probe-b", userId: "b", calendarId: "b-cal@example.test", eventId: "pb", date: "2026-10-01", requestJson: "{}" } });
   await expect(probeB.remove("a", "probe-b")).rejects.toMatchObject({ status: 404 });
   expect((await db.probe.findUniqueOrThrow({ where: { id: "probe-b" } })).status).toBe("prepared");
@@ -55,7 +55,7 @@ it("keeps probes, preferences and series private; another user's object is a neu
   expect(await getPreferences("b", db)).toEqual({ agendaMonths: 1, timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY", eventTime: null });
 
   await db.trackedShow.create({ data: { userId: "b", tvmazeId: 45039, title: "Private to B", sourceUrl: "x", status: "Running" } });
-  expect(JSON.stringify(await overview("a", db))).not.toContain("Private to B");
+  expect(JSON.stringify(await overview("a",  db,  new Date(),  "https://when2watch.example.test"))).not.toContain("Private to B");
 });
 
 it("refuses another user's Google identity when connecting a calendar account", async () => {

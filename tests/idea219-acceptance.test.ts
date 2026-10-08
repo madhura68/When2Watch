@@ -40,7 +40,7 @@ describe("A2 — TVmaze traffic with two users (measured on the real client)", (
     await activeUser(db, "a", { role: "ADMIN", calendarId: "chosen@example.test" }); await activeUser(db, "b", { calendarId: "chosen@example.test" }); await installation(db, "a");
     const source = tvmaze(), calendars = { a: simulatedCalendar(), b: simulatedCalendar() } as Record<string, ReturnType<typeof simulatedCalendar>>;
     let now = new Date("2026-09-25T08:00:00Z");
-    const sync = (id: string) => new SyncService(db, new GoogleCalendar(async () => "synthetic-access", calendars[id].fetcher), source, { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam" }, () => now);
+    const sync = (id: string) => new SyncService(db, new GoogleCalendar(async () => "synthetic-access", calendars[id].fetcher), source, { calendarId: "chosen@example.test", timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY" as const, eventTime: null, origin: "https://when2watch.example.test" }, () => now);
     const steps: Record<string, ReturnType<typeof delta>> = {};
     const measure = async (name: string, work: () => Promise<unknown>) => { const before = sourceRequestCounts(); await work(); steps[name] = delta(before); };
 
@@ -48,7 +48,7 @@ describe("A2 — TVmaze traffic with two users (measured on the real client)", (
     await measure("searchB", () => cachedSearch(db, source, "  slow   horses ", now));
     await measure("followA", () => sync("a").add("a", 45039, true));
     await measure("followB", () => sync("b").add("b", 45039));
-    await measure("pages", async () => { await overview("a", db, now); await overview("b", db, now); });
+    await measure("pages", async () => { await overview("a",  db,  now,  "https://when2watch.example.test"); await overview("b",  db,  now,  "https://when2watch.example.test"); });
     await measure("refollowSameHour", async () => { await sync("b").unfollow("b", 45039); await sync("b").add("b", 45039); });
     now = new Date("2026-09-26T04:05:00Z");
     await measure("daily", () => runScheduledSync(db, source, sync, now));
