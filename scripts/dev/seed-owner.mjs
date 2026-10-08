@@ -2,8 +2,13 @@
 // catalog shows with upcoming episodes and an active calendar binding. Disposable
 // local PostgreSQL only; no Google requests. Cookie: next-auth.session-token=<token>.
 import { PrismaClient } from "@prisma/client";
-const db = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL });
-if (!/127\.0\.0\.1|localhost/.test(process.env.DATABASE_URL ?? "")) throw new Error("local database only");
+// Guard before any Prisma initialisation: loopback host, postgres scheme and a disposable w2w_* database.
+const url = new URL(process.env.DATABASE_URL ?? "invalid:");
+const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+if (!/^postgres(ql)?:$/.test(url.protocol) || !loopback.has(url.hostname) || !/^\/w2w_[a-z0-9_]+$/.test(url.pathname)) {
+  throw new Error("Refusing: DATABASE_URL must be postgresql://…@localhost|127.0.0.1|::1/w2w_<name> (a disposable local database).");
+}
+const db = new PrismaClient({ datasourceUrl: url.toString() });
 const token = "vis-dev-session-token-0123456789abcdef0123456789abcdef";
 const expires = new Date(Date.now() + 7 * 86400e3);
 await db.user.upsert({ where: { id: "owner" }, update: { role: "ADMIN", accessStatus: "ACTIVE" }, create: { id: "owner", email: "owner@example.test", name: "Owner", role: "ADMIN", accessStatus: "ACTIVE" } });

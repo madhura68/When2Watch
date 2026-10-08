@@ -11,6 +11,8 @@ Bron: Design System-artifact **Vis** (https://claude.ai/artifact/1GANGeE2h1sJdb7
 | `6006dec` | T-38 | Vis-tokens light + dark, gevendorde fonts via `next/font/local`, basistypografie, theme_color |
 | `c28ece6` | T-39 | Pill-knoppen, product-/feature-cards, chips, statuspills, notices, inputs, navigatie |
 | `0f8bc7f` | T-40 | Polish na visuele controle; dev-seed; screenshots |
+| `830e3a7` | T-41 | Evidence en README |
+| `8764d39` | review | Reviewfixes: seed-guard, resterende tokens, Vis-artwork voor icoon en banner |
 
 ## Verificatie (lokaal, 8 oktober 2026)
 
@@ -56,9 +58,18 @@ Op 375px is `scrollWidth` gelijk aan `innerWidth`: geen horizontale paginascroll
 - `.notice` (info) is een dust-callout zonder rand; success/error zijn statusregels met teken.
 - De merkpunt na "When2Watch" staat in ink, niet in accent.
 
+## Reviewronde 1 (s4m-codex-reviewer, 8 oktober 2026, 2 BLOCKER)
+
+1. **Seed-guard matchte een substring in de hele DSN.** Bevestigd: `postgresql://user:localhost@db.example.invalid/production` werd geaccepteerd. Nu wordt de URL vóór Prisma geparsed: scheme `postgres(ql):`, hostname exact in {localhost, 127.0.0.1, ::1, [::1]} en databasenaam `w2w_*`. Regressiecontrole met vier foute DSN's (hostnaam-substring in wachtwoord, `localhost.example.invalid`, loopback met productiedatabase, verkeerd scheme): alle vier geweigerd.
+2. **Resterende niet-token-waarden.** Bevestigd. Alle `padding`/`gap`/`margin` in `globals.css` staan nu op `--spacing-*` (afgerond naar de dichtstbijzijnde stap); de 4px-radii van zoekresultaatafbeeldingen en poster-placeholder op `--radius-ghostbutton`; de agenda-daglabel op weight 500. De 58px-inspringing van de match-acties is `calc(44px + var(--spacing-12))` (posterbreedte plus gap). Uitgezonderd: de 8px-statusmarkering en de 2px-radius van de diamant, dat zijn markvormen, geen spacing. Agenda, following en settings opnieuw bekeken na de wijziging.
+
+## Artwork in Vis-stijl (op opdracht van JP, na de sprint)
+
+- `public/icons/when2watch-scherm.svg` en `-maskable.svg`: paper-achtergrond (`surface-canvas`), ink-scherm met paper-W's, voet in `ink-tertiary`, één ember-lampje (`accent`). PNG's gerenderd met `scripts/dev/render-icons.mjs` (sharp): 16, 32, 180, 192, 512 en de maskable-varianten.
+- `public/images/when2watch-banner.svg`: dust-vlak met `surface-high`-ringen, lijnwerk in `ink-tertiary`, ember-afspeelteken. Een `prefers-color-scheme: dark`-blok in de SVG schakelt naar de dark-tokens; `agenda-banner-light.jpg` en `agenda-banner-dark.jpg` tonen beide.
+
 ## Buiten scope, bewust niet gewijzigd
 
-- `public/images/when2watch-banner.svg` (banner-fallback) en de app-iconen in `public/icons/` blijven teal artwork.
 - Copy en flows zijn ongewijzigd.
 - De calendar-status op de screenshots toont "Syncing is paused" omdat de synthetische account geen Google-rechten heeft; dat is seed-gedrag, geen regressie.
 
