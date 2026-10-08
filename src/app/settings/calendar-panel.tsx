@@ -35,7 +35,7 @@ export function CalendarPanel({ settings }: { settings: Settings }) {
     return "De agenda is gekozen. Nieuwe afspraken komen voortaan hierin.";
   });
   const list = () => run(async () => { const body = await request("/api/settings/calendars"); setCalendars(body.calendars); return body.calendars.length ? "Dit zijn je When2Watch-agenda's." : "Je hebt nog geen agenda die When2Watch zelf heeft aangemaakt."; });
-  return <section className="card settings-form" id="agenda-keuze"><h2>Je Google-agenda</h2>
+  return <section className="card settings-form" id="calendar"><h2>Je Google-agenda</h2>
     {current ? <p className={`notice ${paused ? "error" : "success"}`}><strong>{current.name}</strong> · {current.timeZone}<br /><span className="calendar-id">{current.id}</span></p>
       : <p>Maak een aparte agenda voor When2Watch aan. Tot die tijd kun je series volgen en lokaal bekijken.</p>}
     {current?.state === "legacy" && <p className="notice error">Deze agenda is niet door When2Watch aangemaakt. Met de beperkte Google-rechten kan When2Watch hem niet meer bijwerken; synchroniseren is gepauzeerd. Je series en overzicht blijven gewoon zichtbaar. Maak een nieuwe When2Watch-agenda en stap bewust over.</p>}

@@ -103,3 +103,7 @@ All-day meldingen in Apple Agenda en Chrome zijn door JP bevestigd op 24 septemb
 ## Broncontracten
 
 TVmaze: [API](https://www.tvmaze.com/api), echte fixtures met ophaaldatum in `tests/fixtures/tvmaze/source.json`; data onder CC BY-SA. Google: [extended properties](https://developers.google.com/workspace/calendar/api/guides/extended-properties) combineert herhaalde private filters met OR. De adapter haalt daarom app-kandidaten op en controleert lokaal alle eigendomsvelden, op alle responsepagina's.
+
+## IDEA-241 Engelse routes
+
+De oude paden `/volgen`, `/uitnodiging`, `/beheer/gebruikers` en `/beheer/series` geven een tijdelijke 307 naar de Engelse routes. Verwijder deze redirects na 30 dagen na de uitrol of in stap 4, met een expliciete beoordeling van nog geldige uitnodigingslinks. Fragmentbehoud wordt op Safari/iPhone en Chrome in P9 bewezen.

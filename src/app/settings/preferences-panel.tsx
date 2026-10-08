@@ -20,7 +20,7 @@ export function PreferencesPanel({ preferences, invalidTimeZone }: { preferences
     } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Verbinding onderbroken. Probeer opnieuw."); }
     finally { setBusy(false); }
   }
-  return <section id="voorkeuren" className="card settings-form">
+  return <section id="preferences" className="card settings-form">
     <h2>Je Agenda-overzicht</h2><p className="muted">Kies hoe ver je vooruit wilt kijken.</p>
     <form onSubmit={save} aria-busy={busy}>
       <label htmlFor="agenda-months">Periode vanaf vandaag</label>

@@ -13,7 +13,7 @@ export default async function AdminUsers() {
   const db = database();
   const [users, invitations] = await Promise.all([listUsers(db, user.id), listInvitations(db, user.id)]);
   return <>
-    <Navigation active="/beheer/gebruikers" admin />
+    <Navigation active="/admin/users" admin />
     <section className="hero compact"><p className="eyebrow">Beheer</p><h1>Gebruikers en uitnodigingen.</h1>
       <p className="intro">Je ziet naam, e-mailadres en toegang; geen series of agenda's van anderen.</p></section>
     <AdminUsersPanel currentUserId={user.id} users={users} invitations={invitations} />

@@ -10,7 +10,7 @@ export default async function AdminSeries() {
   if (user.role !== "ADMIN") redirect("/");
   const { shows, tvmazeRequests } = await adminStats(database(), user.id);
   return <>
-    <Navigation active="/beheer/series" admin />
+    <Navigation active="/admin/series" admin />
     <section className="hero compact"><p className="eyebrow">Beheer</p><h1>Series en volgers.</h1>
       <p className="intro">Per serie het aantal actieve gebruikers dat haar volgt of probeert. Wie dat zijn, zie je hier niet.</p></section>
     <section className="card">

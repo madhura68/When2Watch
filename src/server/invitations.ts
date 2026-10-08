@@ -27,7 +27,7 @@ export async function createInvitation(db: PrismaClient, adminId: string, email:
     return created;
   });
   // The token travels in the fragment, which browsers never send to the server.
-  return { invitation, token, path: `/uitnodiging#token=${token}` };
+  return { invitation, token, path: `/invitation#token=${token}` };
 }
 
 export async function revokeInvitation(db: PrismaClient, adminId: string, invitationId: string) {

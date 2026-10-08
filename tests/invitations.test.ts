@@ -50,7 +50,7 @@ describe("creating and exchanging invitations", () => {
     const db = await setup();
     const { token, path, invitation } = await createInvitation(db, "admin", "  New.Person+tv@Example.test ", now);
     expect(Buffer.from(token, "base64url")).toHaveLength(32);
-    expect(path).toBe(`/uitnodiging#token=${token}`);
+    expect(path).toBe(`/invitation#token=${token}`);
     const stored = await db.invitation.findUniqueOrThrow({ where: { id: invitation.id } });
     expect(stored).toMatchObject({ email: "new.person+tv@example.test", tokenHash: sha(token), acceptedAt: null, revokedAt: null, expiresAt: new Date(+now + 72 * 3600_000) });
     expect(JSON.stringify(stored)).not.toContain(token);

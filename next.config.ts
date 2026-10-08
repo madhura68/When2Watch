@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  async redirects() { return [
+    { source: "/volgen", destination: "/following", permanent: false },
+    { source: "/uitnodiging", destination: "/invitation", permanent: false },
+    { source: "/beheer/gebruikers", destination: "/admin/users", permanent: false },
+    { source: "/beheer/series", destination: "/admin/series", permanent: false },
+  ]; },
   async headers() {
     return [{ source: "/:path*", headers: [
       { key: "X-Content-Type-Options", value: "nosniff" },

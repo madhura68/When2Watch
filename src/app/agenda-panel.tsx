@@ -11,11 +11,11 @@ export function AgendaPanel({ data }: { data: AgendaOverview }) {
   return <>
     <div className="agenda-period"><div><strong>{dayLabel(data.window.from)} t/m {dayLabel(last.toISOString().slice(0, 10))}</strong>
       <p className="muted small">{count} {count === 1 ? "aflevering" : "afleveringen"} · {data.preferences.agendaMonths} {data.preferences.agendaMonths === 1 ? "maand" : "maanden"} vooruit</p>
-    </div><a href="/settings#voorkeuren">Periode aanpassen</a></div>
+    </div><a href="/settings#preferences">Periode aanpassen</a></div>
     {data.needsReauth && <p className="notice error">Je opgeslagen overzicht blijft beschikbaar. <a href="/settings">Koppel Google opnieuw</a> om de agenda weer bij te werken.</p>}
     {!data.calendar && <p className="notice">Er is nog geen Google-agenda bevestigd. <a href="/settings">Controleer je agenda</a>.</p>}
-    {data.lastRun?.status && data.lastRun.status !== "success" && <p className="notice">De laatste synchronisatie is nog niet volledig afgerond. <a href="/volgen">Bekijk de status bij je series</a>.</p>}
-    {!data.groups.length && <section className="card empty-agenda"><h2>Even geen nieuwe afleveringen.</h2><p>Voor je gevolgde series zijn in deze periode nog geen uitzenddatums bekend.</p><p><a href="/volgen">Bekijk of volg je series</a>, of kies een langere periode bij Instellingen.</p></section>}
+    {data.lastRun?.status && data.lastRun.status !== "success" && <p className="notice">De laatste synchronisatie is nog niet volledig afgerond. <a href="/following">Bekijk de status bij je series</a>.</p>}
+    {!data.groups.length && <section className="card empty-agenda"><h2>Even geen nieuwe afleveringen.</h2><p>Voor je gevolgde series zijn in deze periode nog geen uitzenddatums bekend.</p><p><a href="/following">Bekijk of volg je series</a>, of kies een langere periode bij Instellingen.</p></section>}
     {data.groups.map(group => <section className="agenda-day" key={group.date} aria-labelledby={`day-${group.date}`}>
       <h2 id={`day-${group.date}`} className="agenda-day-label"><time dateTime={group.date}>{dayLabel(group.date, true)}</time></h2>
       <ul className="agenda-episodes">{group.episodes.map(episode => <li key={`${episode.show.id}-${episode.id}`} className="agenda-episode">

@@ -9,7 +9,7 @@ export function InvitationEntry() {
     // Read the fragment once and wipe it from the address bar and history; store it nowhere.
     const match = /(?:^#|&)token=([A-Za-z0-9_-]+)/.exec(window.location.hash);
     token.current = match?.[1] ?? null;
-    window.history.replaceState(null, "", "/uitnodiging");
+    window.history.replaceState(null, "", "/invitation");
     setState(token.current ? "ready" : "invalid");
   }, []);
   async function accept() {
