@@ -1,9 +1,11 @@
+import { desiredEpisodeEvent } from "./episode-event";
+import { calendarEventHash } from "./sync";
 import type { SyncConfiguration } from "./sync";
 import type { CalendarBinding, PrismaClient, Probe } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { GoogleCalendar, safeEvent, type CalendarEvent } from "./google-calendar";
 import { AppError } from "./errors";
-import { localDate, nextDate } from "@/lib/dates";
+import { localDate } from "@/lib/dates";
 import { serializeCalendarMutation } from "./calendar-mutations";
 import { bindingMetadata, bindingUsable, getActiveBinding } from "./calendar-bindings";
 
@@ -45,13 +47,13 @@ export class CalendarProbeService {
     const calendar = await this.verifyLocked(userId);
     const id = randomUUID();
     const eventId = `p${randomUUID().replaceAll("-", "")}`;
-    const request: CalendarEvent = {
-      id: eventId,
-      summary: "When2Watch — meldingsproef",
-      description: "Proefitem voor When2Watch, geen echte aflevering. Stel de meldingstijd voor hele-dagafspraken in je agenda-app in. Controleer de ontvangst in elke agenda-app die je gebruikt.",
-      start: { date }, end: { date: nextDate(date) }, reminders: { useDefault: true },
-      extendedProperties: { private: { app: "when2watch", kind: "probe", userId, probeId: id } },
-    };
+    const request = desiredEpisodeEvent({ ...this.settings, userId },
+      { title: "Example Show", tvmazeId: 0, platform: "Example broadcaster", country: null, runtimeMinutes: 60 },
+      { sourceId: 0, title: "Example episode", season: 1, number: 1, airdate: date, sourceUrl: "" }, eventId,
+      { country: "Netherlands", names: ["Example service A", "Example service B"] });
+    request.summary = `[W2W TEST] ${request.summary}`;
+    request.description = `Notification test only — not a real episode.\nOriginally on Example broadcaster.\nThis date is for the notification test, not an actual release.\nWhen2Watch: ${this.settings.origin}/following\nSource: TVmaze (CC BY-SA).`;
+    request.extendedProperties = { private: { app: "when2watch", kind: "probe", userId, probeId: id } };
     // Persist the ID before touching Google, so a lost response can be retried.
     const probe = await this.db.probe.upsert({
       where: { userId_date: { userId, date } }, update: {},
@@ -73,8 +75,9 @@ export class CalendarProbeService {
       event = await this.google.event(probe.calendarId, probe.eventId);
     }
     this.assertOwned(probe, event);
-    if (event.status === "cancelled" || event.start?.date !== date || event.end?.date !== nextDate(date) || event.start.dateTime || event.end.dateTime) {
-      throw new AppError("EVENT_CHANGED", 409, "Het proefitem is gewijzigd of verwijderd. Controleer het in de agenda.");
+    const savedRequest = JSON.parse(probe.requestJson) as CalendarEvent;
+    if (event.status === "cancelled" || calendarEventHash({ ...event, reminders: savedRequest.reminders }) !== calendarEventHash(savedRequest)) {
+      throw new AppError("EVENT_CHANGED", 409, "The probe event was changed or removed. Check it in your calendar.");
     }
     return this.db.probe.update({
       where: { id: probe.id }, data: { status: "created", readbackJson: JSON.stringify(safeEvent(event)) },

@@ -173,4 +173,22 @@ describe("Calendar trial using real SQLite and simulated Google HTTP", () => {
     await service.remove("owner", probe.id);
     expect(google.writes.filter((write) => write.startsWith("delete:"))).toHaveLength(1);
   });
+  it("creates a fixed-time enriched TEST event and reads it back in the calendar zone",async()=>{
+    const timed=new CalendarProbeService(database.db,new GoogleCalendar(async()=>"test-access",google.fetcher),{...chosen,eventMode:"FIXED_TIME",eventTime:"20:00",timeZone:"America/New_York"},()=>now);
+    const probe=await timed.create("owner","2026-09-24");
+    const request=JSON.parse(probe.requestJson),readback=JSON.parse(probe.readbackJson!);
+    expect(request.summary).toBe("[W2W TEST] Example Show · S01E01 · Example episode");
+    expect(request.location).toBe("Netherlands: Example service A, Example service B");
+    expect(request.start).toEqual({dateTime:"2026-09-24T20:00:00-04:00",timeZone:"America/New_York"});
+    expect(readback.start).toEqual({dateTime:"2026-09-25T02:00:00+02:00",timeZone:"America/New_York"});
+    expect(readback.location).toBe(request.location);expect(probe.status).toBe("created");
+    expect((await timed.create("owner","2026-09-24")).id).toBe(probe.id);expect(google.writes).toHaveLength(1);
+    await timed.remove("owner",probe.id);expect(google.events.size).toBe(0);
+  });
+  it.each(["location","summary","description","status"])("rejects a probe changed only in %s",async field=>{
+    const probe=await service.create("owner","2026-09-24");
+    const event=google.events.get(probe.eventId)!;event[field]=field==="status"?"cancelled":"Changed in Google";
+    await expect(service.create("owner","2026-09-24")).rejects.toMatchObject({code:"EVENT_CHANGED",status:409});
+  });
+
 });

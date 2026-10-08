@@ -30,7 +30,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     <PreferencesPanel preferences={settings.preferences} invalidTimeZone={normalizeTimeZone(settings.preferences.timeZone) === null} />
     <GooglePanel settings={settings} callbackUrl={`${config().origin}/api/auth/callback/google`} />
     <CalendarPanel settings={settings} />
-    {calendar && <TrialPanel key={settings.preferences.timeZone} calendarId={calendar.calendarId} calendar={{ name: calendar.summary ?? calendar.calendarId, timeZone: calendar.timeZone ?? settings.preferences.timeZone, confirmedAt: (calendar.confirmedAt ?? calendar.createdAt).toISOString(), reminders: calendar.defaultRemindersJson ?? "[]" }} tomorrow={nextDate(localDate(new Date(), settings.preferences.timeZone))} probes={probes.map(probe => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />}
+    {calendar && <TrialPanel key={settings.preferences.timeZone} calendarId={calendar.calendarId} calendar={{ name: calendar.summary ?? calendar.calendarId, timeZone: calendar.timeZone ?? settings.preferences.timeZone, confirmedAt: (calendar.confirmedAt ?? calendar.createdAt).toISOString(), reminders: calendar.defaultRemindersJson ?? "[]" }} eventMode={settings.preferences.eventMode} eventTime={settings.preferences.eventTime} tomorrow={nextDate(localDate(new Date(), normalizeTimeZone(settings.preferences.timeZone) ?? "Europe/Amsterdam"))} probes={probes.map(probe => ({ id: probe.id, date: probe.date, status: probe.status, request: probe.requestJson, readback: probe.readbackJson }))} />}
     <PrivacyPanel lastAdmin={user.role === "ADMIN" && otherAdmins === 0} />
   </>;
 }

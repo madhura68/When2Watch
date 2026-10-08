@@ -6,10 +6,12 @@ type Props = {
   calendarId: string;
   calendar: { name: string; timeZone: string; confirmedAt: string; reminders: string } | null;
   tomorrow: string;
+  eventMode: "ALL_DAY" | "FIXED_TIME";
+  eventTime: string | null;
   probes: { id: string; date: string; status: string; request: string; readback: string | null }[];
 };
 
-export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
+export function TrialPanel({ calendarId, calendar, tomorrow, probes, eventMode, eventTime }: Props) {
   const router = useRouter();
   const [date, setDate] = useState(tomorrow);
   const [busy, setBusy] = useState(false);
@@ -26,6 +28,12 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
     } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Verbinding onderbroken. Probeer dezelfde actie opnieuw."); }
     finally { setBusy(false); }
   }
+  const createLabel = eventMode === "FIXED_TIME" ? `Create fixed-time probe at ${eventTime}` : "Create all-day probe";
+  const probeStyle = (raw: string) => {
+    const request = JSON.parse(raw);
+    return request.start?.dateTime ? `Fixed time ${new Intl.DateTimeFormat("en-GB", {timeZone: request.start.timeZone, hour:"2-digit", minute:"2-digit", hourCycle:"h23"}).format(new Date(request.start.dateTime))}` : "All-day";
+  };
+  const reminders = calendar ? JSON.parse(calendar.reminders) as {method: string; minutes: number}[] : [];
   return <>
     <div aria-live="polite" aria-atomic="true">{message && <p className={`notice ${failed ? "error" : "success"}`}>{message}</p>}</div>
     <section className="card">
@@ -33,6 +41,8 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
       <p>Je gekozen agenda is <strong>{calendar?.name}</strong>. Controleer de toegang voordat je het proefitem maakt.</p>
       <details><summary>Agenda-ID bekijken</summary><code className="calendar-id">{calendarId}</code></details>
       {calendar && <p className="notice success">Bevestigd via Google: <strong>{calendar.name}</strong> · {calendar.timeZone} · schrijfbaar</p>}
+      <p className="muted small">Default event notifications: {reminders.length ? reminders.map(r => `${r.method}: ${r.minutes} minutes before`).join(", ") : "None"}</p>
+      {calendar && reminders.length === 0 && <p className="notice">No default notification for timed events is set on this calendar; set one in Google Calendar before the probe.</p>}
       <button disabled={busy} onClick={() => action("/api/calendar/verify", "POST", {}, "De gekozen agenda is teruggelezen en bevestigd.")}>{busy ? "Even geduld…" : calendar ? "Agenda opnieuw controleren" : "Controleer en bevestig deze agenda"}</button>
     </section>
     <section className="card">
@@ -45,7 +55,7 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
       </ol>
       <form onSubmit={(event) => { event.preventDefault(); void action("/api/probe", "POST", { date }, "Het proefitem is aangemaakt en teruggelezen. Controleer de ontvangst in elke agenda-app die je gebruikt."); }}>
         <label htmlFor="probe-date">Datum van de meldingsproef</label>
-        <div className="form-row"><input id="probe-date" type="date" min={tomorrow} value={date} onChange={(event) => setDate(event.target.value)} required disabled={busy} /><button className="primary" disabled={busy || !calendar}>{busy ? "Even geduld…" : "Maak all-day proefitem"}</button></div>
+        <div className="form-row"><input id="probe-date" type="date" min={tomorrow} value={date} onChange={(event) => setDate(event.target.value)} required disabled={busy} /><button className="primary" disabled={busy || !calendar}>{busy ? "Even geduld…" : createLabel}</button></div>
       </form>
       {!calendar && <p className="muted small">Bevestig eerst de agenda hierboven.</p>}
       <p className="muted small">Dit is een herkenbaar proefitem, geen echte aflevering. Een aangemaakt item bewijst nog niet dat je apparaat de melding heeft getoond.</p>
@@ -53,6 +63,8 @@ export function TrialPanel({ calendarId, calendar, tomorrow, probes }: Props) {
     {probes.map((probe) => <section className="card" key={probe.id}>
       <span className="tag">{probe.status === "created" ? "Teruggelezen uit Google" : probe.status === "deleted" ? "Opgeruimd" : "Aanvraag nog niet bevestigd"}</span>
       <h2>Proef van {probe.date}</h2>
+      <p>{probeStyle(probe.request)}</p>
+      {probe.readback && JSON.parse(probe.readback).location && <p>Location: {JSON.parse(probe.readback).location}</p>}
       <p>De meldingstijd volgt de instellingen van je agenda-app. Controleer de werkelijke ontvangst op elk apparaat dat je gebruikt.</p>
       {probe.status === "prepared" && <button disabled={busy} onClick={() => action("/api/probe", "POST", { date: probe.date }, "Het bestaande proefitem is teruggevonden en bevestigd.")}>Dezelfde aanvraag hervatten</button>}
       <details><summary>Verzoek en antwoord bekijken</summary><p className="small">Deze gegevens bewijzen het agenda-item. Ze bewijzen geen ontvangen melding.</p><pre>{JSON.stringify({ request: JSON.parse(probe.request), readback: probe.readback ? JSON.parse(probe.readback) : null }, null, 2)}</pre></details>
