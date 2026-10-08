@@ -50,12 +50,12 @@ export function CalendarPanel({ settings }: { settings: Settings }) {
         <input id="calendar-name" value={name} maxLength={100} required disabled={busy} onChange={event => { setName(event.target.value); setMatches(null); }} />
         <label htmlFor="calendar-zone">Time zone</label><input id="calendar-zone" value={timeZone} required disabled={busy} onChange={event => setTimeZone(event.target.value)} />
         <div className="form-row"><button type="button" disabled={busy} onClick={() => void checkName()}>Check name</button>
-          <button className="primary" disabled={busy || !!pending || !!matches?.some(m => !m.reusable)}>Create calendar</button></div>
+          <button disabled={busy || !!pending || !!matches?.some(m => !m.reusable)}>Create calendar</button></div>
       </form>
       {matches?.filter(m => m.reusable).map(m => <p key={m.id}>Your previous When2Watch calendar “{m.summary}” <button disabled={busy} onClick={() => void choose(m.id)}>Use this one</button></p>)}
       <button disabled={busy} onClick={() => void list()}>Show my When2Watch calendars</button>
       {current && <label className="checkbox"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} /> I understand that existing events will remain in the old calendar and may appear twice. When2Watch does not move or delete them.</label>}
-      {calendars.filter(c => c.id !== current?.id).map(c => <p key={c.id}>{c.summary} · {c.timeZone} <button className="primary" disabled={busy || (!!current && !acknowledged)} onClick={() => void choose(c.id)}>{current ? "Switch to this calendar" : "Choose this calendar"}</button></p>)}
+      {calendars.filter(c => c.id !== current?.id).map(c => <p key={c.id}>{c.summary} · {c.timeZone} <button disabled={busy || (!!current && !acknowledged)} onClick={() => void choose(c.id)}>{current ? "Switch to this calendar" : "Choose this calendar"}</button></p>)}
     </>}
     <div role="status">{message && <p className="notice">{message}</p>}</div>
   </section>;

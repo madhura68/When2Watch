@@ -32,7 +32,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
       <p className="intro">When2Watch puts the original release date of every episode you follow into a Google Calendar of its own, so your phone reminds you the way you already set it up.</p>
     </section>
     <div className="steps-summary"><p><strong>Follow a series</strong><br />Find the shows you want to keep up with.</p><p><strong>It lands in your Google Calendar</strong><br />Use your calendar's notification settings.</p><p><strong>See where to watch</strong><br />Where to watch is coming soon.</p></div>
-    <section className="card"><h2>Access is by invitation for now</h2>
+    <section className="card feature"><h2>Access is by invitation for now</h2>
       <p>When2Watch is free and currently invite-only. Have an invitation? Open the link you received.</p>
       {error && <p role="alert" className="notice error">Sign-in failed. Use the Google account you were invited with, then try again.</p>}
       {await oauthReady() ? <AuthButton /> : <p className="notice">The Google connection is being set up. Sign-in will be available when it is ready.</p>}

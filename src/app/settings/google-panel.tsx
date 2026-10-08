@@ -28,7 +28,7 @@ export function GooglePanel({ settings, callbackUrl }: { settings: Settings; cal
     <div className="form-row"><button disabled={busy} onClick={() => void action({ action: "begin", mode: "calendar" }, true)}>{settings.calendarPermission ? "Reconnect calendar access" : "Grant calendar access"}</button>
       <button disabled={busy} onClick={() => void action({ action: "begin", mode: "candidate" }, true)}>Use a different Google account</button></div>
     {attempt && <div className="notice"><p>{attempt.status === "completed" ? `Google returned ${attempt.profileEmail ?? "your account"}. Confirm to verify and use the persistent connection.` : "A Google connection attempt is pending. You can start again or cancel it."}</p>
-      <div className="form-row">{attempt.status === "completed" && <button className="primary" disabled={busy} onClick={() => void action({ action: "confirm", id: attempt.id })}>Check and confirm connection</button>}
+      <div className="form-row">{attempt.status === "completed" && <button disabled={busy} onClick={() => void action({ action: "confirm", id: attempt.id })}>Check and confirm connection</button>}
         <button disabled={busy} onClick={() => void action({ action: "cancel", id: attempt.id })}>Cancel connection attempt</button></div></div>}
     {settings.isAdmin && <details><summary>Replace Google OAuth client</summary>
       <p className="small">Create an OAuth web client with this callback address. The new client becomes active after the same Google account and persistent access have been verified.</p><code className="calendar-id">{callbackUrl}</code>
