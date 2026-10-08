@@ -125,7 +125,7 @@ Een bestaande restart-loop van drie runnercontainers op max2 is als `ISS-11` ger
 
 ## Google-koppeling en bewijs
 
-Google OAuth-clienttype: Web application. Redirect-URI exact `https://when2watch.jp-visser.nl/api/auth/callback/google`. Project: `when2watch-509517`; Google Cloud toont Calendar API `Enabled`. Scopes: `openid email profile`, `calendar.calendarlist.readonly`, `calendar.events` (volledige scope-URLs in de bron).
+Google OAuth-clienttype: Web application. Redirect-URI exact `https://when2watch.jp-visser.nl/api/auth/callback/google`. Project: `when2watch-509517`; Google Cloud toont Calendar API `Enabled`. Scopes: `openid email profile`, `calendar.calendarlist.readonly`, `calendar.events (historisch; vóór IDEA-241 Production-consent verwijderen uit de Console indien nog gedeclareerd)` (volledige scope-URLs in de bron).
 
 JP heeft het private clientbestand op 23 september aangeleverd. Type, verplichte velden en exacte redirect zijn gecontroleerd zonder credentialwaarden af te drukken. Het lokale bestand en de server-`.env` hebben modus 0600. Alleen Client ID en Client secret zijn via SSH-stdin naar de bestaande max2-configuratie overgebracht; geheimen blijven buiten chat, Git en bewijs.
 
@@ -210,3 +210,7 @@ De ene gewone handmatige run `cmufbmr760001mn01a046dbnj` slaagde: **0 toegevoegd
 Daarna is uitsluitend de When2Watch-webcontainer opnieuw aangemaakt. Health en HTTPS geven 200; bestaande Chrome-sessie en negen series blijven beschikbaar. Hashes van TrackedShow, Episode, CalendarEventLink en SyncRun blijven gelijk na herstart. De teller blijft 12 sync-runs: er is geen extra appstart-synchronisatie. Bij opnieuw laden staan alle negen seriedetails en de ene aanwezige komende episodebeschrijving dicht; opnieuw openen toont de opgeslagen gegevens. `current`, `.env`/container-`RELEASE_TAG` en de image wijzen naar `b31af05`.
 
 **Review en open punten:** zie `docs/IDEA-216-review-posters-en-seriedetails.md`. Geen blokkerende bevindingen. Uitgesteld: meer dan 400 tekens zonder witruimte geeft alleen een ellipsis; de volledige tekst blijft lokaal en via TVmaze beschikbaar. ISS-7 staat nog open; statusmutaties zijn niet omzeild. Ook `origin/main` ontbreekt nog; er is geen fictieve referentie of geslaagde MCP-codeverificatie geclaimd. De taakacceptatie is tegen tests, onafhankelijke review en werkelijk uitrolbewijs gecontroleerd. Geen merge, cron-, proxy-, OAuth- of andere-appwijziging.
+
+## Vervolgproef IDEA-241
+
+Gebruik voor beide eventstijlen en verrijkte readback `docs/evidence/idea-241-stap-1.md` en het Production-consent-runbook. Deze historische proef alleen bewijst de nieuwe Fixed-time-vorm en iPhone-ontvangst niet.

@@ -104,3 +104,15 @@ Uitgevoerd volgens `docs/runbooks/idea-219-r2-cutover.md` in opdracht van JP ("v
 | §6 | Web op `when2watch:5dd8b3f` healthy; `current` → `releases/5dd8b3f`; HTTPS-health 200. Cron teruggezet. Handmatige dagelijkse run: 200 success, catalogus 25/25 opgehaald (eerste volledige run), sync `paused`, retentie 0, 0 open links. |
 
 Nog door JP: opnieuw inloggen, agendatoegang geven en een nieuwe When2Watch-agenda aanmaken en daarnaar overstappen. Daarna een eerste sync en een werkelijk ontvangen melding. Verder de privacygegevens (`W2W_PRIVACY_CONTROLLER`/`_CONTACT`), de twee-accountproef, iPhone/iPad en de edge-proxy-logs.
+
+## Stap 0 bevestigd door JP — 8 oktober 2026
+
+JP antwoordde bij de start van sprint S-2026-10-08-1: “Dit is afgerond.” Hij meldde de agenda **When2Watch** en een ontvangen melding met deze inhoud:
+
+> Slow Horses S06E04 — Lost and Found
+> Scheduled: 7 Oct 2026
+> Oorspronkelijke uitzenddatum volgens TVmaze; beschikbaarheid in Nederland kan afwijken.
+> https://www.tvmaze.com/episodes/3643508/slow-horses-6x04-lost-and-found
+> Bron: TVmaze (CC BY-SA).
+
+Dit is JP's bevestiging van de R2-afronding/ontvangen melding, geen zelfstandig API-readback door Codex. De exacte ontvangsttijd en de actuele binding-provenance zijn in deze chat niet afzonderlijk teruggelezen. Controleer APP_CREATED vóór de latere uitrol. De overige R2-acceptatiepunten worden hiermee niet automatisch als bewezen aangemerkt. Geen merge- of uitrolopdracht verleend.
