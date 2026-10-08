@@ -16,7 +16,7 @@ export async function PATCH(request: Request) {
     const user = await requireUser(); requireSameOrigin(request, config().origin);
     let patch: unknown;
     try { patch = await request.json(); }
-    catch { throw new AppError("INVALID_INPUT", 400, "De invoer is niet leesbaar. Probeer opnieuw."); }
+    catch { throw new AppError("INVALID_INPUT", 400, "The input could not be read. Try again."); }
     const preferences = await savePreferences(user.id, patch);
     return Response.json(preferences, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return errorResponse(error); }

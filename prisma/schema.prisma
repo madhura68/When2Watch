@@ -55,8 +55,15 @@ enum BindingProvenance {
   LEGACY_UNVERIFIED
 }
 
+enum EventMode {
+  ALL_DAY
+  FIXED_TIME
+}
+
 model UserPreferences {
   userId       String @id
+  eventMode    EventMode @default(ALL_DAY)
+  eventTime    String?
   agendaMonths Int    @default(1)
   timeZone     String @default("Europe/Amsterdam")
   user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)

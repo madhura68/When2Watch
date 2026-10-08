@@ -16,7 +16,7 @@ export async function exportOwnData(db: PrismaClient, userId: string, now = new 
   await accessFor(db, userId);
   const [user, preferences, follows, connection, bindings, links, syncRuns] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true, name: true, email: true, role: true, accessStatus: true } }),
-    db.userPreferences.findUnique({ where: { userId }, select: { agendaMonths: true, timeZone: true } }),
+    db.userPreferences.findUnique({ where: { userId }, select: { agendaMonths: true, timeZone: true, eventMode: true, eventTime: true } }),
     db.userFollow.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { trying: true, createdAt: true, lastAttemptAt: true, lastSuccessAt: true, lastError: true,
       show: { select: { tvmazeId: true, title: true, sourceUrl: true } } } }),
     db.userConnection.findUnique({ where: { userId }, select: { account: { select: { provider: true, profileEmail: true, scope: true } } } }),

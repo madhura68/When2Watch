@@ -52,7 +52,7 @@ it("keeps probes, preferences and series private; another user's object is a neu
   expect((await db.probe.findUniqueOrThrow({ where: { id: "probe-b" } })).status).toBe("prepared");
 
   await savePreferences("a", { agendaMonths: 3 }, db);
-  expect(await getPreferences("b", db)).toEqual({ agendaMonths: 1, timeZone: "Europe/Amsterdam" });
+  expect(await getPreferences("b", db)).toEqual({ agendaMonths: 1, timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY", eventTime: null });
 
   await db.trackedShow.create({ data: { userId: "b", tvmazeId: 45039, title: "Private to B", sourceUrl: "x", status: "Running" } });
   expect(JSON.stringify(await overview("a", db))).not.toContain("Private to B");

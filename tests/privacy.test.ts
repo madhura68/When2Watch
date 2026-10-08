@@ -62,7 +62,7 @@ describe("own export", () => {
     expect(data.user).toMatchObject({ id: "a", email: "a@example.test" });
     expect(data.follows).toEqual([expect.objectContaining({ tvmazeId: 45039, trying: true })]);
     expect(data.calendars).toHaveLength(1); expect(data.calendarItems).toEqual([expect.objectContaining({ eventId: "evta", tvmazeEpisodeId: 1 })]);
-    expect(data.preferences).toEqual({ agendaMonths: 2, timeZone: "Europe/Amsterdam" });
+    expect(data.preferences).toEqual({ agendaMonths: 2, timeZone: "Europe/Amsterdam", eventMode: "ALL_DAY", eventTime: null });
     for (const forbidden of ["w2w:v1", "refresh", "synthetic-access", "hash-by-a", "hash-for-a", "b@example.test", "b-cal", "evtb", "session-a"]) expect(text).not.toContain(forbidden);
   });
 });
