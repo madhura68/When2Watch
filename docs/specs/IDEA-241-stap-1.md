@@ -396,3 +396,13 @@ Triage van de zes MINORs (alle tegen de tree gecontroleerd; geen afwijzingen), v
 | 6 | MINOR (claude m5): exacte-shape-asserts in preferences-tests ontbreken in §11 | bevestigd (`tests/preferences.test.ts:11,16,17,29`, `tests/user-isolation.test.ts:55`) | §11 |
 
 Scope-delta ronde 4: geen nieuw productwerk; v0.6 bevat alleen de zes MINOR-remedies. Omdat dit post-GO-bewerkingen van de auteur (claude) zijn, gaat v0.6 als delta-review naar codex (één reviewer, maximaal 5 rondes), met als body `git diff ee03e827c6ff27ffd88b5af3bbe451b68b99de4a..HEAD -- docs/specs/IDEA-241-stap-1.md`.
+
+### Delta-ronde 1 — 8 oktober 2026, document v0.6 op commit `c14b0a7bb41c7d90d8167df3153b73e88bfee68b`
+
+Pins: spec v0.6 (sha256 `edf71086…c750`), grill rev. 3, `AGENTS.md`; `repository.base_sha` = dezelfde commit. Eén reviewer, cross-model op de auteur.
+
+| Slot | Request | root_message | Idempotency | Verdict |
+| --- | --- | --- | --- | --- |
+| codex (`runtime: CODEX`) | `dddd78ef-0328-41d1-8e47-51b625eda8f1` | `6214ddfb-8654-46b7-b7fd-1bcee0cd1da0` | `b6722c9e-83aa-4fd6-8925-ba4307f37b43` | **GO** — 0 BLOCKER, 0 MAJOR, 0 MINOR; alle zes remedies correct |
+
+**Eindstand spec-fase (8 oktober 2026): GO.** Vier reguliere rondes (v0.2 t/m v0.5) plus één delta-ronde (v0.6). Dit document is de door beide reviewers goedgekeurde specificatie van stap 1. Technisch GO wijzigt de scope niet en autoriseert geen uitvoeringsplan, uitvoering, merge of deployment; de volgende fase (uitvoeringsplan) start alleen op opdracht van JP.
