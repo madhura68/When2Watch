@@ -10,7 +10,7 @@ export type Snapshot = { show: Show & ShowDetails; episodes: SourceEpisode[]; so
 export type ShowArtwork = { bannerUrl: string | null; backgroundUrl: string | null };
 export interface ArtworkSource { artwork(id: number): Promise<ShowArtwork> }
 export interface EpisodeSource { snapshot(id: number): Promise<Snapshot>; artwork?: ArtworkSource["artwork"] }
-const invalid = () => new AppError("INVALID_SOURCE", 502, "TVmaze gaf onvolledige of ongeldige gegevens. Je agenda blijft behouden.");
+const invalid = () => new AppError("INVALID_SOURCE", 502, "TVmaze returned incomplete or invalid data. Your calendar has been preserved.");
 const object = (v: unknown): Record<string, any> => { if (!v || typeof v !== "object" || Array.isArray(v)) throw invalid(); return v; };
 const idNumber = (v: unknown): number => { if (!Number.isSafeInteger(v) || (v as number) <= 0) throw invalid(); return v as number; };
 const text = (v: unknown) => typeof v === "string" && v.trim() ? v.trim() : null;
@@ -109,7 +109,7 @@ export function parseUpdates(input: unknown): Map<number, number> {
 export class TVmaze implements EpisodeSource {
   constructor(private readonly fetcher: typeof fetch = fetch, private readonly pause = (ms: number) => new Promise<void>(r => setTimeout(r,ms))) {}
   private async request(path: string): Promise<unknown> {
-    const failed = () => new AppError("SOURCE_UNAVAILABLE",502,"TVmaze is tijdelijk niet bereikbaar. Probeer opnieuw.");
+    const failed = () => new AppError("SOURCE_UNAVAILABLE",502,"TVmaze is temporarily unavailable. Try again.");
     for (let attempt=0; attempt<=maxRetries; attempt++) {
       const previous = rate.tail; let release!: () => void;
       rate.tail = new Promise<void>(r => { release=r; });
@@ -135,7 +135,7 @@ export class TVmaze implements EpisodeSource {
   }
   async search(query: string): Promise<Show[]> {
     const q=query.trim(); if (q.length < MIN_SEARCH_LENGTH) return [];
-    if(q.length>200) throw new AppError("INVALID_QUERY",400,"Gebruik een kortere serienaam.");
+    if(q.length>200) throw new AppError("INVALID_QUERY",400,"Use a shorter series name.");
     return parseSearch(await this.request(`/search/shows?q=${encodeURIComponent(q)}`));
   }
   async snapshot(id: number): Promise<Snapshot> {

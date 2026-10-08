@@ -7,12 +7,12 @@ import { adminFor } from "./user-access";
 export const invitationCookie = "when2watch.invitation";
 const validity = 72 * 3600_000, flowValidity = 15 * 60_000;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-const invalid = () => new AppError("INVITATION_INVALID", 400, "Deze uitnodiging is niet (meer) geldig. Vraag de beheerder om een nieuwe link.");
+const invalid = () => new AppError("INVITATION_INVALID", 400, "This invitation is no longer valid. Ask the administrator for a new link.");
 
 /** Trim and lowercase only: Gmail dots and plus tags are different addresses here. */
 export function normalizeEmail(email: unknown) {
   const value = typeof email === "string" ? email.trim().toLowerCase() : "";
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value) || value.length > 254) throw new AppError("INVALID_INPUT", 400, "Vul een geldig e-mailadres in.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value) || value.length > 254) throw new AppError("INVALID_INPUT", 400, "Enter a valid email address.");
   return value;
 }
 

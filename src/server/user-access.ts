@@ -4,7 +4,7 @@ import { database } from "./db";
 import { AppError } from "./errors";
 
 export type AccessUser = { id: string; email: string | null; role: Role };
-const unauthorized = () => new AppError("UNAUTHORIZED", 401, "Log eerst in met een toegelaten account.");
+const unauthorized = () => new AppError("UNAUTHORIZED", 401, "Sign in with an authorized account first.");
 
 /** Access is decided by the current database state, never by what the session remembers. */
 export async function accessFor(db: PrismaClient, userId: string | null | undefined): Promise<AccessUser> {
@@ -16,7 +16,7 @@ export async function accessFor(db: PrismaClient, userId: string | null | undefi
 
 export async function adminFor(db: PrismaClient, userId: string | null | undefined): Promise<AccessUser> {
   const user = await accessFor(db, userId);
-  if (user.role !== "ADMIN") throw new AppError("FORBIDDEN", 403, "Alleen een beheerder kan dit doen.");
+  if (user.role !== "ADMIN") throw new AppError("FORBIDDEN", 403, "Only an administrator can do this.");
   return user;
 }
 

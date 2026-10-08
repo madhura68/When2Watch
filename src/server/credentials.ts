@@ -9,7 +9,7 @@ import { AppError } from "./errors";
  */
 export type SecretField = "account.access_token" | "account.refresh_token" | "oauthClient.clientSecret" | "connectionAttempt.tokens";
 const prefix = "w2w:v1";
-const unavailable = () => new AppError("CREDENTIALS_UNAVAILABLE", 503, "De sleutel voor opgeslagen Google-toegang ontbreekt of klopt niet. Neem contact op met de beheerder.");
+const unavailable = () => new AppError("CREDENTIALS_UNAVAILABLE", 503, "The key for stored Google access is missing or invalid. Contact the administrator.");
 
 function keys(source = process.env.W2W_CREDENTIAL_KEYS) {
   const parsed = (source ?? "").split(",").map(s => s.trim()).filter(Boolean).map(entry => {

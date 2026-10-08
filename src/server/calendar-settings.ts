@@ -9,12 +9,12 @@ import { accessFor } from "./user-access";
 
 type CreateInput = { requestId: string; name: string; timeZone: string };
 const unresolved = ["sending", "uncertain", "created", "ready"], proven = ["created", "ready", "selected"];
-const uncertain = () => new AppError("CALENDAR_CREATION_UNCERTAIN", 409, "De aanmaak is nog niet bevestigd. Vernieuw de lijst en kies de bedoelde agenda; maak haar niet opnieuw aan.");
+const uncertain = () => new AppError("CALENDAR_CREATION_UNCERTAIN", 409, "Creation has not been confirmed yet. Refresh the list and choose the intended calendar; do not create it again.");
 
 /** Trim, Unicode NFC and single spaces; 1–100 characters. */
 export function normalizeCalendarName(name: unknown) {
   const value = typeof name === "string" ? name.normalize("NFC").trim().replace(/\s+/g, " ") : "";
-  if (!value || value.length > 100) throw new AppError("INVALID_INPUT", 400, "Geef de agenda een naam van 1 tot 100 tekens.");
+  if (!value || value.length > 100) throw new AppError("INVALID_INPUT", 400, "Give the calendar a name of 1 to 100 characters.");
   return value;
 }
 const sameName = (a: string, b: string) => a.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase() === b.toLowerCase();
@@ -26,7 +26,7 @@ export class CalendarSettingsService {
     await accessFor(this.db, userId);
     const account = await connectionAccount(this.db, userId);
     if (!account || account.userId !== userId || account.needsReauth || !account.refresh_token || !hasCalendarScopes(account.scope)) {
-      throw new AppError("RECONNECT_GOOGLE", 409, "Geef Google toestemming om je agendalijst te lezen en een When2Watch-agenda te beheren.");
+      throw new AppError("RECONNECT_GOOGLE", 409, "Allow Google to let When2Watch read your calendar list and manage a When2Watch calendar.");
     }
     return { account, google: this.google(account.id) };
   }
@@ -72,15 +72,15 @@ export class CalendarSettingsService {
   /** Choose (or re-read after a rename) a provable app calendar as the first destination. */
   select(userId: string, calendarId: string) {
     if (typeof calendarId !== "string" || !calendarId.trim() || calendarId.length > 1024 || calendarId === "primary") {
-      throw new AppError("INVALID_INPUT", 400, "Kies een agenda uit de lijst met haar volledige ID.");
+      throw new AppError("INVALID_INPUT", 400, "Choose a calendar from the list using its full ID.");
     }
     return serializeCalendarMutation(userId, async () => {
       const { account, google } = await this.connection(userId);
       if (!(await this.provenCalendarIds(userId, account.id)).has(calendarId)) {
-        throw new AppError("NOT_APP_CALENDAR", 409, "When2Watch kan alleen een agenda gebruiken die het zelf heeft aangemaakt. Maak een nieuwe When2Watch-agenda.");
+        throw new AppError("NOT_APP_CALENDAR", 409, "When2Watch can only use a calendar it created. Create a new When2Watch calendar.");
       }
       const current = await getActiveBinding(this.db, userId);
-      if ("binding" in current && current.binding.calendarId !== calendarId) throw new AppError("CALENDAR_TRANSITION_REQUIRED", 409, "Gebruik de agendawissel; je bestaande afspraken blijven dan in de oude agenda staan.");
+      if ("binding" in current && current.binding.calendarId !== calendarId) throw new AppError("CALENDAR_TRANSITION_REQUIRED", 409, "Use the calendar switch; your existing events will remain in the old calendar.");
       const calendar = await google.calendar(calendarId);
       await this.activate(userId, account.id, calendar, null);
       return calendar;
@@ -89,10 +89,10 @@ export class CalendarSettingsService {
 
   /** Explicit move of the destination to a new app calendar; the user must acknowledge that old items stay behind. */
   async switchCalendar(userId: string, calendarId: string, acknowledgeOldItems: boolean) {
-    if (acknowledgeOldItems !== true) throw new AppError("ACKNOWLEDGEMENT_REQUIRED", 400, "Bevestig dat bestaande afspraken in de oude agenda blijven staan en dubbel zichtbaar kunnen zijn.");
+    if (acknowledgeOldItems !== true) throw new AppError("ACKNOWLEDGEMENT_REQUIRED", 400, "Confirm that existing events will remain in the old calendar and may appear twice.");
     return serializeCalendarMutation(userId, async () => {
       const { account, google } = await this.connection(userId);
-      if (!(await this.provenCalendarIds(userId, account.id)).has(calendarId)) throw new AppError("NOT_APP_CALENDAR", 409, "Kies een agenda die When2Watch zelf heeft aangemaakt.");
+      if (!(await this.provenCalendarIds(userId, account.id)).has(calendarId)) throw new AppError("NOT_APP_CALENDAR", 409, "Choose a calendar created by When2Watch.");
       const current = await getActiveBinding(this.db, userId);
       const calendar = await google.calendar(calendarId);
       await this.activate(userId, account.id, calendar, "binding" in current && current.binding.calendarId !== calendarId ? current.binding.id : null);
@@ -104,7 +104,7 @@ export class CalendarSettingsService {
   abandonCreation(userId: string, requestId: string) {
     return serializeCalendarMutation(userId, async () => {
       const released = await this.db.calendarCreationAttempt.updateMany({ where: { id: requestId, ownerId: userId, status: { in: ["sending", "uncertain"] } }, data: { status: "abandoned" } });
-      if (!released.count) throw new AppError("NOT_FOUND", 404, "Er staat geen onbevestigde aanvraag open.");
+      if (!released.count) throw new AppError("NOT_FOUND", 404, "There is no unconfirmed request.");
       return { abandoned: true };
     });
   }
@@ -112,25 +112,25 @@ export class CalendarSettingsService {
   create(userId: string, input: CreateInput) {
     const name = normalizeCalendarName(input?.name);
     if (!input || typeof input.requestId !== "string" || !/^[a-zA-Z0-9-]{8,128}$/.test(input.requestId) || !validTimeZone(input.timeZone)) {
-      throw new AppError("INVALID_INPUT", 400, "Geef een agendanaam en een geldige tijdzone op.");
+      throw new AppError("INVALID_INPUT", 400, "Enter a calendar name and a valid time zone.");
     }
     return serializeCalendarMutation(userId, async () => {
       const { account, google } = await this.connection(userId);
       const previous = await this.db.calendarCreationAttempt.findUnique({ where: { id: input.requestId } });
       if (previous) {
         if (previous.ownerId !== userId || previous.accountId !== account.id || previous.name !== name || previous.timeZone !== input.timeZone) {
-          throw new AppError("INVALID_INPUT", 409, "Deze aanvraag hoort bij een andere keuze. Vernieuw eerst de instellingen.");
+          throw new AppError("INVALID_INPUT", 409, "This request belongs to a different choice. Refresh Settings first.");
         }
         if (!["ready", "selected"].includes(previous.status) || !previous.calendarId) throw uncertain();
         return google.calendar(previous.calendarId);
       }
       if (await this.db.calendarCreationAttempt.count({ where: { ownerId: userId, status: { in: ["sending", "uncertain"] } } })) {
-        throw new AppError("CALENDAR_CREATION_PENDING", 409, "Er staat al een onbevestigde agenda-aanvraag open. Vernieuw de lijst en kies de bedoelde agenda.");
+        throw new AppError("CALENDAR_CREATION_PENDING", 409, "There is already an unconfirmed calendar request. Refresh the list and choose the intended calendar.");
       }
       const ids = await this.provenCalendarIds(userId, account.id);
       const namesake = (await google.allCalendars()).filter(c => sameName(c.summary, name.toLowerCase()));
-      if (namesake.some(c => !ids.has(c.id))) throw new AppError("NAME_TAKEN", 409, `Er bestaat al een agenda “${name}” die When2Watch niet heeft aangemaakt. Kies een andere naam, bijvoorbeeld “${name} 2”.`);
-      if (namesake.length) throw new AppError("NAME_REUSABLE", 409, "Je hebt al een When2Watch-agenda met deze naam. Kies die in de lijst.");
+      if (namesake.some(c => !ids.has(c.id))) throw new AppError("NAME_TAKEN", 409, `A calendar named “${name}” already exists and was not created by When2Watch. Choose another name, for example “${name} 2”.`);
+      if (namesake.length) throw new AppError("NAME_REUSABLE", 409, "You already have a When2Watch calendar with this name. Choose it from the list.");
       // Persist intent before POST; a lost answer is never repeated nor matched on name.
       await this.db.calendarCreationAttempt.create({ data: { id: input.requestId, ownerId: userId, accountId: account.id, name, timeZone: input.timeZone } });
       let id: string;
@@ -144,7 +144,7 @@ export class CalendarSettingsService {
       }
       await this.db.calendarCreationAttempt.update({ where: { id: input.requestId }, data: { status: "created", calendarId: id } });
       const calendar = await google.calendar(id);
-      if (calendar.timeZone !== input.timeZone) throw new AppError("CALENDAR_TIMEZONE", 409, "De nieuwe agenda heeft een andere tijdzone. Controleer haar in de lijst.");
+      if (calendar.timeZone !== input.timeZone) throw new AppError("CALENDAR_TIMEZONE", 409, "The new calendar has a different time zone. Check it in the list.");
       await this.db.calendarCreationAttempt.update({ where: { id: input.requestId }, data: { status: "ready" } });
       // First destination: bind right away. With an existing (legacy) destination the user switches explicitly.
       if (!("binding" in await getActiveBinding(this.db, userId))) await this.activate(userId, account.id, calendar, null);

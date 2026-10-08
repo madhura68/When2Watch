@@ -16,14 +16,14 @@ export async function POST(request: Request) {
   try {
     const user = await requireUser(); requireSameOrigin(request, config().origin);
     const input = await request.json().catch(() => null) as Record<string, unknown> | null;
-    if (!input || typeof input !== "object" || Array.isArray(input)) throw new AppError("INVALID_INPUT", 400, "Kies een Google-actie.");
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new AppError("INVALID_INPUT", 400, "Choose a Google action.");
     const service = new GoogleConnectionService(database()), token = await currentSessionToken();
     if (input.action === "confirm" || input.action === "cancel") {
-      if (typeof input.id !== "string" || Object.keys(input).some(k => !["action", "id"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Kies een geldige koppelpoging.");
+      if (typeof input.id !== "string" || Object.keys(input).some(k => !["action", "id"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Choose a valid connection attempt.");
       if (input.action === "confirm") return Response.json(await service.confirm(user.id, token, input.id), { headers: { "Cache-Control": "private, no-store" } });
       await service.cancel(input.id, token); return Response.json({ cancelled: true });
     }
-    if (input.action !== "begin" || Object.keys(input).some(k => !["action", "mode", "clientId", "clientSecret"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Kies een Google-actie.");
+    if (input.action !== "begin" || Object.keys(input).some(k => !["action", "mode", "clientId", "clientSecret"].includes(k))) throw new AppError("INVALID_INPUT", 400, "Choose a Google action.");
     const attempt = await service.begin(user.id, token, { mode: input.mode as ConnectionMode, clientId: input.clientId as string, clientSecret: input.clientSecret as string });
     return Response.json({ started: true }, { headers: { "Cache-Control": "private, no-store", "Set-Cookie": `${connectionCookie}=${attempt.id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=900${config().origin.startsWith("https://") ? "; Secure" : ""}` } });
   } catch (error) { return errorResponse(error); }

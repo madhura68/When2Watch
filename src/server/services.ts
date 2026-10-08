@@ -17,7 +17,7 @@ export function googleForAccount(accountId: string) {
 function bindingGoogle(userId: string) {
   return new GoogleCalendar(async () => {
     const active = await getActiveBinding(database(), userId);
-    if (!("binding" in active)) throw new AppError("CALENDAR_UNCONFIGURED", 409, "Kies eerst je eigen agenda bij Instellingen.");
+    if (!("binding" in active)) throw new AppError("CALENDAR_UNCONFIGURED", 409, "Choose your own calendar in Settings first.");
     return getGoogleAccessToken(database(), active.account.id);
   });
 }

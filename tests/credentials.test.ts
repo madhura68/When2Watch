@@ -17,8 +17,8 @@ describe("sealed secrets", () => {
     const a = seal("refresh-secret", "account.refresh_token", "acc-1", key(1)), b = seal("refresh-secret", "account.refresh_token", "acc-1", key(1));
     expect(a).not.toContain("refresh-secret"); expect(a).not.toBe(b); // unique nonce
     expect(open(a, "account.refresh_token", "acc-1", key(1))).toBe("refresh-secret");
-    expect(() => open(a, "account.refresh_token", "acc-2", key(1))).toThrow(/sleutel/);
-    expect(() => open(a, "account.access_token", "acc-1", key(1))).toThrow(/sleutel/);
+    expect(() => open(a, "account.refresh_token", "acc-2", key(1))).toThrow(/key/);
+    expect(() => open(a, "account.access_token", "acc-1", key(1))).toThrow(/key/);
   });
 
   it("refuses tampering, a wrong or missing key and plaintext — there is no fallback", () => {

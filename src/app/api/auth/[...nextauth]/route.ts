@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 async function handler(request: NextRequest, context: { params: Promise<{ nextauth: string[] }> }) {
   try {
     const db = database(), installation = await getInstallation(db), { nextauth } = await context.params;
-    if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Richt eerst de Google-koppeling van deze installatie in.");
+    if (!installation?.oauthClientConfigId) throw new AppError("SETUP_REQUIRED", 503, "Set up the Google connection for this installation first.");
     const action = nextauth[0], callback = action === "callback";
     const work = async () => {
       const attemptId = ["signin", "callback"].includes(action) ? request.cookies.get(connectionCookie)?.value : undefined;

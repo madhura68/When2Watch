@@ -11,5 +11,5 @@ export function errorResponse(error: unknown): Response {
   }
   // Provider exceptions can contain access tokens and request headers.
   console.error("when2watch: unexpected operation failure");
-  return Response.json({ error: "Deze actie is niet gelukt. Probeer het opnieuw.", code: "UNEXPECTED" }, { status: 500 });
+  return Response.json({ error: "This action failed. Try again.", code: "UNEXPECTED" }, { status: 500 });
 }

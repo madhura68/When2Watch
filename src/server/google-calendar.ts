@@ -38,30 +38,30 @@ export class GoogleCalendar {
         signal: AbortSignal.timeout(15_000),
       });
     } catch {
-      throw new AppError("GOOGLE_UNAVAILABLE", 503, "Google gaf geen antwoord. Probeer dezelfde actie opnieuw; het proefitem wordt niet dubbel aangemaakt.");
+      throw new AppError("GOOGLE_UNAVAILABLE", 503, "Google did not respond. Try the same action again; the test event will not be created twice.");
     }
     if (!response.ok) {
       const codes: Record<number, [string, string]> = {
-        401: ["RECONNECT_GOOGLE", "Koppel Google opnieuw om verder te gaan."],
-        403: ["CALENDAR_FORBIDDEN", "Google weigert deze agenda-actie. Controleer de toestemming en probeer opnieuw."],
-        404: ["NOT_FOUND", "De gekozen agenda of het proefitem is niet gevonden."],
-        409: ["CONFLICT", "Dit agenda-item bestaat al."],
-        410: ["GONE", "Dit agenda-item is verwijderd."],
-        412: ["EVENT_CHANGED", "Het proefitem is intussen gewijzigd. Controleer het en probeer opnieuw."],
+        401: ["RECONNECT_GOOGLE", "Reconnect Google to continue."],
+        403: ["CALENDAR_FORBIDDEN", "Google refused this calendar action. Check the permission and try again."],
+        404: ["NOT_FOUND", "The selected calendar or probe event was not found."],
+        409: ["CONFLICT", "This calendar event already exists."],
+        410: ["GONE", "This calendar event was removed."],
+        412: ["EVENT_CHANGED", "The probe event has changed. Check it and try again."],
       };
-      const [code, message] = codes[response.status] ?? ["GOOGLE_UNAVAILABLE", "Google kan deze actie nu niet uitvoeren. Probeer het later opnieuw."];
+      const [code, message] = codes[response.status] ?? ["GOOGLE_UNAVAILABLE", "Google cannot perform this action now. Try again later."];
       throw new AppError(code, response.status, message);
     }
     if (response.status === 204) return undefined as T;
     try { return await response.json() as T; }
-    catch { throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google gaf een onleesbaar antwoord. Probeer opnieuw."); }
+    catch { throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google returned an unreadable response. Try again."); }
   }
 
   async calendar(calendarId: string): Promise<CalendarInfo> {
     const result = await this.request<CalendarInfo>(`users/me/calendarList/${encodeURIComponent(calendarId)}`);
-    if (result.id !== calendarId) throw new AppError("WRONG_CALENDAR", 409, "Google gaf een andere agenda terug. Er wordt niets geschreven.");
+    if (result.id !== calendarId) throw new AppError("WRONG_CALENDAR", 409, "Google returned a different calendar. Nothing will be written.");
     if (!["owner", "writer"].includes(result.accessRole)) {
-      throw new AppError("CALENDAR_NOT_WRITABLE", 403, "Je hebt geen schrijfrechten voor de gekozen agenda.");
+      throw new AppError("CALENDAR_NOT_WRITABLE", 403, "You do not have write access to the selected calendar.");
     }
     return {
       id: result.id, summary: result.summary, timeZone: result.timeZone, accessRole: result.accessRole,
@@ -76,18 +76,18 @@ export class GoogleCalendar {
       const query = new URLSearchParams({ maxResults: "250", minAccessRole: "writer" });
       if (pageToken) query.set("pageToken", pageToken);
       const page = await this.request<{ items?: CalendarInfo[]; nextPageToken?: string }>(`users/me/calendarList?${query}`);
-      if (page.items !== undefined && !Array.isArray(page.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      if (page.items !== undefined && !Array.isArray(page.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "The calendar list could not be read completely.");
       for (const item of page.items ?? []) {
         if (!item || !["owner", "writer"].includes(item.accessRole)) continue;
         if (typeof item.id !== "string" || !item.id || typeof item.summary !== "string" || typeof item.timeZone !== "string") {
-          throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google gaf onvolledige agendagegevens.");
+          throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google returned incomplete calendar data.");
         }
         result.push({ id: item.id, summary: item.summary, timeZone: item.timeZone, accessRole: item.accessRole,
           defaultReminders: (item.defaultReminders ?? []).map(({ method, minutes }) => ({ method, minutes })) });
       }
       // B0 returned an empty first page with a continuation token.
       pageToken = page.nextPageToken;
-      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "The calendar list could not be read completely.");
       if (pageToken) seen.add(pageToken);
     } while (pageToken);
     return result;
@@ -101,10 +101,10 @@ export class GoogleCalendar {
       const query = new URLSearchParams({ maxResults: "250" });
       if (pageToken) query.set("pageToken", pageToken);
       const page = await this.request<{ items?: { id?: unknown; summary?: unknown }[]; nextPageToken?: string }>(`users/me/calendarList?${query}`);
-      if (page.items !== undefined && !Array.isArray(page.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      if (page.items !== undefined && !Array.isArray(page.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "The calendar list could not be read completely.");
       for (const item of page.items ?? []) if (typeof item?.id === "string" && typeof item.summary === "string") result.push({ id: item.id, summary: item.summary });
       pageToken = page.nextPageToken;
-      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De agendalijst kon niet volledig worden gelezen.");
+      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "The calendar list could not be read completely.");
       if (pageToken) seen.add(pageToken);
     } while (pageToken);
     return result;
@@ -112,7 +112,7 @@ export class GoogleCalendar {
 
   async createCalendar(name: string, timeZone: string): Promise<{ id: string }> {
     const calendar = await this.request<{ id?: string }>("calendars", { method: "POST", body: JSON.stringify({ summary: name, timeZone }) });
-    if (typeof calendar.id !== "string" || !calendar.id) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De nieuwe agenda is nog niet bevestigd. Vernieuw de agendalijst.");
+    if (typeof calendar.id !== "string" || !calendar.id) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "The new calendar has not been confirmed yet. Refresh the calendar list.");
     return { id: calendar.id };
   }
 
@@ -134,10 +134,10 @@ export class GoogleCalendar {
       query.append("privateExtendedProperty", "app=when2watch");
       if (pageToken) query.set("pageToken", pageToken);
       const result = await this.request<{ items?: CalendarEvent[]; nextPageToken?: string }>(`calendars/${encodeURIComponent(calendarId)}/events?${query}`);
-      if (result.items !== undefined && !Array.isArray(result.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google gaf geen geldige lijst agenda-items.");
+      if (result.items !== undefined && !Array.isArray(result.items)) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "Google did not return a valid list of calendar events.");
       events.push(...(result.items ?? []));
       pageToken = result.nextPageToken;
-      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "De lijst agenda-items kon niet volledig worden gelezen.");
+      if (pageToken && (typeof pageToken !== "string" || seen.has(pageToken))) throw new AppError("INVALID_GOOGLE_RESPONSE", 502, "The list of calendar events could not be read completely.");
       if (pageToken) seen.add(pageToken);
     } while (pageToken);
     return events.filter(event => Object.entries({ app:"when2watch",kind:"episode",userId,showId:String(showId) })

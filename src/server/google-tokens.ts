@@ -8,10 +8,10 @@ import { clientSecretOf, open, sealOptional } from "./credentials";
 type Refresher = (refreshToken: string) => Promise<{ access_token?: string | null; refresh_token?: string | null; expiry_date?: number | null }>;
 
 export async function saveGoogleTokens(db: PrismaClient, accountId: string, oauthClientConfigId: string, account: Account): Promise<void> {
-  if (account.provider !== "google") throw new AppError("INVALID_PROVIDER", 403, "Gebruik Google om te koppelen.");
+  if (account.provider !== "google") throw new AppError("INVALID_PROVIDER", 403, "Use Google to connect.");
   const current = await db.account.findUnique({ where: { id: accountId } });
-  if (!current || current.provider !== "google" || current.providerAccountId !== account.providerAccountId) throw new AppError("ACCOUNT_NOT_FOUND", 401, "Koppel je Google-account opnieuw.");
-  if (current.oauthClientConfigId !== oauthClientConfigId && !account.refresh_token) throw new AppError("RECONNECT_GOOGLE", 401, "De nieuwe client heeft eigen blijvende Google-toegang nodig.");
+  if (!current || current.provider !== "google" || current.providerAccountId !== account.providerAccountId) throw new AppError("ACCOUNT_NOT_FOUND", 401, "Reconnect your Google account.");
+  if (current.oauthClientConfigId !== oauthClientConfigId && !account.refresh_token) throw new AppError("RECONNECT_GOOGLE", 401, "The new client needs its own persistent Google access.");
   await db.account.update({
     where: { id: accountId },
     data: {
@@ -28,7 +28,7 @@ export async function saveGoogleTokens(db: PrismaClient, accountId: string, oaut
 
 export async function getGoogleAccessToken(db: PrismaClient, accountId: string, refreshFactory: typeof googleTokenRefresher = googleTokenRefresher, forceRefresh = false): Promise<string> {
   const account = await db.account.findUnique({ where: { id: accountId }, include: { oauthClient: true } });
-  const reconnect = () => new AppError("RECONNECT_GOOGLE", 401, "Koppel Google opnieuw en geef beide agendatoestemmingen.");
+  const reconnect = () => new AppError("RECONNECT_GOOGLE", 401, "Reconnect Google and grant both calendar permissions.");
   if (!account || account.provider !== "google" || !account.oauthClient || account.needsReauth || !hasCalendarScopes(account.scope)) throw reconnect();
   if (!forceRefresh && account.access_token && (account.expires_at ?? 0) > Date.now() / 1000 + 60) return open(account.access_token, "account.access_token", account.id);
   if (!account.refresh_token) throw reconnect();
@@ -43,7 +43,7 @@ export async function getGoogleAccessToken(db: PrismaClient, accountId: string, 
       await db.account.update({ where: { id: account.id }, data: { needsReauth: true } });
       throw reconnect();
     }
-    throw new AppError("GOOGLE_UNAVAILABLE", 503, "Google is tijdelijk niet bereikbaar. Probeer het opnieuw.");
+    throw new AppError("GOOGLE_UNAVAILABLE", 503, "Google is temporarily unavailable. Try again.");
   }
   if (!tokens.access_token || !tokens.expiry_date) throw reconnect();
   await db.account.update({

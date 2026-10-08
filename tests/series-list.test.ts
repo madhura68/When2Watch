@@ -23,8 +23,8 @@ it.each([
 });
 it("handles empty lists and keeps unknown source values under one label",()=>{
   expect(visibleSeries([],"all","all")).toEqual([]);
-  expect(sourceStatus("Surprise")).toBe("Status onbekend");
-  expect(sourceStatus("Running")).toBe("Lopend");
-  expect(sourceStatus("Ended")).toBe("Beëindigd");
-  expect(sourceStatus("To Be Determined")).toBe("Vervolg nog onzeker");
+  expect(sourceStatus("Surprise")).toBe("Status unknown");
+  expect(sourceStatus("Running")).toBe("Running");
+  expect(sourceStatus("Ended")).toBe("Ended");
+  expect(sourceStatus("To Be Determined")).toBe("Renewal undecided");
 });

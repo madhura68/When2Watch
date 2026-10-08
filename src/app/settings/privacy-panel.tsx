@@ -21,9 +21,9 @@ export function PrivacyPanel({ lastAdmin }: { lastAdmin: boolean }) {
     <h3>Account verwijderen</h3>
     {lastAdmin ? <p className="notice">Je bent de laatste beheerder. Maak eerst iemand anders beheerder voordat je je account verwijdert.</p> : <>
       <p>Je series, instellingen, Google-koppeling en synchronisatiegeschiedenis worden verwijderd. <strong>Afspraken die al in je Google-agenda staan blijven staan</strong>; verwijder die zelf in Google Agenda als je ze niet meer wilt. Voor de zekerheid moet je binnen 10 minuten vóór het verwijderen opnieuw zijn ingelogd.</p>
-      <label htmlFor="delete-confirmation">Typ VERWIJDEREN om te bevestigen</label>
+      <label htmlFor="delete-confirmation">Typ DELETE om te bevestigen</label>
       <input id="delete-confirmation" value={confirmation} disabled={busy} autoComplete="off" onChange={event => setConfirmation(event.target.value)} />
-      <div className="form-row"><button className="danger" disabled={busy || confirmation !== "VERWIJDEREN"} onClick={() => void remove()}>Account definitief verwijderen</button>
+      <div className="form-row"><button className="danger" disabled={busy || confirmation !== "DELETE"} onClick={() => void remove()}>Account definitief verwijderen</button>
         {needsLogin && <button disabled={busy} onClick={() => void relogin()}>Opnieuw inloggen</button>}</div>
     </>}
     <div role="status">{message && <p className="notice error">{message}</p>}</div>

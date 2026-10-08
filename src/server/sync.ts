@@ -15,7 +15,7 @@ export type SyncResult = { id: string; status: "success" | "partial" | "failed";
 export type SyncConfiguration = SyncSettings & { origin: string };
 export type SyncSource = Pick<CatalogSource, "snapshot"> & Partial<Pick<CatalogSource, "artwork">>;
 type EpisodeWithLinks = CatalogEpisode & { links: CalendarEventLink[] };
-const failure = (error: unknown) => error instanceof AppError ? error.message : "Synchroniseren is onderbroken. Probeer opnieuw; bewaarde koppelingen blijven behouden.";
+const failure = (error: unknown) => error instanceof AppError ? error.message : "Sync was interrupted. Try again; your saved connections have been preserved.";
 // sync.ts — canonical hash; the array equals today's for all-day events without location
 const instantOf = (part?: EventPart | null): string | null => {
   if (!part?.dateTime) return null;
@@ -84,7 +84,7 @@ export class SyncService {
 
   private async unfollowLocked(userId: string, tvmazeId: number) {
     const follow = await this.db.userFollow.findFirst({ where: { userId, show: { tvmazeId } }, include: { show: true } });
-    if (!follow) throw new AppError("NOT_FOUND", 404, "Deze serie staat niet in jouw overzicht.");
+    if (!follow) throw new AppError("NOT_FOUND", 404, "This series is not in your list.");
     const binding = await this.activeBinding(userId);
     const account = binding?.accountId ? await this.db.account.findUnique({ where: { id: binding.accountId } }) : null;
     let removed = 0;
@@ -106,7 +106,7 @@ export class SyncService {
       if (event) {
         this.assertOwned(event, userId, tvmazeId, link.catalogEpisode!.sourceId);
         await this.google.remove(this.settings.calendarId, event.id, event.etag!);
-        if (await this.read(event.id)) throw new AppError("DELETE_UNCONFIRMED", 502, "De verwijdering is nog niet bevestigd. Probeer opnieuw.");
+        if (await this.read(event.id)) throw new AppError("DELETE_UNCONFIRMED", 502, "The deletion has not been confirmed yet. Try again.");
       }
       await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleted" } });
       removed++;
@@ -152,7 +152,7 @@ export class SyncService {
       try {
         // Blocking waits for this lock; still re-check access before each show's external work.
         if ((await this.db.user.findUnique({ where: { id: userId }, select: { accessStatus: true } }))?.accessStatus !== "ACTIVE") {
-          throw new AppError("UNAUTHORIZED", 401, "De toegang van dit account is ingetrokken.");
+          throw new AppError("UNAUTHORIZED", 401, "Access for this account has been revoked.");
         }
         const previous = await this.db.catalogEpisode.findMany({ where: { catalogShowId: show.id } });
         const oldDates = new Map(previous.map(e => [e.sourceId, e.airdate]));
@@ -161,10 +161,10 @@ export class SyncService {
           // Weekly at most; an artwork failure never blocks the episodes below.
           if (this.source.artwork) await refreshCatalogArtwork(this.db, this.catalogSource, show, started);
         }
-        else if (!show.lastSuccessAt) throw new AppError("SOURCE_UNAVAILABLE", 502, "Deze serie is nog niet volledig opgehaald. De volgende synchronisatie probeert het opnieuw.");
+        else if (!show.lastSuccessAt) throw new AppError("SOURCE_UNAVAILABLE", 502, "This series has not been fully retrieved yet. The next sync will try again.");
         result.title = show.title;
         if (binding) {
-          if (show.needsReconcile) throw new AppError("NEEDS_RECONCILE", 409, "Deze serie wacht op een gecontroleerde broncontrole; agenda-items blijven ongewijzigd.");
+          if (show.needsReconcile) throw new AppError("NEEDS_RECONCILE", 409, "This series is waiting for a controlled source check; calendar events remain unchanged.");
           await this.google.calendar(binding.calendarId);
           const remote = await this.google.ownedEpisodes(binding.calendarId, userId, show.tvmazeId);
           const episodes = await this.db.catalogEpisode.findMany({ where: { catalogShowId: show.id }, include: { links: { where: { bindingId: binding.id } } }, orderBy: { sourceId: "asc" } });
@@ -187,7 +187,7 @@ export class SyncService {
 
   private assertOwned(event: CalendarEvent, userId: string, showId: number, episodeId: number): void {
     if (!event.id || !event.etag || !Object.entries(markers(userId,showId,episodeId)).every(([key,value]) => event.extendedProperties?.private?.[key] === value)) {
-      throw new AppError("EVENT_OWNERSHIP", 409, "Een agenda-item heeft een afwijkende markering. Het item is niet gewijzigd.");
+      throw new AppError("EVENT_OWNERSHIP", 409, "A calendar event has an unexpected marker. The event was not changed.");
     }
   }
 
@@ -198,12 +198,12 @@ export class SyncService {
 
   private async confirm(link: CalendarEventLink, desired: CalendarEvent, userId: string, showId: number, episode: CatalogEpisode): Promise<void> {
     const event = await this.read(link.eventId);
-    if (!event) throw new AppError("EVENT_UNCONFIRMED", 502, "Google heeft het agenda-item nog niet bevestigd. Probeer opnieuw.");
+    if (!event) throw new AppError("EVENT_UNCONFIRMED", 502, "Google has not confirmed the calendar event yet. Try again.");
     this.assertOwned(event,userId,showId,episode.sourceId);
     // Google canonicalizes all-day defaults. Remember its confirmed representation
     // separately from the desired payload, so unchanged runs perform no writes.
     if (event.id !== desired.id || calendarEventHash({ ...event, reminders: desired.reminders }) !== calendarEventHash(desired)) {
-      throw new AppError("EVENT_UNCONFIRMED", 502, "Het teruggelezen agenda-item wijkt af. Probeer opnieuw.");
+      throw new AppError("EVENT_UNCONFIRMED", 502, "The calendar event returned by Google differs from the expected event. Try again.");
     }
     await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "synced", desiredJson: JSON.stringify(desired),
       lastDate: episode.airdate, confirmedDesiredHash: calendarEventHash(desired), confirmedRemoteHash: calendarEventHash(event) } });
@@ -216,10 +216,10 @@ export class SyncService {
     const candidates = allRemote.filter(e => e.status !== "cancelled" && Object.entries(markers(userId, show.tvmazeId, episode.sourceId)).every(([k,v]) => e.extendedProperties?.private?.[k] === v));
     // Missing mappings can still have an owned remote date inside the window.
     if (!within(episode.airdate) && !within(oldDate) && !within(link?.lastDate) && !candidates.some(e => within(eventDate(e, this.settings.timeZone))) && !pending(link)) return;
-    if (candidates.length > 1) throw new AppError("DUPLICATE_EVENTS", 409, "Meerdere eigen agenda-items voor deze aflevering gevonden. Los dit conflict eerst op.");
+    if (candidates.length > 1) throw new AppError("DUPLICATE_EVENTS", 409, "Multiple When2Watch calendar events were found for this episode. Resolve this conflict first.");
     let event: CalendarEvent | null = candidates[0] ?? (link ? await this.read(link.eventId) : null);
     if (event) this.assertOwned(event,userId,show.tvmazeId,episode.sourceId);
-    if (event && link && event.id !== link.eventId && link.status !== "deleted") throw new AppError("EVENT_CONFLICT", 409, "De opgeslagen koppeling wijkt af van het gevonden agenda-item.");
+    if (event && link && event.id !== link.eventId && link.status !== "deleted") throw new AppError("EVENT_CONFLICT", 409, "The saved connection differs from the calendar event that was found.");
     const ownership = { userId, bindingId: binding.id, catalogEpisodeId: episode.id, calendarId: binding.calendarId };
     if (!link && event) link = await this.db.calendarEventLink.create({ data: { ...ownership, eventId: event.id, status: "synced", desiredJson: "{}", lastDate: eventDate(event, this.settings.timeZone) } });
 
@@ -228,7 +228,7 @@ export class SyncService {
       await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleting" } });
       if (event) {
         await this.google.remove(binding.calendarId, event.id, event.etag!);
-        if (await this.read(event.id)) throw new AppError("DELETE_UNCONFIRMED", 502, "De verwijdering is nog niet bevestigd. Probeer opnieuw.");
+        if (await this.read(event.id)) throw new AppError("DELETE_UNCONFIRMED", 502, "The deletion has not been confirmed yet. Try again.");
       }
       link = await this.db.calendarEventLink.update({ where: { id: link.id }, data: { status: "deleted" } });
       result.deleted++; event = null;
@@ -244,7 +244,7 @@ export class SyncService {
       link = link ? await this.db.calendarEventLink.update({ where: { id: link.id }, data })
         : await this.db.calendarEventLink.create({ data: { ...data, ...ownership } });
     }
-    if (!link) throw new AppError("MAPPING_MISSING", 500, "De agendakoppeling ontbreekt.");
+    if (!link) throw new AppError("MAPPING_MISSING", 500, "The calendar connection is missing.");
     const desired = desiredEpisodeEvent({ ...this.settings, userId },show,episode,link.eventId);
     if (!event) {
       // Persist intent before POST. A lost response is recovered by GET of this ID.

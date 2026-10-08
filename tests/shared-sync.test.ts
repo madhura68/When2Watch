@@ -86,7 +86,7 @@ describe("two users sharing one series", () => {
     await db.catalogShow.updateMany({ data: { needsReconcile: true } });
     calendars.a.writes.length = 0;
     const result = await services("a").sync("a", "manual");
-    expect(result.status).toBe("failed"); expect(result.series[0].errors.join()).toMatch(/broncontrole/);
+    expect(result.status).toBe("failed"); expect(result.series[0].errors.join()).toMatch(/source check/);
     expect(calendars.a.writes).toEqual([]);
   });
 });

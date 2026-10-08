@@ -10,13 +10,13 @@ export const runtime = "nodejs";
 async function showInput(request: Request, requireTrying: boolean) {
   let body: unknown;
   try { body = await request.json(); }
-  catch { throw new AppError("INVALID_INPUT",400,"De invoer is niet leesbaar. Probeer opnieuw."); }
-  if (!body || typeof body !== "object" || Array.isArray(body)) throw new AppError("INVALID_INPUT",400,"De invoer is ongeldig.");
+  catch { throw new AppError("INVALID_INPUT",400,"The input could not be read. Try again."); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new AppError("INVALID_INPUT",400,"The input is invalid.");
   const value = body as Record<string,unknown>;
   const id = typeof value.showId === "string" ? Number(value.showId) : NaN;
   if (Object.keys(value).some(key=>!["showId","trying"].includes(key)) || typeof value.showId !== "string" || value.showId.length > 200 || !/^\d+$/.test(value.showId) || !Number.isSafeInteger(id) || id <= 0 ||
       ((requireTrying || "trying" in value) && typeof value.trying !== "boolean")) {
-    throw new AppError("INVALID_INPUT",400,"Kies een serie en een geldige voorkeur: Volgen of Proberen.");
+    throw new AppError("INVALID_INPUT",400,"Choose a series and a valid preference: Follow or Try.");
   }
   return { id, trying: value.trying === true };
 }
@@ -35,9 +35,9 @@ export async function PATCH(request: Request) {
   try {
     const user=await requireUser();requireSameOrigin(request,config().origin);
     const {id,trying}=await showInput(request,true);
-    // Proberen is personal: only this user's own follow changes.
+    // Try is personal: only this user's own follow changes.
     const result=await database().userFollow.updateMany({where:{userId:user.id,show:{tvmazeId:id}},data:{trying}});
-    if(result.count===0) throw new AppError("NOT_FOUND",404,"Deze serie staat niet in jouw overzicht.");
+    if(result.count===0) throw new AppError("NOT_FOUND",404,"This series is not in your list.");
     return Response.json({showId:String(id),trying},{headers:{"Cache-Control":"private, no-store"}});
   }catch(error){return errorResponse(error);}
 }

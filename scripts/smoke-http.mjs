@@ -133,10 +133,10 @@ try {
   check(exported.ok && exported.headers.get("cache-control")?.includes("no-store") && exported.headers.get("content-disposition")?.includes("attachment"),"own export downloads privately");
   check(JSON.parse(exportText).user.id === "owner" && !exportText.includes("never-serialize") && !exportText.includes("w2w:v1") && !exportText.includes(sessions.owner),"export holds own data without tokens or session");
   const deleteRequest = (headers, body) => request("/api/account/delete",{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify(body)});
-  check((await deleteRequest({...cookie("owner"),origin:"https://evil.example"},{confirmation:"VERWIJDEREN"})).status === 403,"cross-origin delete refused");
+  check((await deleteRequest({...cookie("owner"),origin:"https://evil.example"},{confirmation:"DELETE"})).status === 403,"cross-origin delete refused");
   check((await deleteRequest({...cookie("owner"),origin},{confirmation:"ja"})).status === 400,"delete requires typed confirmation");
-  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"VERWIJDEREN",userId:"other"})).status === 400,"delete cannot target another user");
-  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"VERWIJDEREN"})).status === 409,"the last admin cannot delete the account");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"DELETE",userId:"other"})).status === 400,"delete cannot target another user");
+  check((await deleteRequest({...cookie("owner"),origin},{confirmation:"DELETE"})).status === 409,"the last admin cannot delete the account");
   for (const path of ["/api/shows","/api/settings/google","/api/settings/preferences"]) {
     check((await request(path,{headers:cookie("owner")})).headers.get("cache-control")?.includes("no-store"),"private API responses must not be cached between users");
   }

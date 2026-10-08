@@ -6,7 +6,7 @@ const shared = globalThis as typeof globalThis & { when2watchMutations?: Map<str
 const pending = shared.when2watchMutations ??= new Map<string, Promise<void>>();
 
 export async function serializeCalendarMutation<T>(userId: string, work: () => Promise<T>, rejectIfBusy = false): Promise<T> {
-  if (rejectIfBusy && pending.has(userId)) throw new AppError("SYNC_BUSY", 409, "Er loopt al een agenda-actie. De volgende synchronisatie probeert het opnieuw.");
+  if (rejectIfBusy && pending.has(userId)) throw new AppError("SYNC_BUSY", 409, "A calendar action is already in progress. The next sync will try again.");
   const previous = pending.get(userId) ?? Promise.resolve();
   let release!: () => void;
   const finished = new Promise<void>((resolve) => { release = resolve; });
