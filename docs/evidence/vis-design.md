@@ -12,7 +12,7 @@ Bron: Design System-artifact **Vis** (https://claude.ai/artifact/1GANGeE2h1sJdb7
 | `c28ece6` | T-39 | Pill-knoppen, product-/feature-cards, chips, statuspills, notices, inputs, navigatie |
 | `0f8bc7f` | T-40 | Polish na visuele controle; dev-seed; screenshots |
 | `830e3a7` | T-41 | Evidence en README |
-| `8764d39` | review | Reviewfixes: seed-guard, resterende tokens, Vis-artwork voor icoon en banner |
+| `1fcbc48` | review | Reviewfixes: seed-guard, resterende tokens, Vis-artwork voor icoon en banner |
 
 ## Verificatie (lokaal, 8 oktober 2026)
 
