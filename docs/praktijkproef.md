@@ -44,7 +44,7 @@ De additieve episode-migratie is toegepast. Vooraf maakte SQLite's backup-API ee
 
 ## Gebruik en grenzen
 
-Open [When2Watch](https://when2watch.jp-visser.nl/), zoek een serie en kies expliciet de juiste match. `Nu synchroniseren` voert dezelfde synchronisatie uit als de dagelijkse taak om **06:05**. De Google-koppeling en meldingsproef staan bij **Instellingen**. Bij een fout blijft de serie staan en toont het overzicht de laatste poging, laatste succes en fout. Een gewijzigde datum/titel wordt pas “In je agenda” genoemd als precies die inhoud bevestigd is.
+Open [When2Watch](https://when2watch.jp-visser.nl/), zoek een serie en kies expliciet de juiste match. `Sync now` voert dezelfde synchronisatie uit als de dagelijkse taak om **06:05**. De Google-koppeling en meldingsproef staan bij **Settings**. Bij een fout blijft de serie staan en toont het overzicht de laatste poging, laatste succes en fout. Een gewijzigde datum/titel wordt pas “In je agenda” genoemd als precies die inhoud bevestigd is.
 
 All-day en de bewezen clientinstellingen blijven behouden. De Google OAuth-app stond bij de inrichting op External/Testing. Blijvend gebruik/publicatiestatus en tokengebruik na dag zeven zijn nog niet bewezen. Ook agendawisseling, serie verwijderen, volledige v1-interface en volledige backup/restoreacceptatie zijn buiten dit increment. De product-DoD wordt niet als volledige v1-aftekening gepresenteerd.
 
